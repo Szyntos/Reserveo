@@ -1,0 +1,275 @@
+// Reserveo — Hotel Management System
+
+Table hotels {
+  id          integer   [pk, increment]
+  name        varchar
+  address     varchar
+  phone       varchar
+  email       varchar
+  timezone    varchar
+  created_at  timestamp [default: `now()`]
+}
+
+// ─── Rooms ───────────────────────────────────────────────
+
+Table room_types {
+  id          integer [pk, increment]
+  hotel_id    integer [ref: > hotels.id]
+  name        varchar
+  description text
+
+  indexes {
+    (hotel_id, name) [unique]
+  }
+}
+
+Enum room_status {
+  available
+  occupied
+  cleaning
+  maintenance
+  out_of_service
+}
+
+Table rooms {
+  id           integer     [pk, increment]
+  hotel_id     integer     [ref: > hotels.id]
+  room_type_id integer     [ref: > room_types.id]
+  number       varchar
+  floor        integer
+  max_guests   integer     [not null]
+  status       room_status [default: "available"]
+  desc         text
+  created_at   timestamp   [default: `now()`]
+
+  indexes {
+    (hotel_id, number) [unique]
+  }
+}
+
+Table tags {
+  id   integer [pk, increment]
+  name varchar [unique]
+}
+
+Table room_tags {
+  room_id integer [ref: > rooms.id]
+  tag_id  integer [ref: > tags.id]
+
+  indexes {
+    (room_id, tag_id) [unique]
+  }
+}
+
+// ─── Pricing ─────────────────────────────────────────────
+
+Table room_night_prices {
+  id               integer [pk, increment]
+  room_id          integer [ref: > rooms.id]
+  date             date
+  price_per_person decimal
+  currency         varchar
+
+  indexes {
+    (room_id, date) [unique]
+  }
+}
+
+// ─── Guests & Users ──────────────────────────────────────
+
+Table guests {
+  id          integer   [pk, increment]
+  first_name  varchar
+  last_name   varchar
+  email       varchar
+  phone       varchar
+  id_number   varchar
+  nationality varchar
+  blacklisted boolean   [default: false]
+  notes       text
+  created_at  timestamp [default: `now()`]
+}
+
+Table users {
+  id         integer   [pk, increment]
+  name       varchar
+  email      varchar   [unique]
+  created_at timestamp [default: `now()`]
+}
+
+Enum hotel_user_role {
+  admin
+  receptionist
+  viewer
+}
+
+Table user_hotel_roles {
+  user_id  integer        [ref: > users.id]
+  hotel_id integer        [ref: > hotels.id]
+  role     hotel_user_role
+
+  indexes {
+    (user_id, hotel_id) [unique]
+  }
+}
+
+// ─── Reservations ─────────────────────────────────────────
+
+Enum reservation_status {
+  pending
+  confirmed
+  checked_in
+  checked_out
+  cancelled
+  no_show
+}
+
+Enum reservation_source_type {
+  private
+  external
+}
+
+Enum deposit_status {
+  not_required
+  pending
+  paid
+  forfeited
+}
+
+Table reservations {
+  id               integer                [pk, increment]
+  hotel_id         integer                [ref: > hotels.id]
+  room_id          integer                [ref: > rooms.id]
+  guest_id         integer                [ref: > guests.id]
+  created_by       integer                [ref: > users.id]
+
+  source_type      reservation_source_type
+  source_name      varchar                // e.g. "Booking.com", "Airbnb"
+  external_ref     varchar                // reservation ID on external platform
+
+  check_in_date    date
+  check_out_date   date
+  check_in_time    timestamp
+  check_out_time   timestamp
+
+  status           reservation_status     [default: "pending"]
+  adults           integer                [default: 1]
+  children         integer                [default: 0]
+
+  currency         varchar
+  subtotal_amount  decimal
+  deduction_amount decimal                [default: 0]
+  extra_fee_amount decimal                [default: 0]
+  total_amount     decimal
+
+  deposit_amount   decimal
+  deposit_due_date date
+  deposit_status   deposit_status         [default: "not_required"]
+  deposit_paid_at  timestamp
+
+  price_overridden boolean                [default: false]
+  price_snapshot   json
+  price_note       text
+
+  notes            text
+  created_at       timestamp              [default: `now()`]
+  updated_at       timestamp
+  deleted_at       timestamp
+}
+
+Enum pricing_adjustment_type {
+  deduction
+  surcharge
+}
+
+Enum pricing_adjustment_reason {
+  discount
+  coupon
+  manual_discount
+  cleaning_fee
+  city_tax
+  service_fee
+  late_checkout
+  other
+}
+
+Table reservation_price_adjustments {
+  id             integer                   [pk, increment]
+  reservation_id integer                   [ref: > reservations.id]
+  type           pricing_adjustment_type
+  reason         pricing_adjustment_reason [default: "other"]
+  label          varchar
+  amount         decimal
+  notes          text
+  created_at     timestamp                 [default: `now()`]
+}
+
+// ─── Invoices & Payments ──────────────────────────────────
+
+Enum invoice_status {
+  draft
+  issued
+  paid
+  overdue
+  cancelled
+}
+
+Table invoices {
+  id             integer        [pk, increment]
+  reservation_id integer        [ref: > reservations.id]
+  invoice_number varchar        [unique]
+  issued_at      timestamp
+  due_date       date
+  total_amount   decimal
+  paid_amount    decimal        [default: 0]
+  status         invoice_status [default: "draft"]
+}
+
+Enum payment_method {
+  cash
+  card
+  bank_transfer
+  online
+}
+
+Enum payment_status {
+  pending
+  completed
+  failed
+  refunded
+}
+
+Table payments {
+  id             integer        [pk, increment]
+  reservation_id integer        [ref: > reservations.id]
+  invoice_id     integer        [ref: > invoices.id, null]
+  amount         decimal
+  currency       varchar
+  method         payment_method
+  status         payment_status [default: "pending"]
+  is_deposit     boolean        [default: false]
+  paid_at        timestamp
+  notes          text
+}
+
+// ─── Operations ───────────────────────────────────────────
+
+Table room_blocks {
+  id         integer   [pk, increment]
+  room_id    integer   [ref: > rooms.id]
+  created_by integer   [ref: > users.id]
+  from_date  date
+  to_date    date
+  reason     varchar
+  notes      text
+}
+
+Table audit_log {
+  id         integer   [pk, increment]
+  table_name varchar
+  record_id  integer
+  action     varchar
+  changed_by integer   [ref: > users.id]
+  changed_at timestamp [default: `now()`]
+  diff       json
+}
