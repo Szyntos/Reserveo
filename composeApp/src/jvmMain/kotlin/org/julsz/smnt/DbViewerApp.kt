@@ -9,25 +9,19 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.ktor.client.*
 import io.ktor.client.call.*
-import io.ktor.client.engine.cio.*
-import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.http.*
-import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
-private const val BASE_URL = "http://localhost:8080"
-
 @Composable
-fun DbViewerApp() {
+fun DbViewerApp(client: HttpClient, onLogout: () -> Unit) {
     val tabs = listOf("Hotels", "Rooms", "Guests", "Reservations", "Users")
     var selectedTab by remember { mutableStateOf(0) }
 
@@ -39,8 +33,6 @@ fun DbViewerApp() {
     var loading      by remember { mutableStateOf(false) }
     var error        by remember { mutableStateOf<String?>(null) }
 
-    val client = remember { HttpClient(CIO) { install(ContentNegotiation) { json() } } }
-    DisposableEffect(Unit) { onDispose { client.close() } }
     val scope = rememberCoroutineScope()
 
     fun reload() = scope.launch {
@@ -67,28 +59,7 @@ fun DbViewerApp() {
 
     LaunchedEffect(Unit) { reload() }
 
-    val sansSerifTypography = remember {
-        val ff = FontFamily.SansSerif
-        Typography(
-            displayLarge  = Typography().displayLarge.copy(fontFamily = ff),
-            displayMedium = Typography().displayMedium.copy(fontFamily = ff),
-            displaySmall  = Typography().displaySmall.copy(fontFamily = ff),
-            headlineLarge = Typography().headlineLarge.copy(fontFamily = ff),
-            headlineMedium= Typography().headlineMedium.copy(fontFamily = ff),
-            headlineSmall = Typography().headlineSmall.copy(fontFamily = ff),
-            titleLarge    = Typography().titleLarge.copy(fontFamily = ff),
-            titleMedium   = Typography().titleMedium.copy(fontFamily = ff),
-            titleSmall    = Typography().titleSmall.copy(fontFamily = ff),
-            bodyLarge     = Typography().bodyLarge.copy(fontFamily = ff),
-            bodyMedium    = Typography().bodyMedium.copy(fontFamily = ff),
-            bodySmall     = Typography().bodySmall.copy(fontFamily = ff),
-            labelLarge    = Typography().labelLarge.copy(fontFamily = ff),
-            labelMedium   = Typography().labelMedium.copy(fontFamily = ff),
-            labelSmall    = Typography().labelSmall.copy(fontFamily = ff),
-        )
-    }
-    MaterialTheme(typography = sansSerifTypography) {
-        Column(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize()) {
 
             // ── Top bar ───────────────────────────────────────────────────────
             Row(
@@ -112,6 +83,7 @@ fun DbViewerApp() {
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)) {
                         Text("Refresh")
                     }
+                    TextButton(onClick = onLogout) { Text("Logout") }
                 }
             }
 
@@ -132,7 +104,6 @@ fun DbViewerApp() {
                 3 -> ReservationsTab(reservations)
                 4 -> UsersTab(users,         onCreate = ::createUser)
             }
-        }
     }
 }
 
