@@ -9,6 +9,8 @@ import io.ktor.server.netty.*
 import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import org.julsz.smnt.db.DatabaseFactory
+import org.julsz.smnt.routes.*
 
 fun main() {
     embeddedServer(Netty, port = SERVER_PORT, host = "0.0.0.0", module = Application::module)
@@ -21,6 +23,12 @@ fun Application.module() {
 
     routing {
         get("/") { call.respondText("Ktor: ${Greeting().greet()}") }
-        apiRoutes()
+        route("/api") {
+            hotelRoutes()
+            roomRoutes()
+            guestRoutes()
+            reservationRoutes()
+            userRoutes()
+        }
     }
 }

@@ -1,0 +1,52 @@
+package org.julsz.smnt.routes
+
+import io.ktor.http.*
+import io.ktor.server.request.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
+import org.jetbrains.exposed.sql.SortOrder
+import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.transactions.transaction
+import org.julsz.smnt.CreateUserRequest
+import org.julsz.smnt.UserDto
+import org.julsz.smnt.db.Users
+import java.time.format.DateTimeFormatter
+
+private val dtFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+
+fun Route.userRoutes() {
+    get("/users") { call.respond(queryUsers()) }
+
+    post("/users") {
+        val req = call.receive<CreateUserRequest>()
+        call.respond(HttpStatusCode.Created, createUser(req))
+    }
+}
+
+private fun queryUsers(): List<UserDto> = transaction {
+    Users.selectAll().orderBy(Users.id, SortOrder.ASC).map {
+        UserDto(
+            id        = it[Users.id],
+            name      = it[Users.name],
+            email     = it[Users.email],
+            appRole   = it[Users.appRole],
+            createdAt = it[Users.createdAt].format(dtFormatter)
+        )
+    }
+}
+
+private fun createUser(req: CreateUserRequest): UserDto = transaction {
+    val newId = Users.insert {
+        it[Users.name]    = req.name
+        it[Users.email]   = req.email
+        it[Users.appRole] = req.appRole
+    } get Users.id
+
+    val createdAt = Users.selectAll()
+        .where { Users.id eq newId }
+        .first()[Users.createdAt]
+
+    UserDto(id = newId, name = req.name, email = req.email,
+            appRole = req.appRole, createdAt = createdAt.format(dtFormatter))
+}

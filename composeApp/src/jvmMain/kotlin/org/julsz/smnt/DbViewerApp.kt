@@ -304,17 +304,23 @@ private fun UsersTab(rows: List<UserDto>, onCreate: (CreateUserRequest) -> Unit)
     Column(Modifier.fillMaxSize()) {
         TabToolbar { Button(onClick = { showDialog = true }) { Text("Register User") } }
         DataTable(
-            headers = listOf("ID" to 45.dp, "Name" to 200.dp, "Email" to 280.dp, "Created" to 160.dp),
+            headers = listOf("ID" to 45.dp, "Name" to 180.dp, "Email" to 240.dp,
+                             "Role" to 80.dp, "Created" to 160.dp),
             rows = rows
-        ) { u -> listOf(u.id.toString(), u.name, u.email, u.createdAt) }
+        ) { u -> listOf(u.id.toString(), u.name, u.email, u.appRole, u.createdAt) }
     }
     if (showDialog) CreateUserDialog(onDismiss = { showDialog = false }, onCreate = onCreate)
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CreateUserDialog(onDismiss: () -> Unit, onCreate: (CreateUserRequest) -> Unit) {
-    var name  by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
+    val roles = listOf("user", "admin")
+    var name         by remember { mutableStateOf("") }
+    var email        by remember { mutableStateOf("") }
+    var selectedRole by remember { mutableStateOf("user") }
+    var roleExpanded by remember { mutableStateOf(false) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Register User") },
@@ -322,12 +328,31 @@ private fun CreateUserDialog(onDismiss: () -> Unit, onCreate: (CreateUserRequest
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 FormField("Name *", name, { name = it })
                 FormField("Email *", email, { email = it })
+                ExposedDropdownMenuBox(expanded = roleExpanded, onExpandedChange = { roleExpanded = it }) {
+                    OutlinedTextField(
+                        value = selectedRole,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("App Role") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(roleExpanded) },
+                        modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
+                        singleLine = true
+                    )
+                    ExposedDropdownMenu(expanded = roleExpanded, onDismissRequest = { roleExpanded = false }) {
+                        roles.forEach { role ->
+                            DropdownMenuItem(
+                                text = { Text(role) },
+                                onClick = { selectedRole = role; roleExpanded = false }
+                            )
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
             Button(
                 onClick = {
-                    onCreate(CreateUserRequest(name.trim(), email.trim()))
+                    onCreate(CreateUserRequest(name.trim(), email.trim(), selectedRole))
                     onDismiss()
                 },
                 enabled = name.isNotBlank() && email.isNotBlank()

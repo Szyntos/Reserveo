@@ -1,8 +1,8 @@
 -- ─── Users ───────────────────────────────────────────────────────────────────
 
-INSERT INTO users (name, email, created_at) VALUES
-    ('Anna Kowalska',  'anna.kowalska@reserveo.dev', '2025-06-01 10:00:00'),
-    ('Marek Nowak',    'marek.nowak@reserveo.dev',   '2025-06-01 10:05:00');
+INSERT INTO users (name, email, app_role, created_at) VALUES
+    ('Anna Kowalska',  'anna.kowalska@reserveo.dev', 'admin', '2025-06-01 10:00:00'),
+    ('Marek Nowak',    'marek.nowak@reserveo.dev',   'user',  '2025-06-01 10:05:00');
 
 -- ─── Hotels ──────────────────────────────────────────────────────────────────
 

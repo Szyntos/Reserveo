@@ -53,6 +53,7 @@ data class UserDto(
     val id: Int,
     val name: String,
     val email: String,
+    val appRole: String,
     val createdAt: String
 )
 
@@ -79,5 +80,6 @@ data class CreateRoomRequest(
 @Serializable
 data class CreateUserRequest(
     val name: String,
-    val email: String
+    val email: String,
+    val appRole: String = "user"
 )

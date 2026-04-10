@@ -1,4 +1,4 @@
-package org.julsz.smnt
+package org.julsz.smnt.db
 
 import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.VarCharColumnType
@@ -53,20 +53,25 @@ object Users : Table("users") {
     val id        = integer("id").autoIncrement()
     val name      = varchar("name", 255)
     val email     = varchar("email", 255)
+    val appRole   = registerColumn<String>("app_role", object : VarCharColumnType(50) {
+        override fun sqlType() = "app_role"
+        override fun notNullValueToDB(value: String): Any =
+            PGobject().apply { type = "app_role"; this.value = value }
+    })
     val createdAt = datetime("created_at")
     override val primaryKey = PrimaryKey(id)
 }
 
 object Reservations : Table("reservations") {
-    val id            = integer("id").autoIncrement()
-    val hotelId       = integer("hotel_id")
-    val roomId        = integer("room_id")
-    val guestId       = integer("guest_id")
-    val checkInDate   = date("check_in_date")
-    val checkOutDate  = date("check_out_date")
-    val status        = varchar("status", 50)
-    val adults        = integer("adults")
-    val children      = integer("children")
-    val totalAmount   = decimal("total_amount", 10, 2).nullable()
+    val id           = integer("id").autoIncrement()
+    val hotelId      = integer("hotel_id")
+    val roomId       = integer("room_id")
+    val guestId      = integer("guest_id")
+    val checkInDate  = date("check_in_date")
+    val checkOutDate = date("check_out_date")
+    val status       = varchar("status", 50)
+    val adults       = integer("adults")
+    val children     = integer("children")
+    val totalAmount  = decimal("total_amount", 10, 2).nullable()
     override val primaryKey = PrimaryKey(id)
 }
