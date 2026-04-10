@@ -105,6 +105,12 @@ compose.desktop {
     application {
         mainClass = "org.julsz.smnt.MainKt"
 
+        jvmArgs += listOf(
+            "-Dfile.encoding=UTF-8",
+            "-Dstdout.encoding=UTF-8",
+            "-Dstderr.encoding=UTF-8",
+        )
+
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "org.julsz.smnt"

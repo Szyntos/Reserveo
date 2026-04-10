@@ -1,0 +1,2 @@
+ALTER TABLE rooms
+    ADD COLUMN archived_at TIMESTAMP;

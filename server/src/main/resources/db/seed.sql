@@ -1,3 +1,5 @@
+SET client_encoding TO 'UTF8';
+
 -- ─── Users ───────────────────────────────────────────────────────────────────
 
 INSERT INTO users (name, email, app_role, created_at) VALUES
@@ -16,7 +18,7 @@ INSERT INTO hotels (name, address, phone, email, timezone, created_at) VALUES
 INSERT INTO user_hotel_roles (user_id, hotel_id, role) VALUES
     (1, 1, 'admin'),
     (1, 2, 'viewer'),
-    (2, 1, 'receptionist'),
+    (2, 1, 'manager'),
     (2, 2, 'admin');
 
 -- ─── Room types ───────────────────────────────────────────────────────────────

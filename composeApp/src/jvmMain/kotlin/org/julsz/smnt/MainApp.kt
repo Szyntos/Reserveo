@@ -14,25 +14,33 @@ import io.ktor.client.*
 
 private enum class AppScreen(val label: String) {
     Dashboard("Dashboard"),
-    HotelConfig("Hotel Config"),
+    Config("Config"),
 }
 
 @Composable
-fun MainApp(client: HttpClient, currentUser: UserDto, onLogout: () -> Unit) {
+fun MainApp(
+    client: HttpClient,
+    currentUser: UserDto,
+    selectedHotel: UserHotelRoleDto,
+    onSwitchHotel: () -> Unit,
+    onLogout: () -> Unit
+) {
     var currentScreen by remember { mutableStateOf(AppScreen.Dashboard) }
 
     Row(Modifier.fillMaxSize()) {
         AppSidebar(
             currentUser   = currentUser,
+            selectedHotel = selectedHotel,
             currentScreen = currentScreen,
             onScreenChange = { currentScreen = it },
+            onSwitchHotel = onSwitchHotel,
             onLogout      = onLogout
         )
         VerticalDivider()
         Box(Modifier.fillMaxSize().padding(28.dp)) {
             when (currentScreen) {
-                AppScreen.Dashboard  -> DashboardPage()
-                AppScreen.HotelConfig -> HotelConfigPage()
+                AppScreen.Dashboard -> DashboardPage(selectedHotel)
+                AppScreen.Config    -> ConfigPage(client, selectedHotel)
             }
         }
     }
@@ -43,8 +51,10 @@ fun MainApp(client: HttpClient, currentUser: UserDto, onLogout: () -> Unit) {
 @Composable
 private fun AppSidebar(
     currentUser: UserDto,
+    selectedHotel: UserHotelRoleDto,
     currentScreen: AppScreen,
     onScreenChange: (AppScreen) -> Unit,
+    onSwitchHotel: () -> Unit,
     onLogout: () -> Unit
 ) {
     Column(
@@ -55,30 +65,26 @@ private fun AppSidebar(
         verticalArrangement = Arrangement.SpaceBetween
     ) {
         Column {
-            // Brand + user
+            // Hotel header
             Column(
                 modifier = Modifier
                     .padding(horizontal = 16.dp)
-                    .padding(top = 20.dp, bottom = 16.dp)
+                    .padding(top = 20.dp, bottom = 4.dp)
             ) {
                 Text(
-                    "Reserveo",
+                    selectedHotel.hotelName,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    currentUser.name,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    currentUser.email,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                Spacer(Modifier.height(4.dp))
+                AssistChip(
+                    onClick = {},
+                    label = { Text(selectedHotel.role, style = MaterialTheme.typography.labelSmall) },
+                    modifier = Modifier.height(24.dp)
                 )
             }
 
+            Spacer(Modifier.height(12.dp))
             HorizontalDivider()
             Spacer(Modifier.height(8.dp))
 
@@ -93,6 +99,21 @@ private fun AppSidebar(
 
         Column {
             HorizontalDivider()
+            // User info
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                Text(
+                    currentUser.name,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    currentUser.email,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
+            HorizontalDivider()
+            SidebarItem(label = "Switch Hotel", selected = false, onClick = onSwitchHotel)
             SidebarItem(label = "Logout", selected = false, onClick = onLogout)
             Spacer(Modifier.height(8.dp))
         }
@@ -119,35 +140,18 @@ private fun SidebarItem(label: String, selected: Boolean, onClick: () -> Unit) {
 // ─── Pages ────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun DashboardPage() {
+private fun DashboardPage(hotel: UserHotelRoleDto) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            "Dashboard",
+            hotel.hotelName,
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold
         )
-        Spacer(Modifier.height(4.dp))
         Text(
-            "Stats, arrivals and quick actions will appear here.",
+            "Dashboard — stats, arrivals and quick actions will appear here.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
 
-@Composable
-private fun HotelConfigPage() {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            "Hotel Config",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "Hotel settings and configuration will appear here.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}

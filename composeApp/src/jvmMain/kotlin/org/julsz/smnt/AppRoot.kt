@@ -4,10 +4,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.*
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.platform.Font as PlatformFont
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
+import java.io.File
 
 internal const val BASE_URL = "http://localhost:8080"
 
@@ -16,24 +20,40 @@ fun AppRoot() {
     val client = remember { HttpClient(CIO) { install(ContentNegotiation) { json() } } }
     DisposableEffect(Unit) { onDispose { client.close() } }
 
-    var currentUser by remember { mutableStateOf<UserDto?>(null) }
+    var currentUser   by remember { mutableStateOf<UserDto?>(null) }
+    var selectedHotel by remember { mutableStateOf<UserHotelRoleDto?>(null) }
+
+    fun logout() { currentUser = null; selectedHotel = null }
 
     MaterialTheme(typography = rememberSansSerifTypography()) {
         when {
             currentUser == null ->
                 LoginScreen(client, onLogin = { currentUser = it })
             currentUser!!.appRole == "admin" ->
-                DbViewerApp(client, onLogout = { currentUser = null })
+                DbViewerApp(client, onLogout = ::logout)
+            selectedHotel == null ->
+                HotelPickerScreen(
+                    client       = client,
+                    currentUser  = currentUser!!,
+                    onHotelSelected = { selectedHotel = it },
+                    onLogout     = ::logout
+                )
             else ->
-                MainApp(client, currentUser!!, onLogout = { currentUser = null })
+                MainApp(
+                    client        = client,
+                    currentUser   = currentUser!!,
+                    selectedHotel = selectedHotel!!,
+                    onSwitchHotel = { selectedHotel = null },
+                    onLogout      = ::logout
+                )
         }
     }
 }
 
 @Composable
 internal fun rememberSansSerifTypography(): Typography {
-    val ff = FontFamily.SansSerif
-    return remember {
+    val ff = remember { loadUnicodeFontFamily() }
+    return remember(ff) {
         val base = Typography()
         Typography(
             displayLarge   = base.displayLarge.copy(fontFamily = ff),
@@ -53,4 +73,30 @@ internal fun rememberSansSerifTypography(): Typography {
             labelSmall     = base.labelSmall.copy(fontFamily = ff),
         )
     }
+}
+
+/**
+ * Loads Segoe UI directly from the Windows system fonts directory so that
+ * Skia/Skiko renders Latin Extended characters (ą ę ó ś ź ż ć ń) correctly.
+ * Falls back to FontFamily.SansSerif on non-Windows systems.
+ */
+private fun loadUnicodeFontFamily(): FontFamily {
+    val winFonts = File("C:/Windows/Fonts")
+    if (!winFonts.exists()) return FontFamily.SansSerif
+
+    data class Entry(val file: String, val weight: FontWeight, val style: FontStyle)
+    val entries = listOf(
+        Entry("segoeui.ttf",  FontWeight.Normal,   FontStyle.Normal),
+        Entry("segoeuib.ttf", FontWeight.Bold,     FontStyle.Normal),
+        Entry("segoeuii.ttf", FontWeight.Normal,   FontStyle.Italic),
+        Entry("segoeuiz.ttf", FontWeight.Bold,     FontStyle.Italic),
+        Entry("seguisb.ttf",  FontWeight.SemiBold, FontStyle.Normal),
+    )
+
+    val fonts = entries.mapNotNull { (file, weight, style) ->
+        val f = winFonts.resolve(file)
+        if (f.exists()) PlatformFont("segoeui-$file", f.readBytes(), weight, style) else null
+    }
+
+    return if (fonts.isNotEmpty()) FontFamily(fonts) else FontFamily.SansSerif
 }

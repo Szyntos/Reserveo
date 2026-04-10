@@ -16,11 +16,13 @@ data class RoomDto(
     val id: Int,
     val hotelId: Int,
     val hotelName: String,
+    val typeName: String,
     val number: String,
     val floor: Int?,
     val maxGuests: Int,
     val status: String,
-    val description: String?
+    val description: String?,
+    val archivedAt: String?
 )
 
 @Serializable
@@ -46,6 +48,13 @@ data class ReservationDto(
     val adults: Int,
     val children: Int,
     val totalAmount: Double?
+)
+
+@Serializable
+data class UserHotelRoleDto(
+    val hotelId: Int,
+    val hotelName: String,
+    val role: String
 )
 
 @Serializable
@@ -78,8 +87,52 @@ data class CreateRoomRequest(
 )
 
 @Serializable
+data class UpdateRoomRequest(
+    val typeName: String,
+    val number: String,
+    val floor: Int? = null,
+    val maxGuests: Int,
+    val status: String,
+    val description: String? = null
+)
+
+@Serializable
 data class CreateUserRequest(
     val name: String,
     val email: String,
     val appRole: String = "user"
+)
+
+@Serializable
+data class PriceRuleDto(
+    val id: Int,
+    val roomId: Int,
+    val roomNumber: String,
+    val fromDate: String,
+    val toDate: String,
+    val minNights: Int,
+    val maxNights: Int?,
+    val pricePerPersonPerNight: Double,
+    val currency: String
+)
+
+@Serializable
+data class CreatePriceRuleRequest(
+    val roomId: Int,
+    val fromDate: String,
+    val toDate: String,
+    val minNights: Int = 1,
+    val maxNights: Int? = null,
+    val pricePerPersonPerNight: Double,
+    val currency: String = "PLN"
+)
+
+@Serializable
+data class UpdatePriceRuleRequest(
+    val fromDate: String,
+    val toDate: String,
+    val minNights: Int = 1,
+    val maxNights: Int? = null,
+    val pricePerPersonPerNight: Double,
+    val currency: String = "PLN"
 )

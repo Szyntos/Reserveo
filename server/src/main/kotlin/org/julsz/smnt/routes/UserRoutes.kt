@@ -8,8 +8,12 @@ import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.JoinType
 import org.julsz.smnt.CreateUserRequest
 import org.julsz.smnt.UserDto
+import org.julsz.smnt.UserHotelRoleDto
+import org.julsz.smnt.db.Hotels
+import org.julsz.smnt.db.UserHotelRoles
 import org.julsz.smnt.db.Users
 import java.time.format.DateTimeFormatter
 
@@ -17,6 +21,12 @@ private val dtFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 
 fun Route.userRoutes() {
     get("/users") { call.respond(queryUsers()) }
+
+    get("/users/{id}/hotels") {
+        val userId = call.parameters["id"]?.toIntOrNull()
+            ?: return@get call.respond(HttpStatusCode.BadRequest, "Invalid user id")
+        call.respond(queryUserHotels(userId))
+    }
 
     post("/users") {
         val req = call.receive<CreateUserRequest>()
@@ -34,6 +44,20 @@ private fun queryUsers(): List<UserDto> = transaction {
             createdAt = it[Users.createdAt].format(dtFormatter)
         )
     }
+}
+
+private fun queryUserHotels(userId: Int): List<UserHotelRoleDto> = transaction {
+    UserHotelRoles
+        .join(Hotels, JoinType.INNER, onColumn = UserHotelRoles.hotelId, otherColumn = Hotels.id)
+        .selectAll()
+        .where { UserHotelRoles.userId eq userId }
+        .map {
+            UserHotelRoleDto(
+                hotelId   = it[Hotels.id],
+                hotelName = it[Hotels.name],
+                role      = it[UserHotelRoles.role]
+            )
+        }
 }
 
 private fun createUser(req: CreateUserRequest): UserDto = transaction {

@@ -29,6 +29,7 @@ fun Application.module() {
             guestRoutes()
             reservationRoutes()
             userRoutes()
+            priceRoutes()
         }
     }
 }

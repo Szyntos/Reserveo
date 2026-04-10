@@ -164,11 +164,13 @@ private fun RoomsTab(rows: List<RoomDto>, hotels: List<HotelDto>, onCreate: (Cre
     Column(Modifier.fillMaxSize()) {
         TabToolbar { Button(onClick = { showDialog = true }) { Text("New Room") } }
         DataTable(
-            headers = listOf("ID" to 45.dp, "Hotel" to 160.dp, "Room" to 65.dp, "Floor" to 55.dp,
-                             "Max Guests" to 85.dp, "Status" to 120.dp, "Description" to 240.dp),
+            headers = listOf("ID" to 45.dp, "Hotel" to 140.dp, "Room" to 55.dp, "Type" to 100.dp,
+                             "Floor" to 50.dp, "Guests" to 55.dp, "Status" to 110.dp,
+                             "Archived" to 75.dp),
             rows = rows
-        ) { r -> listOf(r.id.toString(), r.hotelName, r.number, r.floor?.toString().d(),
-                        r.maxGuests.toString(), r.status, r.description.d()) }
+        ) { r -> listOf(r.id.toString(), r.hotelName, r.number, r.typeName,
+                        r.floor?.toString().d(), r.maxGuests.toString(), r.status,
+                        if (r.archivedAt != null) "yes" else "—") }
     }
     if (showDialog) CreateRoomDialog(hotels, onDismiss = { showDialog = false }, onCreate = onCreate)
 }
