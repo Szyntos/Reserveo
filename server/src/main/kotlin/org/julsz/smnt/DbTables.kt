@@ -1,8 +1,10 @@
 package org.julsz.smnt
 
 import org.jetbrains.exposed.sql.Table
+import org.jetbrains.exposed.sql.VarCharColumnType
 import org.jetbrains.exposed.sql.javatime.date
-import org.jetbrains.exposed.sql.javatime.timestamp
+import org.jetbrains.exposed.sql.javatime.datetime
+import org.postgresql.util.PGobject
 
 object Hotels : Table("hotels") {
     val id      = integer("id").autoIncrement()
@@ -27,7 +29,11 @@ object Rooms : Table("rooms") {
     val number      = varchar("number", 50)
     val floor       = integer("floor").nullable()
     val maxGuests   = integer("max_guests")
-    val status      = varchar("status", 50)
+    val status      = registerColumn<String>("status", object : VarCharColumnType(50) {
+        override fun sqlType() = "room_status"
+        override fun notNullValueToDB(value: String): Any =
+            PGobject().apply { type = "room_status"; this.value = value }
+    })
     val description = text("description").nullable()
     override val primaryKey = PrimaryKey(id)
 }
@@ -40,6 +46,14 @@ object Guests : Table("guests") {
     val phone       = varchar("phone", 50).nullable()
     val nationality = varchar("nationality", 10).nullable()
     val blacklisted = bool("blacklisted")
+    override val primaryKey = PrimaryKey(id)
+}
+
+object Users : Table("users") {
+    val id        = integer("id").autoIncrement()
+    val name      = varchar("name", 255)
+    val email     = varchar("email", 255)
+    val createdAt = datetime("created_at")
     override val primaryKey = PrimaryKey(id)
 }
 

@@ -47,3 +47,37 @@ data class ReservationDto(
     val children: Int,
     val totalAmount: Double?
 )
+
+@Serializable
+data class UserDto(
+    val id: Int,
+    val name: String,
+    val email: String,
+    val createdAt: String
+)
+
+// ─── Request bodies ───────────────────────────────────────────────────────────
+
+@Serializable
+data class CreateHotelRequest(
+    val name: String,
+    val address: String? = null,
+    val phone: String? = null,
+    val email: String? = null
+)
+
+@Serializable
+data class CreateRoomRequest(
+    val hotelId: Int,
+    val typeName: String,
+    val number: String,
+    val floor: Int? = null,
+    val maxGuests: Int,
+    val description: String? = null
+)
+
+@Serializable
+data class CreateUserRequest(
+    val name: String,
+    val email: String
+)
