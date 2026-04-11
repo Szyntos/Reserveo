@@ -1,7 +1,11 @@
 package org.julsz.smnt
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -14,6 +18,9 @@ import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.http.*
 import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
 
 @Composable
 fun BasePriceConfigPage(client: HttpClient, hotel: UserHotelRoleDto, onBack: () -> Unit) {
@@ -24,8 +31,8 @@ fun BasePriceConfigPage(client: HttpClient, hotel: UserHotelRoleDto, onBack: () 
     var loading by remember { mutableStateOf(true) }
     var error   by remember { mutableStateOf<String?>(null) }
 
-    var showAddDialog  by remember { mutableStateOf(false) }
-    var editingRule    by remember { mutableStateOf<PriceRuleDto?>(null) }
+    // null = tile grid; non-null = rules for that room
+    var selectedRoom by remember { mutableStateOf<RoomDto?>(null) }
 
     suspend fun loadData() {
         loading = true; error = null
@@ -42,10 +49,42 @@ fun BasePriceConfigPage(client: HttpClient, hotel: UserHotelRoleDto, onBack: () 
 
     LaunchedEffect(hotel.hotelId) { loadData() }
 
-    fun reload() = scope.launch { loadData() }
+    val current = selectedRoom
+    if (current == null) {
+        RoomTileGrid(
+            rooms   = rooms,
+            rules   = rules,
+            loading = loading,
+            error   = error,
+            onBack  = onBack,
+            onSelect = { selectedRoom = it }
+        )
+    } else {
+        RoomRulesView(
+            client   = client,
+            room     = current,
+            rules    = rules.filter { it.roomId == current.id },
+            allRooms = rooms,
+            error    = error,
+            onBack   = { selectedRoom = null },
+            onError  = { error = it },
+            onReload = { scope.launch { loadData() } }
+        )
+    }
+}
 
+// ─── Level 1: Room tile grid ──────────────────────────────────────────────────
+
+@Composable
+private fun RoomTileGrid(
+    rooms: List<RoomDto>,
+    rules: List<PriceRuleDto>,
+    loading: Boolean,
+    error: String?,
+    onBack: () -> Unit,
+    onSelect: (RoomDto) -> Unit
+) {
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(0.dp)) {
-        // ── Breadcrumb ────────────────────────────────────────────────────────
         TextButton(
             onClick = onBack,
             contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
@@ -54,7 +93,6 @@ fun BasePriceConfigPage(client: HttpClient, hotel: UserHotelRoleDto, onBack: () 
             Text("← Config", style = MaterialTheme.typography.labelMedium)
         }
 
-        // ── Header ────────────────────────────────────────────────────────────
         Row(
             modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -63,7 +101,134 @@ fun BasePriceConfigPage(client: HttpClient, hotel: UserHotelRoleDto, onBack: () 
             Column {
                 Text("Base Price", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Text(
-                    "${rules.size} rule${if (rules.size != 1) "s" else ""}",
+                    "Select a room to manage its price rules",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            error?.let {
+                Text("Error: $it", color = MaterialTheme.colorScheme.error,
+                     style = MaterialTheme.typography.bodySmall)
+            }
+        }
+
+        if (loading) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        } else if (rooms.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    "Add rooms first before setting price rules.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        } else {
+            val ruleCountByRoom = rules.groupBy { it.roomId }.mapValues { it.value.size }
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 200.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(bottom = 16.dp)
+            ) {
+                items(rooms, key = { it.id }) { room ->
+                    RoomPriceTile(
+                        room       = room,
+                        ruleCount  = ruleCountByRoom[room.id] ?: 0,
+                        onClick    = { onSelect(room) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RoomPriceTile(room: RoomDto, ruleCount: Int, onClick: () -> Unit) {
+    Card(
+        modifier  = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                "Room ${room.number}",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                room.typeName,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(4.dp))
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    if (ruleCount == 0) "No rules" else "$ruleCount rule${if (ruleCount != 1) "s" else ""}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (ruleCount == 0)
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    else
+                        MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    "Manage →",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
+}
+
+// ─── Level 2: Rules for one room ─────────────────────────────────────────────
+
+@Composable
+private fun RoomRulesView(
+    client: HttpClient,
+    room: RoomDto,
+    rules: List<PriceRuleDto>,
+    allRooms: List<RoomDto>,
+    error: String?,
+    onBack: () -> Unit,
+    onError: (String?) -> Unit,
+    onReload: () -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    var showAddDialog by remember { mutableStateOf(false) }
+    var editingRule   by remember { mutableStateOf<PriceRuleDto?>(null) }
+
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(0.dp)) {
+        // Breadcrumb
+        TextButton(
+            onClick = onBack,
+            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+            modifier = Modifier.padding(bottom = 4.dp)
+        ) {
+            Text("← Base Price", style = MaterialTheme.typography.labelMedium)
+        }
+
+        // Header
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    "Room ${room.number}",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "${room.typeName} · ${rules.size} rule${if (rules.size != 1) "s" else ""}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -73,37 +238,23 @@ fun BasePriceConfigPage(client: HttpClient, hotel: UserHotelRoleDto, onBack: () 
                     Text("Error: $it", color = MaterialTheme.colorScheme.error,
                          style = MaterialTheme.typography.bodySmall)
                 }
-                Button(onClick = { showAddDialog = true }, enabled = rooms.isNotEmpty()) {
-                    Text("Add Rule")
-                }
+                Button(onClick = { showAddDialog = true }) { Text("Add Rule") }
             }
         }
 
-        // ── Table header ──────────────────────────────────────────────────────
-        if (!loading && rules.isNotEmpty()) {
-            PriceRuleTableHeader()
-            HorizontalDivider()
-        }
-
-        // ── Content ───────────────────────────────────────────────────────────
-        if (loading) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-        } else if (rules.isEmpty()) {
+        // Table
+        if (rules.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
-                    if (rooms.isEmpty()) "Add rooms first before setting price rules."
-                    else "No price rules yet. Click \"Add Rule\" to create one.",
+                    "No rules yet for this room. Click \"Add Rule\" to create one.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         } else {
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(0.dp),
-                contentPadding = PaddingValues(bottom = 16.dp)
-            ) {
+            PriceRuleTableHeader()
+            HorizontalDivider()
+            LazyColumn(contentPadding = PaddingValues(bottom = 16.dp)) {
                 items(rules, key = { it.id }) { rule ->
                     PriceRuleRow(
                         rule     = rule,
@@ -112,8 +263,8 @@ fun BasePriceConfigPage(client: HttpClient, hotel: UserHotelRoleDto, onBack: () 
                             scope.launch {
                                 try {
                                     client.delete("$BASE_URL/api/price-rules/${rule.id}")
-                                    loadData()
-                                } catch (e: Exception) { error = e.message }
+                                    onReload()
+                                } catch (e: Exception) { onError(e.message) }
                             }
                         }
                     )
@@ -123,14 +274,15 @@ fun BasePriceConfigPage(client: HttpClient, hotel: UserHotelRoleDto, onBack: () 
         }
     }
 
-    // ── Dialogs ───────────────────────────────────────────────────────────────
+    // Dialogs
     if (showAddDialog) {
         PriceRuleDialog(
-            title     = "Add Price Rule",
-            rooms     = rooms,
-            initial   = null,
-            onDismiss = { showAddDialog = false },
-            onConfirm = { req ->
+            title      = "Add Rule — Room ${room.number}",
+            rooms      = allRooms,
+            initial    = null,
+            fixedRoom  = room,
+            onDismiss  = { showAddDialog = false },
+            onConfirm  = { req ->
                 scope.launch {
                     try {
                         client.post("$BASE_URL/api/price-rules") {
@@ -138,8 +290,8 @@ fun BasePriceConfigPage(client: HttpClient, hotel: UserHotelRoleDto, onBack: () 
                             setBody(req)
                         }
                         showAddDialog = false
-                        loadData()
-                    } catch (e: Exception) { error = e.message }
+                        onReload()
+                    } catch (e: Exception) { onError(e.message) }
                 }
             }
         )
@@ -147,9 +299,10 @@ fun BasePriceConfigPage(client: HttpClient, hotel: UserHotelRoleDto, onBack: () 
 
     editingRule?.let { rule ->
         PriceRuleDialog(
-            title     = "Edit Price Rule",
-            rooms     = rooms,
+            title     = "Edit Rule — Room ${room.number}",
+            rooms     = allRooms,
             initial   = rule,
+            fixedRoom = room,
             onDismiss = { editingRule = null },
             onConfirm = { req ->
                 scope.launch {
@@ -157,24 +310,24 @@ fun BasePriceConfigPage(client: HttpClient, hotel: UserHotelRoleDto, onBack: () 
                         client.put("$BASE_URL/api/price-rules/${rule.id}") {
                             contentType(ContentType.Application.Json)
                             setBody(UpdatePriceRuleRequest(
-                                fromDate              = req.fromDate,
-                                toDate                = req.toDate,
-                                minNights             = req.minNights,
-                                maxNights             = req.maxNights,
+                                fromDate               = req.fromDate,
+                                toDate                 = req.toDate,
+                                minNights              = req.minNights,
+                                maxNights              = req.maxNights,
                                 pricePerPersonPerNight = req.pricePerPersonPerNight,
-                                currency              = req.currency
+                                currency               = req.currency
                             ))
                         }
                         editingRule = null
-                        loadData()
-                    } catch (e: Exception) { error = e.message }
+                        onReload()
+                    } catch (e: Exception) { onError(e.message) }
                 }
             }
         )
     }
 }
 
-// ─── Table ────────────────────────────────────────────────────────────────────
+// ─── Table components ─────────────────────────────────────────────────────────
 
 @Composable
 private fun PriceRuleTableHeader() {
@@ -183,10 +336,9 @@ private fun PriceRuleTableHeader() {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("Room",        Modifier.width(80.dp),  style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
-        Text("From",        Modifier.width(100.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
-        Text("To",          Modifier.width(100.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
-        Text("Nights",      Modifier.width(90.dp),  style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
+        Text("From",   Modifier.width(110.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
+        Text("To",     Modifier.width(110.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
+        Text("Nights", Modifier.width(100.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
         Text("Price / person / night", Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
     }
 }
@@ -204,10 +356,9 @@ private fun PriceRuleRow(rule: PriceRuleDto, onEdit: () -> Unit, onDelete: () ->
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(rule.roomNumber, Modifier.width(80.dp),  style = MaterialTheme.typography.bodySmall)
-        Text(rule.fromDate,   Modifier.width(100.dp), style = MaterialTheme.typography.bodySmall)
-        Text(rule.toDate,     Modifier.width(100.dp), style = MaterialTheme.typography.bodySmall)
-        Text(nightsLabel,     Modifier.width(90.dp),  style = MaterialTheme.typography.bodySmall)
+        Text(rule.fromDate,   Modifier.width(110.dp), style = MaterialTheme.typography.bodySmall)
+        Text(rule.toDate,     Modifier.width(110.dp), style = MaterialTheme.typography.bodySmall)
+        Text(nightsLabel,     Modifier.width(100.dp), style = MaterialTheme.typography.bodySmall)
         Text(
             "%.2f %s".format(rule.pricePerPersonPerNight, rule.currency),
             Modifier.weight(1f),
@@ -228,12 +379,12 @@ private fun PriceRuleDialog(
     title: String,
     rooms: List<RoomDto>,
     initial: PriceRuleDto?,
+    fixedRoom: RoomDto?,           // pre-selected, picker hidden
     onDismiss: () -> Unit,
     onConfirm: (CreatePriceRuleRequest) -> Unit
 ) {
-    var selectedRoom by remember { mutableStateOf(
-        if (initial != null) rooms.firstOrNull { it.id == initial.roomId } else rooms.firstOrNull()
-    ) }
+    val resolvedRoom = fixedRoom ?: (if (initial != null) rooms.firstOrNull { it.id == initial.roomId } else rooms.firstOrNull())
+    var selectedRoom by remember { mutableStateOf(resolvedRoom) }
     var roomExpanded by remember { mutableStateOf(false) }
 
     var fromDate  by remember { mutableStateOf(initial?.fromDate ?: "") }
@@ -253,48 +404,48 @@ private fun PriceRuleDialog(
         title = { Text(title) },
         text = {
             Column(
-                modifier = Modifier.width(360.dp),
+                modifier = Modifier.width(380.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Room picker
-                ExposedDropdownMenuBox(expanded = roomExpanded, onExpandedChange = { roomExpanded = it }) {
-                    OutlinedTextField(
-                        value         = selectedRoom?.number?.let { "Room $it" } ?: "Select room",
-                        onValueChange = {},
-                        readOnly      = true,
-                        label         = { Text("Room *") },
-                        trailingIcon  = { ExposedDropdownMenuDefaults.TrailingIcon(roomExpanded) },
-                        modifier      = Modifier
-                            .menuAnchor(MenuAnchorType.PrimaryNotEditable)
-                            .fillMaxWidth(),
-                        singleLine    = true,
-                        enabled       = initial == null  // can't change room when editing
-                    )
-                    ExposedDropdownMenu(expanded = roomExpanded, onDismissRequest = { roomExpanded = false }) {
-                        rooms.forEach { room ->
-                            DropdownMenuItem(
-                                text    = { Text("Room ${room.number} · ${room.typeName}") },
-                                onClick = { selectedRoom = room; roomExpanded = false }
-                            )
+                // Room picker — only shown when not fixed to a specific room
+                if (fixedRoom == null) {
+                    ExposedDropdownMenuBox(expanded = roomExpanded, onExpandedChange = { roomExpanded = it }) {
+                        OutlinedTextField(
+                            value         = selectedRoom?.number?.let { "Room $it" } ?: "Select room",
+                            onValueChange = {},
+                            readOnly      = true,
+                            label         = { Text("Room *") },
+                            trailingIcon  = { ExposedDropdownMenuDefaults.TrailingIcon(roomExpanded) },
+                            modifier      = Modifier
+                                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                                .fillMaxWidth(),
+                            singleLine    = true,
+                            enabled       = initial == null
+                        )
+                        ExposedDropdownMenu(expanded = roomExpanded, onDismissRequest = { roomExpanded = false }) {
+                            rooms.forEach { room ->
+                                DropdownMenuItem(
+                                    text    = { Text("Room ${room.number} · ${room.typeName}") },
+                                    onClick = { selectedRoom = room; roomExpanded = false }
+                                )
+                            }
                         }
                     }
                 }
 
                 // Date range
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        fromDate, { fromDate = it },
-                        label       = { Text("From *") },
-                        placeholder = { Text("YYYY-MM-DD") },
-                        singleLine  = true,
-                        modifier    = Modifier.weight(1f)
+                    DatePickerField(
+                        label          = "From *",
+                        dateString     = fromDate,
+                        onDateSelected = { fromDate = it },
+                        modifier       = Modifier.weight(1f)
                     )
-                    OutlinedTextField(
-                        toDate, { toDate = it },
-                        label       = { Text("To *") },
-                        placeholder = { Text("YYYY-MM-DD") },
-                        singleLine  = true,
-                        modifier    = Modifier.weight(1f)
+                    DatePickerField(
+                        label          = "To *",
+                        dateString     = toDate,
+                        onDateSelected = { toDate = it },
+                        modifier       = Modifier.weight(1f)
                     )
                 }
 
@@ -336,13 +487,13 @@ private fun PriceRuleDialog(
             Button(
                 onClick = {
                     onConfirm(CreatePriceRuleRequest(
-                        roomId                = selectedRoom!!.id,
-                        fromDate              = fromDate.trim(),
-                        toDate                = toDate.trim(),
-                        minNights             = minNights.trim().toInt(),
-                        maxNights             = maxNights.trim().toIntOrNull(),
+                        roomId                 = selectedRoom!!.id,
+                        fromDate               = fromDate.trim(),
+                        toDate                 = toDate.trim(),
+                        minNights              = minNights.trim().toInt(),
+                        maxNights              = maxNights.trim().toIntOrNull(),
                         pricePerPersonPerNight = price.trim().toDouble(),
-                        currency              = currency.trim().ifBlank { "PLN" }
+                        currency               = currency.trim().ifBlank { "PLN" }
                     ))
                 },
                 enabled = valid
@@ -350,4 +501,62 @@ private fun PriceRuleDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
+}
+
+// ─── Date Picker Field ────────────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DatePickerField(
+    label: String,
+    dateString: String,
+    onDateSelected: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var showPicker by remember { mutableStateOf(false) }
+
+    val initialMillis = remember(dateString) {
+        if (dateString.isNotBlank()) {
+            try { LocalDate.parse(dateString).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() }
+            catch (_: Exception) { null }
+        } else null
+    }
+    val pickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
+
+    OutlinedTextField(
+        value         = dateString,
+        onValueChange = {},
+        readOnly      = true,
+        label         = { Text(label) },
+        trailingIcon  = {
+            TextButton(
+                onClick = { showPicker = true },
+                contentPadding = PaddingValues(horizontal = 4.dp)
+            ) { Text("📅") }
+        },
+        modifier   = modifier,
+        singleLine = true
+    )
+
+    if (showPicker) {
+        DatePickerDialog(
+            onDismissRequest = { showPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    pickerState.selectedDateMillis?.let { millis ->
+                        val date = Instant.ofEpochMilli(millis)
+                            .atZone(ZoneOffset.UTC)
+                            .toLocalDate()
+                        onDateSelected(date.toString())
+                    }
+                    showPicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPicker = false }) { Text("Cancel") }
+            }
+        ) {
+            DatePicker(state = pickerState)
+        }
+    }
 }

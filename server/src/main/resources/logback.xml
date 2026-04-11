@@ -1,12 +1,32 @@
 <configuration>
+
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>%d{YYYY-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            <pattern>%d{HH:mm:ss.SSS} %highlight(%-5level) %cyan(%-30logger{30}) %msg%n</pattern>
         </encoder>
     </appender>
-    <root level="trace">
+
+    <!-- root -->
+    <root level="INFO">
         <appender-ref ref="STDOUT"/>
     </root>
-    <logger name="org.eclipse.jetty" level="INFO"/>
-    <logger name="io.netty" level="INFO"/>
+
+    <!-- our code: DEBUG so query params etc. are visible -->
+    <logger name="org.julsz.smnt" level="DEBUG"/>
+
+    <!-- Exposed: INFO shows schema, DEBUG shows every SQL statement -->
+    <logger name="Exposed"                        level="INFO"/>
+
+    <!-- Flyway -->
+    <logger name="org.flywaydb"                   level="INFO"/>
+
+    <!-- HikariCP: only warnings -->
+    <logger name="com.zaxxer.hikari"              level="WARN"/>
+
+    <!-- Netty internals: very noisy at DEBUG/TRACE -->
+    <logger name="io.netty"                       level="WARN"/>
+
+    <!-- Ktor internals -->
+    <logger name="io.ktor"                        level="INFO"/>
+
 </configuration>

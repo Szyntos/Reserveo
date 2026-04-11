@@ -1,4 +1,4 @@
-CREATE TABLE price_rules (
+CREATE TABLE IF NOT EXISTS price_rules (
     id                      SERIAL        PRIMARY KEY,
     room_id                 INTEGER       NOT NULL REFERENCES rooms(id),
     from_date               DATE          NOT NULL,

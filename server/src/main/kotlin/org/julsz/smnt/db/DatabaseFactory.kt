@@ -5,9 +5,13 @@ import com.zaxxer.hikari.HikariDataSource
 import io.ktor.server.config.ApplicationConfig
 import org.flywaydb.core.Flyway
 import org.jetbrains.exposed.sql.Database
+import org.slf4j.LoggerFactory
 
 object DatabaseFactory {
+    private val log = LoggerFactory.getLogger(DatabaseFactory::class.java)
+
     fun init(config: ApplicationConfig) {
+        log.info("Initialising database connection pool")
         val dataSource = HikariDataSource(HikariConfig().apply {
             jdbcUrl         = config.property("database.url").getString()
             driverClassName = config.property("database.driver").getString()
@@ -21,7 +25,7 @@ object DatabaseFactory {
             addDataSourceProperty("charSet", "UTF-8")
         })
 
-        Flyway.configure()
+        val result = Flyway.configure()
             .dataSource(dataSource)
             // If the DB was created by the Docker init script (no flyway history table),
             // baseline at V4 so Flyway doesn't try to re-apply migrations 1-4.
@@ -31,6 +35,9 @@ object DatabaseFactory {
             .load()
             .migrate()
 
+        log.info("Flyway migrations applied: {}", result.migrationsExecuted)
+
         Database.connect(dataSource)
+        log.info("Database ready")
     }
 }
