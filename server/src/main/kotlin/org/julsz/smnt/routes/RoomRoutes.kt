@@ -10,8 +10,11 @@ import org.julsz.smnt.CreateRoomRequest
 import org.julsz.smnt.RoomDto
 import org.julsz.smnt.UpdateRoomRequest
 import org.julsz.smnt.db.Hotels
+import org.julsz.smnt.db.Reservations
+import org.julsz.smnt.db.RoomBlocks
 import org.julsz.smnt.db.RoomTypes
 import org.julsz.smnt.db.Rooms
+import java.time.LocalDate
 import java.time.LocalDateTime
 
 fun Route.roomRoutes() {
@@ -47,9 +50,27 @@ fun Route.roomRoutes() {
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
+/** Must be called inside an existing transaction. */
+private fun loadStatusSets(): Pair<Set<Int>, Set<Int>> {
+    val today = LocalDate.now()
+    val occupiedRoomIds = Reservations.selectAll().where {
+        (Reservations.checkInDate lessEq today) and
+        (Reservations.checkOutDate greater today) and
+        (Reservations.status neq "cancelled") and
+        (Reservations.status neq "no_show") and
+        (Reservations.status neq "checked_out")
+    }.map { it[Reservations.roomId] }.toSet()
+    val blockedRoomIds = RoomBlocks.selectAll().where {
+        (RoomBlocks.fromDate lessEq today) and
+        (RoomBlocks.toDate greaterEq today)
+    }.map { it[RoomBlocks.roomId] }.toSet()
+    return occupiedRoomIds to blockedRoomIds
+}
+
 private fun queryRooms(hotelId: Int? = null): List<RoomDto> = transaction {
     val hotelNames = Hotels.selectAll().associate { it[Hotels.id] to it[Hotels.name] }
     val typeNames  = RoomTypes.selectAll().associate { it[RoomTypes.id] to it[RoomTypes.name] }
+    val (occupiedRoomIds, blockedRoomIds) = loadStatusSets()
 
     val query = if (hotelId != null) {
         Rooms.selectAll().where { Rooms.hotelId eq hotelId }
@@ -57,7 +78,7 @@ private fun queryRooms(hotelId: Int? = null): List<RoomDto> = transaction {
         Rooms.selectAll()
     }
 
-    query.orderBy(Rooms.number to SortOrder.ASC).map { it.toDto(hotelNames, typeNames) }
+    query.orderBy(Rooms.number to SortOrder.ASC).map { it.toDto(hotelNames, typeNames, occupiedRoomIds, blockedRoomIds) }
 }
 
 // ─── Mutations ────────────────────────────────────────────────────────────────
@@ -75,7 +96,6 @@ private fun createRoom(req: CreateRoomRequest): RoomDto = transaction {
         it[Rooms.number]      = req.number
         it[Rooms.floor]       = req.floor
         it[Rooms.maxGuests]   = req.maxGuests
-        it[Rooms.status]      = "available"
         it[Rooms.description] = req.description
     } get Rooms.id
 
@@ -87,7 +107,7 @@ private fun createRoom(req: CreateRoomRequest): RoomDto = transaction {
         number      = req.number,
         floor       = req.floor,
         maxGuests   = req.maxGuests,
-        status      = "available",
+        status      = "free",
         description = req.description,
         archivedAt  = null
     )
@@ -102,13 +122,13 @@ private fun updateRoom(id: Int, req: UpdateRoomRequest): RoomDto = transaction {
         it[Rooms.number]      = req.number
         it[Rooms.floor]       = req.floor
         it[Rooms.maxGuests]   = req.maxGuests
-        it[Rooms.status]      = req.status
         it[Rooms.description] = req.description
     }
 
     val hotelNames = Hotels.selectAll().associate { it[Hotels.id] to it[Hotels.name] }
     val typeNames  = RoomTypes.selectAll().associate { it[RoomTypes.id] to it[RoomTypes.name] }
-    Rooms.selectAll().where { Rooms.id eq id }.first().toDto(hotelNames, typeNames)
+    val (occupiedRoomIds, blockedRoomIds) = loadStatusSets()
+    Rooms.selectAll().where { Rooms.id eq id }.first().toDto(hotelNames, typeNames, occupiedRoomIds, blockedRoomIds)
 }
 
 private fun setArchived(id: Int, archived: Boolean): RoomDto = transaction {
@@ -117,7 +137,8 @@ private fun setArchived(id: Int, archived: Boolean): RoomDto = transaction {
     }
     val hotelNames = Hotels.selectAll().associate { it[Hotels.id] to it[Hotels.name] }
     val typeNames  = RoomTypes.selectAll().associate { it[RoomTypes.id] to it[RoomTypes.name] }
-    Rooms.selectAll().where { Rooms.id eq id }.first().toDto(hotelNames, typeNames)
+    val (occupiedRoomIds, blockedRoomIds) = loadStatusSets()
+    Rooms.selectAll().where { Rooms.id eq id }.first().toDto(hotelNames, typeNames, occupiedRoomIds, blockedRoomIds)
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -132,7 +153,12 @@ private fun findOrCreateRoomType(hotelId: Int, typeName: String): Int =
             it[RoomTypes.name]    = typeName
         } get RoomTypes.id)
 
-private fun ResultRow.toDto(hotelNames: Map<Int, String>, typeNames: Map<Int, String>) = RoomDto(
+private fun ResultRow.toDto(
+    hotelNames: Map<Int, String>,
+    typeNames: Map<Int, String>,
+    occupiedRoomIds: Set<Int>,
+    blockedRoomIds: Set<Int>
+) = RoomDto(
     id          = this[Rooms.id],
     hotelId     = this[Rooms.hotelId],
     hotelName   = hotelNames[this[Rooms.hotelId]] ?: "—",
@@ -140,7 +166,11 @@ private fun ResultRow.toDto(hotelNames: Map<Int, String>, typeNames: Map<Int, St
     number      = this[Rooms.number],
     floor       = this[Rooms.floor],
     maxGuests   = this[Rooms.maxGuests],
-    status      = this[Rooms.status],
+    status      = when {
+        this[Rooms.id] in blockedRoomIds  -> "out_of_order"
+        this[Rooms.id] in occupiedRoomIds -> "occupied"
+        else                              -> "free"
+    },
     description = this[Rooms.description],
     archivedAt  = this[Rooms.archivedAt]?.toString()
 )

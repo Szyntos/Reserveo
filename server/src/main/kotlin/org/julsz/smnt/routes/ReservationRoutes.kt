@@ -24,6 +24,9 @@ fun Route.reservationRoutes() {
 
     post("/reservations") {
         val req = call.receive<CreateReservationRequest>()
+        if (hasOverlap(req.roomId, req.checkInDate, req.checkOutDate)) {
+            return@post call.respond(HttpStatusCode.Conflict, "Room already booked for the selected dates")
+        }
         call.respond(HttpStatusCode.Created, createReservation(req))
     }
 
@@ -31,6 +34,9 @@ fun Route.reservationRoutes() {
         val id  = call.parameters["id"]?.toIntOrNull()
             ?: return@put call.respond(HttpStatusCode.BadRequest, "Invalid id")
         val req = call.receive<UpdateReservationRequest>()
+        if (hasOverlap(req.roomId, req.checkInDate, req.checkOutDate, excludeId = id)) {
+            return@put call.respond(HttpStatusCode.Conflict, "Room already booked for the selected dates")
+        }
         call.respond(updateReservation(id, req))
     }
 
@@ -41,6 +47,23 @@ fun Route.reservationRoutes() {
         call.respond(HttpStatusCode.NoContent)
     }
 }
+
+// ─── Overlap guard ────────────────────────────────────────────────────────────
+
+private fun hasOverlap(roomId: Int, checkIn: String, checkOut: String, excludeId: Int? = null): Boolean =
+    transaction {
+        val cin  = LocalDate.parse(checkIn)
+        val cout = LocalDate.parse(checkOut)
+        var query = Reservations.selectAll().where {
+            (Reservations.roomId eq roomId) and
+            (Reservations.checkInDate less cout) and
+            (Reservations.checkOutDate greater cin) and
+            (Reservations.status neq "cancelled") and
+            (Reservations.status neq "no_show")
+        }
+        if (excludeId != null) query = query.andWhere { Reservations.id neq excludeId }
+        query.count() > 0
+    }
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
 

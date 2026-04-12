@@ -95,7 +95,6 @@ data class UpdateRoomRequest(
     val number: String,
     val floor: Int? = null,
     val maxGuests: Int,
-    val status: String,
     val description: String? = null
 )
 
@@ -153,6 +152,24 @@ data class CreatePriceRuleRequest(
     val maxNights: Int? = null,
     val pricePerPersonPerNight: Double,
     val currency: String = "PLN"
+)
+
+@Serializable
+data class RoomBlockDto(
+    val id: Int,
+    val roomId: Int,
+    val roomNumber: String,
+    val fromDate: String,
+    val toDate: String,
+    val reason: String?
+)
+
+@Serializable
+data class CreateRoomBlockRequest(
+    val roomId: Int,
+    val fromDate: String,
+    val toDate: String,
+    val reason: String? = null
 )
 
 @Serializable

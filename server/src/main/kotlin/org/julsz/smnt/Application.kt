@@ -48,6 +48,7 @@ fun Application.module() {
             reservationRoutes()
             userRoutes()
             priceRoutes()
+            roomBlockRoutes()
         }
     }
 }

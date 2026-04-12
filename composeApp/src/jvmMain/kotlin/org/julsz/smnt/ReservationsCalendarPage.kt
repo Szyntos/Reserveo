@@ -87,13 +87,16 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto) {
     var rooms        by remember { mutableStateOf<List<RoomDto>>(emptyList()) }
     var guests       by remember { mutableStateOf<List<GuestDto>>(emptyList()) }
     var priceRules   by remember { mutableStateOf<List<PriceRuleDto>>(emptyList()) }
+    var roomBlocks   by remember { mutableStateOf<List<RoomBlockDto>>(emptyList()) }
     var loading      by remember { mutableStateOf(true) }
     var error        by remember { mutableStateOf<String?>(null) }
     var displayYear  by remember { mutableStateOf(LocalDate.now().year) }
     var displayMonth by remember { mutableStateOf(LocalDate.now().monthValue) }
     var currentView  by remember { mutableStateOf(ResView.Calendar) }
     var showNewDialog     by remember { mutableStateOf(false) }
+    var showBlockDialog   by remember { mutableStateOf(false) }
     var editReservation   by remember { mutableStateOf<ReservationDto?>(null) }
+    var editBlock         by remember { mutableStateOf<RoomBlockDto?>(null) }
     var prefillRoom       by remember { mutableStateOf<RoomDto?>(null) }
     var prefillCheckIn    by remember { mutableStateOf("") }
     var prefillCheckOut   by remember { mutableStateOf("") }
@@ -106,6 +109,7 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto) {
                 .filter { it.archivedAt == null }
             guests       = client.get("$BASE_URL/api/guests").body()
             priceRules   = client.get("$BASE_URL/api/hotels/${hotel.hotelId}/price-rules").body()
+            roomBlocks   = client.get("$BASE_URL/api/room-blocks?hotelId=${hotel.hotelId}").body()
         } catch (e: Exception) { error = e.message } finally { loading = false }
     }
 
@@ -168,6 +172,9 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto) {
                     else if (displayMonth == 12) { displayMonth = 1; displayYear++ } else displayMonth++
                 }, Modifier.size(32.dp)) { Text("▶", style = MaterialTheme.typography.labelLarge) }
                 Spacer(Modifier.width(4.dp))
+                Button(onClick = { showBlockDialog = true }, enabled = rooms.isNotEmpty()) {
+                    Text("Block Room")
+                }
                 Button(onClick = { showNewDialog = true }, enabled = rooms.isNotEmpty() && guests.isNotEmpty()) {
                     Text("New Reservation")
                 }
@@ -217,9 +224,11 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto) {
             ResView.Timeline -> ReservationsTimelineView(
                 rooms           = rooms.sortedWith(compareBy({ it.number.toIntOrNull() ?: Int.MAX_VALUE }, { it.number })),
                 reservations    = reservations,
+                blocks          = roomBlocks,
                 year            = displayYear,
                 month           = displayMonth,
                 onEditRequest   = { editReservation = it },
+                onBlockClick    = { editBlock = it },
                 onCreateRequest = { room, cin, cout ->
                     prefillRoom     = room
                     prefillCheckIn  = cin.toString()
@@ -247,9 +256,16 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto) {
             onConfirm = { req ->
                 scope.launch {
                     try {
-                        client.post("$BASE_URL/api/reservations") {
+                        val response = client.post("$BASE_URL/api/reservations") {
                             contentType(ContentType.Application.Json)
                             setBody(req)
+                        }
+                        if (!response.status.isSuccess()) {
+                            error = if (response.status == HttpStatusCode.Conflict)
+                                "Double booking: room already reserved for these dates"
+                            else
+                                "Server error: ${response.status}"
+                            return@launch
                         }
                         showNewDialog = false
                         prefillRoom = null; prefillCheckIn = ""; prefillCheckOut = ""
@@ -271,9 +287,16 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto) {
             onConfirm  = { req ->
                 scope.launch {
                     try {
-                        client.put("$BASE_URL/api/reservations/${res.id}") {
+                        val response = client.put("$BASE_URL/api/reservations/${res.id}") {
                             contentType(ContentType.Application.Json)
                             setBody(req)
+                        }
+                        if (!response.status.isSuccess()) {
+                            error = if (response.status == HttpStatusCode.Conflict)
+                                "Double booking: room already reserved for these dates"
+                            else
+                                "Server error: ${response.status}"
+                            return@launch
                         }
                         editReservation = null
                         loadData()
@@ -285,6 +308,43 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto) {
                     try {
                         client.delete("$BASE_URL/api/reservations/${res.id}")
                         editReservation = null
+                        loadData()
+                    } catch (e: Exception) { error = e.message }
+                }
+            }
+        )
+    }
+
+    // ── Block Room dialog ──────────────────────────────────────────────────────
+    if (showBlockDialog) {
+        BlockRoomDialog(
+            rooms     = rooms,
+            onDismiss = { showBlockDialog = false },
+            onConfirm = { req ->
+                scope.launch {
+                    try {
+                        client.post("$BASE_URL/api/room-blocks") {
+                            contentType(ContentType.Application.Json)
+                            setBody(req)
+                        }
+                        showBlockDialog = false
+                        loadData()
+                    } catch (e: Exception) { error = e.message }
+                }
+            }
+        )
+    }
+
+    // ── Block delete dialog ────────────────────────────────────────────────────
+    editBlock?.let { block ->
+        RoomBlockDeleteDialog(
+            block     = block,
+            onDismiss = { editBlock = null },
+            onConfirm = {
+                scope.launch {
+                    try {
+                        client.delete("$BASE_URL/api/room-blocks/${block.id}")
+                        editBlock = null
                         loadData()
                     } catch (e: Exception) { error = e.message }
                 }
@@ -778,9 +838,11 @@ private data class TimelineDragState(val room: RoomDto, val startIdx: Int, val e
 private fun ReservationsTimelineView(
     rooms: List<RoomDto>,
     reservations: List<ReservationDto>,
+    blocks: List<RoomBlockDto>,
     year: Int,
     month: Int,
     onEditRequest: (ReservationDto) -> Unit,
+    onBlockClick: (RoomBlockDto) -> Unit,
     onCreateRequest: (room: RoomDto, checkIn: LocalDate, checkOut: LocalDate) -> Unit
 ) {
     var dragState by remember { mutableStateOf<TimelineDragState?>(null) }
@@ -822,6 +884,7 @@ private fun ReservationsTimelineView(
     val BAND_H       = 22.dp
 
     val resByRoom    = remember(reservations) { reservations.groupBy { it.roomId } }
+    val blocksByRoom = remember(blocks) { blocks.groupBy { it.roomId } }
     val hScroll      = rememberScrollState()
     val vScroll      = rememberScrollState()
     val divColor     = MaterialTheme.colorScheme.outlineVariant
@@ -1012,6 +1075,45 @@ private fun ReservationsTimelineView(
                                         }))
                                     }
                                 }
+                                // Room block bands
+                                val roomBlocksInView = (blocksByRoom[room.id] ?: emptyList()).filter { block ->
+                                    !LocalDate.parse(block.toDate).isBefore(dateStart) &&
+                                    !LocalDate.parse(block.fromDate).isAfter(dateEnd)
+                                }
+                                roomBlocksInView.forEach { block ->
+                                    val from      = LocalDate.parse(block.fromDate)
+                                    val to        = LocalDate.parse(block.toDate)
+                                    val clampFrom = if (from.isBefore(dateStart)) dateStart else from
+                                    val clampTo   = if (to.isAfter(dateEnd))     dateEnd   else to
+                                    val startOff  = ChronoUnit.DAYS.between(dateStart, clampFrom).toInt()
+                                    val endOff    = ChronoUnit.DAYS.between(dateStart, clampTo).toInt()
+                                    val bLeft     = DAY_W * startOff + 1.dp
+                                    val bWidth    = DAY_W * (endOff - startOff + 1) - 2.dp
+                                    val bTop      = (ROW_H - BAND_H) / 2
+                                    Box(
+                                        Modifier
+                                            .offset(x = bLeft, y = bTop)
+                                            .width(bWidth).height(BAND_H)
+                                            .clip(RoundedCornerShape(
+                                                topStart    = if (clampFrom == from) 4.dp else 0.dp,
+                                                bottomStart = if (clampFrom == from) 4.dp else 0.dp,
+                                                topEnd      = if (clampTo   == to)   4.dp else 0.dp,
+                                                bottomEnd   = if (clampTo   == to)   4.dp else 0.dp
+                                            ))
+                                            .background(Color(0xFF607D8B))
+                                            .clickable { onBlockClick(block) },
+                                        contentAlignment = Alignment.CenterStart
+                                    ) {
+                                        Text(
+                                            block.reason ?: "Blocked",
+                                            modifier = Modifier.padding(horizontal = 4.dp),
+                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                            color = Color.White,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
                                 // Existing reservation bands
                                 roomRes.forEach { res ->
                                     val from      = LocalDate.parse(res.checkInDate)
@@ -1080,6 +1182,100 @@ private fun ReservationsTimelineView(
             }
         }
     }
+}
+
+// ─── Block Room dialog ────────────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BlockRoomDialog(
+    rooms: List<RoomDto>,
+    onDismiss: () -> Unit,
+    onConfirm: (CreateRoomBlockRequest) -> Unit
+) {
+    var selectedRoom by remember { mutableStateOf(rooms.firstOrNull()) }
+    var roomExpanded by remember { mutableStateOf(false) }
+    var fromDate     by remember { mutableStateOf("") }
+    var toDate       by remember { mutableStateOf("") }
+    var reason       by remember { mutableStateOf("") }
+
+    val valid = selectedRoom != null && fromDate.isNotBlank() && toDate.isNotBlank()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Block Room") },
+        text = {
+            Column(Modifier.width(380.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                ExposedDropdownMenuBox(expanded = roomExpanded, onExpandedChange = { roomExpanded = it }) {
+                    OutlinedTextField(
+                        value = selectedRoom?.let { "Room ${it.number} · ${it.typeName}" } ?: "Select room",
+                        onValueChange = {}, readOnly = true, label = { Text("Room *") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(roomExpanded) },
+                        modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
+                        singleLine = true
+                    )
+                    ExposedDropdownMenu(expanded = roomExpanded, onDismissRequest = { roomExpanded = false }) {
+                        rooms.forEach { room ->
+                            DropdownMenuItem(
+                                text  = { Text("Room ${room.number} · ${room.typeName}") },
+                                onClick = { selectedRoom = room; roomExpanded = false }
+                            )
+                        }
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ResDatePickerField("From *", fromDate, { fromDate = it }, Modifier.weight(1f))
+                    ResDatePickerField("To *",   toDate,   { toDate   = it }, Modifier.weight(1f))
+                }
+                OutlinedTextField(
+                    reason, { reason = it },
+                    label       = { Text("Reason") },
+                    placeholder = { Text("Maintenance, cleaning…") },
+                    singleLine  = true,
+                    modifier    = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onConfirm(CreateRoomBlockRequest(
+                        roomId   = selectedRoom!!.id,
+                        fromDate = fromDate.trim(),
+                        toDate   = toDate.trim(),
+                        reason   = reason.trim().ifBlank { null }
+                    ))
+                },
+                enabled = valid
+            ) { Text("Block") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+// ─── Block delete dialog ──────────────────────────────────────────────────────
+
+@Composable
+private fun RoomBlockDeleteDialog(
+    block: RoomBlockDto,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Remove Block") },
+        text  = {
+            Text("Remove block for Room ${block.roomNumber} from ${block.fromDate} to ${block.toDate}" +
+                 (block.reason?.let { " ($it)" } ?: "") + "?")
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors  = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+            ) { Text("Remove") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }
 
 // ─── Date picker field (local copy) ───────────────────────────────────────────

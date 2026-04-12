@@ -29,11 +29,6 @@ object Rooms : Table("rooms") {
     val number      = varchar("number", 50)
     val floor       = integer("floor").nullable()
     val maxGuests   = integer("max_guests")
-    val status      = registerColumn<String>("status", object : VarCharColumnType(50) {
-        override fun sqlType() = "room_status"
-        override fun notNullValueToDB(value: String): Any =
-            PGobject().apply { type = "room_status"; this.value = value }
-    })
     val description = text("description").nullable()
     val archivedAt  = datetime("archived_at").nullable()
     override val primaryKey = PrimaryKey(id)
@@ -84,6 +79,15 @@ object PriceRules : Table("price_rules") {
     val pricePerPersonPerNight = decimal("price_per_person_per_night", 10, 2)
     val currency               = varchar("currency", 10)
     override val primaryKey    = PrimaryKey(id)
+}
+
+object RoomBlocks : Table("room_blocks") {
+    val id       = integer("id").autoIncrement()
+    val roomId   = integer("room_id")
+    val fromDate = date("from_date")
+    val toDate   = date("to_date")
+    val reason   = varchar("reason", 255).nullable()
+    override val primaryKey = PrimaryKey(id)
 }
 
 object Reservations : Table("reservations") {

@@ -20,7 +20,7 @@ import io.ktor.client.request.setBody
 import io.ktor.http.*
 import kotlinx.coroutines.launch
 
-private val ROOM_STATUSES = listOf("available", "occupied", "cleaning", "maintenance", "out_of_service")
+private val ROOM_STATUSES = listOf("free", "occupied", "out_of_order")
 
 @Composable
 fun RoomsConfigPage(client: HttpClient, hotel: UserHotelRoleDto, onBack: () -> Unit) {
@@ -257,11 +257,9 @@ private fun StatusChip(status: String) {
 }
 
 private val statusColorMap: Map<String, Pair<Color, Color>> = mapOf(
-    "available"      to (Color(0xFFDCF5E0) to Color(0xFF1B5E20)),
-    "occupied"       to (Color(0xFFD0E4FF) to Color(0xFF0D3B7A)),
-    "cleaning"       to (Color(0xFFFFF3CD) to Color(0xFF7A5200)),
-    "maintenance"    to (Color(0xFFFFE0CC) to Color(0xFF7A2E00)),
-    "out_of_service" to (Color(0xFFEEEEEE) to Color(0xFF424242)),
+    "free"         to (Color(0xFFDCF5E0) to Color(0xFF1B5E20)),
+    "occupied"     to (Color(0xFFD0E4FF) to Color(0xFF0D3B7A)),
+    "out_of_order" to (Color(0xFFEEEEEE) to Color(0xFF424242)),
 )
 
 @Composable
@@ -331,7 +329,6 @@ private fun EditRoomDialog(
     var floor       by remember { mutableStateOf(room.floor?.toString() ?: "") }
     var maxGuests   by remember { mutableStateOf(room.maxGuests.toString()) }
     var description by remember { mutableStateOf(room.description ?: "") }
-    var status      by remember { mutableStateOf(room.status) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -344,7 +341,7 @@ private fun EditRoomDialog(
                     floor = floor, onFloor = { floor = it },
                     maxGuests = maxGuests, onMaxGuests = { maxGuests = it },
                     description = description, onDescription = { description = it },
-                    status = status, onStatus = { status = it }
+                    status = null, onStatus = {}
                 )
             }
         },
@@ -356,7 +353,6 @@ private fun EditRoomDialog(
                         number      = number.trim(),
                         floor       = floor.trim().toIntOrNull(),
                         maxGuests   = maxGuests.trim().toIntOrNull() ?: room.maxGuests,
-                        status      = status,
                         description = description.trim().ifBlank { null }
                     ))
                     onDismiss()
