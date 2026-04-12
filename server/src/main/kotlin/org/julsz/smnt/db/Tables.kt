@@ -93,7 +93,11 @@ object Reservations : Table("reservations") {
     val guestId      = integer("guest_id")
     val checkInDate  = date("check_in_date")
     val checkOutDate = date("check_out_date")
-    val status       = varchar("status", 50)
+    val status       = registerColumn<String>("status", object : VarCharColumnType(50) {
+        override fun sqlType() = "reservation_status"
+        override fun notNullValueToDB(value: String): Any =
+            PGobject().apply { type = "reservation_status"; this.value = value }
+    })
     val adults       = integer("adults")
     val children     = integer("children")
     val totalAmount  = decimal("total_amount", 10, 2).nullable()

@@ -39,6 +39,9 @@ data class GuestDto(
 @Serializable
 data class ReservationDto(
     val id: Int,
+    val hotelId: Int,
+    val roomId: Int,
+    val guestId: Int,
     val hotelName: String,
     val roomNumber: String,
     val guestName: String,
@@ -94,6 +97,31 @@ data class UpdateRoomRequest(
     val maxGuests: Int,
     val status: String,
     val description: String? = null
+)
+
+@Serializable
+data class CreateReservationRequest(
+    val hotelId: Int,
+    val roomId: Int,
+    val guestId: Int,
+    val checkInDate: String,
+    val checkOutDate: String,
+    val status: String = "confirmed",
+    val adults: Int = 1,
+    val children: Int = 0,
+    val totalAmount: Double? = null
+)
+
+@Serializable
+data class UpdateReservationRequest(
+    val roomId: Int,
+    val guestId: Int,
+    val checkInDate: String,
+    val checkOutDate: String,
+    val status: String,
+    val adults: Int,
+    val children: Int,
+    val totalAmount: Double? = null
 )
 
 @Serializable

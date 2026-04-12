@@ -14,6 +14,7 @@ import io.ktor.client.*
 
 private enum class AppScreen(val label: String) {
     Dashboard("Dashboard"),
+    Reservations("Reservations"),
     Config("Config"),
 }
 
@@ -39,8 +40,9 @@ fun MainApp(
         VerticalDivider()
         Box(Modifier.fillMaxSize().padding(28.dp)) {
             when (currentScreen) {
-                AppScreen.Dashboard -> DashboardPage(selectedHotel)
-                AppScreen.Config    -> ConfigPage(client, selectedHotel)
+                AppScreen.Dashboard    -> DashboardPage(selectedHotel)
+                AppScreen.Reservations -> ReservationsCalendarPage(client, selectedHotel)
+                AppScreen.Config       -> ConfigPage(client, selectedHotel)
             }
         }
     }
