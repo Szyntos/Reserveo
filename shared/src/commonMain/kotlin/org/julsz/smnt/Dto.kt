@@ -31,7 +31,8 @@ data class GuestDto(
     val firstName: String,
     val lastName: String,
     val email: String?,
-    val phone: String?,
+    val countryCode: String?,
+    val phoneNumber: String?,
     val nationality: String?,
     val blacklisted: Boolean
 )
@@ -121,6 +122,16 @@ data class UpdateReservationRequest(
     val adults: Int,
     val children: Int,
     val totalAmount: Double? = null
+)
+
+@Serializable
+data class CreateGuestRequest(
+    val firstName: String,
+    val lastName: String,
+    val email: String? = null,
+    val countryCode: String? = null,
+    val phoneNumber: String? = null,
+    val nationality: String? = null
 )
 
 @Serializable

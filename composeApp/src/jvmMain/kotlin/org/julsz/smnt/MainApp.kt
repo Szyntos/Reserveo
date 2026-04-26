@@ -3,10 +3,12 @@ package org.julsz.smnt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -24,7 +26,9 @@ fun MainApp(
     currentUser: UserDto,
     selectedHotel: UserHotelRoleDto,
     onSwitchHotel: () -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    isDark: Boolean = true,
+    onThemeToggle: () -> Unit = {}
 ) {
     var currentScreen by remember { mutableStateOf(AppScreen.Dashboard) }
 
@@ -35,7 +39,9 @@ fun MainApp(
             currentScreen = currentScreen,
             onScreenChange = { currentScreen = it },
             onSwitchHotel = onSwitchHotel,
-            onLogout      = onLogout
+            onLogout      = onLogout,
+            isDark        = isDark,
+            onThemeToggle = onThemeToggle
         )
         VerticalDivider()
         Box(Modifier.fillMaxSize().padding(28.dp)) {
@@ -57,7 +63,9 @@ private fun AppSidebar(
     currentScreen: AppScreen,
     onScreenChange: (AppScreen) -> Unit,
     onSwitchHotel: () -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    isDark: Boolean,
+    onThemeToggle: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -117,7 +125,42 @@ private fun AppSidebar(
             HorizontalDivider()
             SidebarItem(label = "Switch Hotel", selected = false, onClick = onSwitchHotel)
             SidebarItem(label = "Logout", selected = false, onClick = onLogout)
-            Spacer(Modifier.height(8.dp))
+            // Theme toggle pill
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Row(
+                    Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(MaterialTheme.colorScheme.surface)
+                ) {
+                    listOf(true to "Dark", false to "Light").forEach { (dark, label) ->
+                        val selected = isDark == dark
+                        Box(
+                            Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(
+                                    if (selected) MaterialTheme.colorScheme.primary
+                                    else Color.Transparent
+                                )
+                                .clickable(enabled = !selected, onClick = onThemeToggle)
+                                .padding(horizontal = 14.dp, vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                label,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (selected) MaterialTheme.colorScheme.onPrimary
+                                        else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(4.dp))
         }
     }
 }

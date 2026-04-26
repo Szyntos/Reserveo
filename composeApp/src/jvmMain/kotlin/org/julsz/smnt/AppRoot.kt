@@ -1,8 +1,13 @@
 package org.julsz.smnt
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Typography
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -22,30 +27,37 @@ fun AppRoot() {
 
     var currentUser   by remember { mutableStateOf<UserDto?>(null) }
     var selectedHotel by remember { mutableStateOf<UserHotelRoleDto?>(null) }
+    var isDark        by remember { mutableStateOf(true) }
 
     fun logout() { currentUser = null; selectedHotel = null }
 
-    MaterialTheme(typography = rememberSansSerifTypography()) {
-        when {
-            currentUser == null ->
-                LoginScreen(client, onLogin = { currentUser = it })
-            currentUser!!.appRole == "admin" ->
-                DbViewerApp(client, onLogout = ::logout)
-            selectedHotel == null ->
-                HotelPickerScreen(
-                    client       = client,
-                    currentUser  = currentUser!!,
-                    onHotelSelected = { selectedHotel = it },
-                    onLogout     = ::logout
-                )
-            else ->
-                MainApp(
-                    client        = client,
-                    currentUser   = currentUser!!,
-                    selectedHotel = selectedHotel!!,
-                    onSwitchHotel = { selectedHotel = null },
-                    onLogout      = ::logout
-                )
+    val colorScheme = if (isDark) darkColorScheme() else lightColorScheme()
+
+    MaterialTheme(colorScheme = colorScheme, typography = rememberSansSerifTypography()) {
+        Surface(Modifier.fillMaxSize()) {
+            when {
+                currentUser == null ->
+                    LoginScreen(client, onLogin = { currentUser = it })
+                currentUser!!.appRole == "admin" ->
+                    DbViewerApp(client, onLogout = ::logout)
+                selectedHotel == null ->
+                    HotelPickerScreen(
+                        client          = client,
+                        currentUser     = currentUser!!,
+                        onHotelSelected = { selectedHotel = it },
+                        onLogout        = ::logout
+                    )
+                else ->
+                    MainApp(
+                        client        = client,
+                        currentUser   = currentUser!!,
+                        selectedHotel = selectedHotel!!,
+                        onSwitchHotel = { selectedHotel = null },
+                        onLogout      = ::logout,
+                        isDark        = isDark,
+                        onThemeToggle = { isDark = !isDark }
+                    )
+            }
         }
     }
 }

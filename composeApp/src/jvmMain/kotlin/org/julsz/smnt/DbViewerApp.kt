@@ -251,10 +251,11 @@ private fun CreateRoomDialog(
 @Composable
 private fun GuestsTab(rows: List<GuestDto>) = DataTable(
     headers = listOf("ID" to 45.dp, "First Name" to 120.dp, "Last Name" to 140.dp,
-                     "Email" to 220.dp, "Phone" to 155.dp, "Nationality" to 95.dp,
-                     "Blacklisted" to 85.dp),
+                     "Email" to 200.dp, "Code" to 60.dp, "Phone" to 130.dp,
+                     "Nationality" to 95.dp, "Blacklisted" to 85.dp),
     rows = rows
-) { g -> listOf(g.id.toString(), g.firstName, g.lastName, g.email.d(), g.phone.d(),
+) { g -> listOf(g.id.toString(), g.firstName, g.lastName, g.email.d(),
+                g.countryCode?.let { "+$it" }.d(), g.phoneNumber.d(),
                 g.nationality.d(), if (g.blacklisted) "YES" else "no") }
 
 // ─── Reservations ─────────────────────────────────────────────────────────────
