@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.ktor.client.*
@@ -106,8 +107,9 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto) {
     var prefillCheckIn    by remember { mutableStateOf("") }
     var prefillCheckOut   by remember { mutableStateOf("") }
 
-    suspend fun loadData() {
-        loading = true; error = null
+    suspend fun loadData(showLoading: Boolean = true) {
+        if (showLoading) loading = true
+        error = null
         try {
             reservations = client.get("$BASE_URL/api/reservations?hotelId=${hotel.hotelId}").body()
             rooms        = client.get("$BASE_URL/api/rooms?hotelId=${hotel.hotelId}").body<List<RoomDto>>()
@@ -115,7 +117,7 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto) {
             guests       = client.get("$BASE_URL/api/guests").body()
             priceRules   = client.get("$BASE_URL/api/hotels/${hotel.hotelId}/price-rules").body()
             roomBlocks   = client.get("$BASE_URL/api/room-blocks?hotelId=${hotel.hotelId}").body()
-        } catch (e: Exception) { error = e.message } finally { loading = false }
+        } catch (e: Exception) { error = e.message } finally { if (showLoading) loading = false }
     }
 
     LaunchedEffect(hotel.hotelId) { loadData() }
@@ -250,6 +252,7 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto) {
             hotel           = hotel,
             rooms           = rooms,
             guests          = guests,
+            reservations    = reservations,
             priceRules      = priceRules,
             prefillRoom     = prefillRoom,
             prefillCheckIn  = prefillCheckIn,
@@ -274,7 +277,7 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto) {
                         }
                         showNewDialog = false
                         prefillRoom = null; prefillCheckIn = ""; prefillCheckOut = ""
-                        loadData()
+                        loadData(showLoading = false)
                     } catch (e: Exception) { error = e.message }
                 }
             },
@@ -297,6 +300,7 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto) {
             existing   = res,
             rooms      = rooms,
             guests     = guests,
+            reservations = reservations,
             priceRules = priceRules,
             onDismiss  = { editReservation = null },
             onConfirm  = { req ->
@@ -314,7 +318,7 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto) {
                             return@launch
                         }
                         editReservation = null
-                        loadData()
+                        loadData(showLoading = false)
                     } catch (e: Exception) { error = e.message }
                 }
             },
@@ -323,7 +327,7 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto) {
                     try {
                         client.delete("$BASE_URL/api/reservations/${res.id}")
                         editReservation = null
-                        loadData()
+                        loadData(showLoading = false)
                     } catch (e: Exception) { error = e.message }
                 }
             }
@@ -343,7 +347,7 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto) {
                             setBody(req)
                         }
                         showBlockDialog = false
-                        loadData()
+                        loadData(showLoading = false)
                     } catch (e: Exception) { error = e.message }
                 }
             }
@@ -360,7 +364,7 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto) {
                     try {
                         client.delete("$BASE_URL/api/room-blocks/${block.id}")
                         editBlock = null
-                        loadData()
+                        loadData(showLoading = false)
                     } catch (e: Exception) { error = e.message }
                 }
             }
@@ -526,6 +530,27 @@ private fun matchPriceRule(
     }.maxByOrNull { it.minNights }
 }
 
+// ─── Booking conflict helper ─────────────────────────────────────────────────
+
+private fun hasReservationConflict(
+    reservations: List<ReservationDto>,
+    roomId: Int,
+    checkIn: String,
+    checkOut: String,
+    excludeId: Int? = null
+): Boolean {
+    val cin  = runCatching { LocalDate.parse(checkIn.trim())  }.getOrNull() ?: return false
+    val cout = runCatching { LocalDate.parse(checkOut.trim()) }.getOrNull() ?: return false
+    if (!cout.isAfter(cin)) return false
+    return reservations.any { r ->
+        r.roomId == roomId &&
+        r.id != excludeId &&
+        r.status !in listOf("cancelled", "no_show") &&
+        LocalDate.parse(r.checkInDate).isBefore(cout) &&
+        LocalDate.parse(r.checkOutDate).isAfter(cin)
+    }
+}
+
 // ─── New Reservation dialog ───────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -534,6 +559,7 @@ private fun NewReservationDialog(
     hotel: UserHotelRoleDto,
     rooms: List<RoomDto>,
     guests: List<GuestDto>,
+    reservations: List<ReservationDto>,
     priceRules: List<PriceRuleDto>,
     prefillRoom: RoomDto? = null,
     prefillCheckIn: String = "",
@@ -573,8 +599,12 @@ private fun NewReservationDialog(
     val totalGuests = (adults.toIntOrNull() ?: 1) + (children.toIntOrNull() ?: 0)
     val computedTotal = if (ppn != null && nights > 0) ppn * nights * totalGuests else null
     val guestReady = selectedGuest != null || (guestFirstName.isNotBlank() && guestLastName.isNotBlank())
+    val conflict = remember(selectedRoom?.id, checkIn, checkOut) {
+        selectedRoom != null && checkIn.isNotBlank() && checkOut.isNotBlank() &&
+        hasReservationConflict(reservations, selectedRoom!!.id, checkIn, checkOut)
+    }
     val valid = selectedRoom != null && guestReady &&
-        checkIn.isNotBlank() && checkOut.isNotBlank() && adults.toIntOrNull() != null
+        checkIn.isNotBlank() && checkOut.isNotBlank() && adults.toIntOrNull() != null && !conflict
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -619,6 +649,22 @@ private fun NewReservationDialog(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ResDatePickerField("Check-in *",  checkIn,  { checkIn  = it }, Modifier.weight(1f))
                     ResDatePickerField("Check-out *", checkOut, { checkOut = it }, Modifier.weight(1f))
+                }
+                if (conflict) {
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(MaterialTheme.colorScheme.errorContainer)
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("⚠", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer)
+                        Text("Room already reserved for these dates",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer)
+                    }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(adults,   { adults   = it }, label = { Text("Adults *") }, singleLine = true, modifier = Modifier.weight(1f))
@@ -680,6 +726,7 @@ private fun ReservationEditDialog(
     existing: ReservationDto,
     rooms: List<RoomDto>,
     guests: List<GuestDto>,
+    reservations: List<ReservationDto>,
     priceRules: List<PriceRuleDto>,
     onDismiss: () -> Unit,
     onConfirm: (UpdateReservationRequest) -> Unit,
@@ -719,8 +766,12 @@ private fun ReservationEditDialog(
     val ppn = ppnInput.toDoubleOrNull()
     val totalGuests = (adults.toIntOrNull() ?: 1) + (children.toIntOrNull() ?: 0)
     val computedTotal = if (ppn != null && nights > 0) ppn * nights * totalGuests else null
+    val conflict = remember(selectedRoom?.id, checkIn, checkOut) {
+        selectedRoom != null && checkIn.isNotBlank() && checkOut.isNotBlank() &&
+        hasReservationConflict(reservations, selectedRoom!!.id, checkIn, checkOut, excludeId = existing.id)
+    }
     val valid = selectedRoom != null && selectedGuest != null &&
-        checkIn.isNotBlank() && checkOut.isNotBlank() && adults.toIntOrNull() != null
+        checkIn.isNotBlank() && checkOut.isNotBlank() && adults.toIntOrNull() != null && !conflict
 
     if (showDeleteConfirm) {
         AlertDialog(
@@ -751,6 +802,22 @@ private fun ReservationEditDialog(
                     children = children, onChildrenChange = { children = it },
                     status = status, onStatusChange = { status = it }
                 )
+                if (conflict) {
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(MaterialTheme.colorScheme.errorContainer)
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("⚠", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer)
+                        Text("Room already reserved for these dates",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer)
+                    }
+                }
                 HorizontalDivider()
                 PricePpnSection(
                     ppnInput = ppnInput, onPpnChange = { ppnInput = it },
@@ -921,9 +988,11 @@ private fun ReservationsTimelineView(
     onBlockClick: (RoomBlockDto) -> Unit,
     onCreateRequest: (room: RoomDto, checkIn: LocalDate, checkOut: LocalDate) -> Unit
 ) {
-    var dragState by remember { mutableStateOf<TimelineDragState?>(null) }
-    var scale        by remember { mutableStateOf(TimelineScale.Month) }
-    var dayWidthPx   by remember { mutableStateOf(40f) }
+    var dragState     by remember { mutableStateOf<TimelineDragState?>(null) }
+    var scale         by remember { mutableStateOf(TimelineScale.Month) }
+    var dayWidthPx    by remember { mutableStateOf(40f) }
+    var halfShift     by remember { mutableStateOf(false) }
+    var showCancelled by remember { mutableStateOf(false) }
     // Round to an integer pixel so that (DAY_W * n) == n individual DAY_W cells,
     // preventing month-header dividers from drifting out of sync with day columns.
     val density      = LocalDensity.current
@@ -956,6 +1025,8 @@ private fun ReservationsTimelineView(
     val totalWidth   = DAY_W * days.size
 
     val ROW_H        = 34.dp
+    val LANE_H       = 30.dp          // each lane height when split (showCancelled)
+    val SPLIT_ROW_H  = LANE_H * 2
     val MONTH_ROW_H  = 18.dp
     val DAY_ROW_H    = 46.dp
     val HEAD_H       = if (scale == TimelineScale.Year) MONTH_ROW_H + DAY_ROW_H else DAY_ROW_H
@@ -971,8 +1042,16 @@ private fun ReservationsTimelineView(
     val vScroll      = rememberScrollState()
     val divColor     = MaterialTheme.colorScheme.outlineVariant
 
-    // Reset horizontal scroll when scale or period changes
-    LaunchedEffect(scale, year, month) { hScroll.scrollTo(0) }
+    // Scroll to today when scale or period changes
+    LaunchedEffect(scale, year, month) {
+        val dayPx = with(density) { dayWidthPx.dp.roundToPx() }
+        if (!today.isBefore(dateStart) && !today.isAfter(dateEnd)) {
+            val dayOffset = ChronoUnit.DAYS.between(dateStart, today).toInt()
+            hScroll.scrollTo(dayOffset * dayPx)
+        } else {
+            hScroll.scrollTo(0)
+        }
+    }
 
     Column(Modifier.fillMaxSize()) {
         // ── Controls row ──────────────────────────────────────────────────────
@@ -1011,6 +1090,42 @@ private fun ReservationsTimelineView(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.width(24.dp))
+            Spacer(Modifier.width(4.dp))
+            // Half-shift pill
+            Row(Modifier.clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
+                listOf(false to "Full day", true to "Half shift").forEach { (v, label) ->
+                    val sel = halfShift == v
+                    Box(
+                        Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (sel) MaterialTheme.colorScheme.tertiary else Color.Transparent)
+                            .clickable { halfShift = v }
+                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                    ) {
+                        Text(label, style = MaterialTheme.typography.labelMedium,
+                            color = if (sel) MaterialTheme.colorScheme.onTertiary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            Spacer(Modifier.width(4.dp))
+            // Show/hide cancellations button
+            val cancelBtnColor = if (showCancelled) MaterialTheme.colorScheme.errorContainer
+                                 else MaterialTheme.colorScheme.surfaceVariant
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(cancelBtnColor)
+                    .clickable { showCancelled = !showCancelled }
+                    .padding(horizontal = 10.dp, vertical = 5.dp)
+            ) {
+                Text(
+                    if (showCancelled) "Hide cancelled" else "Show cancelled",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (showCancelled) MaterialTheme.colorScheme.onErrorContainer
+                            else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
 
         // ── Date header (sticky top) ──────────────────────────────────────────
@@ -1102,7 +1217,11 @@ private fun ReservationsTimelineView(
                 rooms.forEach { room ->
                     val isExpanded = expandedRoomId == room.id
                     val rowH by animateDpAsState(
-                        targetValue = if (isExpanded) EXPANDED_ROW_H else ROW_H,
+                        targetValue = when {
+                            isExpanded    -> EXPANDED_ROW_H
+                            showCancelled -> SPLIT_ROW_H
+                            else          -> ROW_H
+                        },
                         label = "label_${room.id}"
                     )
                     Box(
@@ -1147,33 +1266,92 @@ private fun ReservationsTimelineView(
                         rooms.forEach { room ->
                             val isExpanded = expandedRoomId == room.id
                             val rowH by animateDpAsState(
-                                targetValue = if (isExpanded) EXPANDED_ROW_H else ROW_H,
+                                targetValue = when {
+                                    isExpanded    -> EXPANDED_ROW_H
+                                    showCancelled -> SPLIT_ROW_H
+                                    else          -> ROW_H
+                                },
                                 label = "content_${room.id}"
                             )
-                            val roomRes = (resByRoom[room.id] ?: emptyList()).filter { res ->
-                                !LocalDate.parse(res.checkOutDate).isBefore(dateStart) &&
-                                !LocalDate.parse(res.checkInDate).isAfter(dateEnd)
+
+                            // ── Filter reservations for this room ──────────────
+                            val cancelStatuses = setOf("cancelled", "no_show")
+                            val allRoomRes = (resByRoom[room.id] ?: emptyList()).filter { res ->
+                                val co = LocalDate.parse(res.checkOutDate)
+                                val ci = LocalDate.parse(res.checkInDate)
+                                // Without half-shift, checkout on dateStart = nothing shown
+                                val coVisible = if (halfShift) !co.isBefore(dateStart) else co.isAfter(dateStart)
+                                coVisible && !ci.isAfter(dateEnd)
                             }
+                            val activeRes    = allRoomRes.filter { it.status !in cancelStatuses }
+                            val cancelledRes = if (showCancelled) allRoomRes.filter { it.status in cancelStatuses }
+                                              else emptyList()
+
+                            // ── Band geometry helper (halfShift-aware) ─────────
+                            // Returns (bLeft, bWidth, leftRounded, rightRounded) or null if invisible
+                            fun bandGeo(from: LocalDate, to: LocalDate): Array<Any>? {
+                                return if (halfShift) {
+                                    val inOff  = ChronoUnit.DAYS.between(dateStart, from).toInt()
+                                    val outOff = ChronoUnit.DAYS.between(dateStart, to).toInt()
+                                    val startFrac = (inOff + 0.5f).coerceAtLeast(0f)
+                                    val endFrac   = (outOff + 0.5f).coerceAtMost(days.size.toFloat())
+                                    if (endFrac <= startFrac) null
+                                    else arrayOf(
+                                        DAY_W * startFrac + 1.dp,
+                                        DAY_W * (endFrac - startFrac) - 2.dp,
+                                        inOff >= 0,                 // left cap: checkIn visible
+                                        outOff <= days.size - 1     // right cap: checkOut visible
+                                    )
+                                } else {
+                                    // Full-day mode: band covers check-in (inclusive) to
+                                    // check-out (exclusive). Last visible column = checkOut - 1.
+                                    val lastNight = to.minusDays(1)
+                                    val clampFrom = if (from.isBefore(dateStart)) dateStart else from
+                                    val clampTo   = if (lastNight.isAfter(dateEnd)) dateEnd else lastNight
+                                    if (clampTo.isBefore(clampFrom)) return@bandGeo null
+                                    val startOff  = ChronoUnit.DAYS.between(dateStart, clampFrom).toInt()
+                                    val endOff    = ChronoUnit.DAYS.between(dateStart, clampTo).toInt()
+                                    arrayOf(
+                                        DAY_W * startOff + 1.dp,
+                                        DAY_W * (endOff - startOff + 1) - 2.dp,
+                                        from == clampFrom,
+                                        lastNight == clampTo  // right cap: last night is within view
+                                    )
+                                }
+                            }
+
                             Box(
                                 Modifier
                                     .fillMaxWidth()
                                     .height(rowH)
-                                    .pointerInput(room.id, DAY_W, days.size) {
+                                    .pointerInput(room.id, DAY_W, days.size, halfShift) {
+                                        fun toIdx(x: Float): Int {
+                                            val raw = if (halfShift)
+                                                ((x / DAY_W.toPx()) - 0.5f).toInt()
+                                            else
+                                                (x / DAY_W.toPx()).toInt()
+                                            return raw.coerceIn(0, days.size - 1)
+                                        }
                                         detectHorizontalDragGestures(
                                             onDragStart = { offset ->
-                                                val idx = (offset.x / DAY_W.toPx()).toInt().coerceIn(0, days.size - 1)
-                                                dragState = TimelineDragState(room, idx, idx)
+                                                dragState = TimelineDragState(room, toIdx(offset.x), toIdx(offset.x))
                                             },
                                             onHorizontalDrag = { change, _ ->
                                                 change.consume()
-                                                val idx = (change.position.x / DAY_W.toPx()).toInt().coerceIn(0, days.size - 1)
-                                                dragState = dragState?.copy(endIdx = idx)
+                                                dragState = dragState?.copy(endIdx = toIdx(change.position.x))
                                             },
                                             onDragEnd = {
                                                 dragState?.let { ds ->
-                                                    val s = minOf(ds.startIdx, ds.endIdx)
-                                                    val e = maxOf(ds.startIdx, ds.endIdx)
-                                                    onCreateRequest(ds.room, days[s], days[e])
+                                                    val s       = minOf(ds.startIdx, ds.endIdx)
+                                                    val e       = maxOf(ds.startIdx, ds.endIdx)
+                                                    // checkout = day after last selected square → nights = e-s+1
+                                                    val checkIn  = days[s]
+                                                    val checkOut = days[e].plusDays(1)
+                                                    val noConflict = !hasReservationConflict(
+                                                        reservations, ds.room.id,
+                                                        checkIn.toString(), checkOut.toString()
+                                                    )
+                                                    if (noConflict) onCreateRequest(ds.room, checkIn, checkOut)
                                                 }
                                                 dragState = null
                                             },
@@ -1197,31 +1375,38 @@ private fun ReservationsTimelineView(
                                             })
                                     }
                                 }
+                                // Lane divider line when split
+                                if (showCancelled && !isExpanded) {
+                                    Box(Modifier.fillMaxWidth().height(1.dp).offset(y = LANE_H)
+                                        .background(divColor.copy(alpha = 0.5f)))
+                                }
                                 // Room block bands
                                 val roomBlocksInView = (blocksByRoom[room.id] ?: emptyList()).filter { block ->
                                     !LocalDate.parse(block.toDate).isBefore(dateStart) &&
                                     !LocalDate.parse(block.fromDate).isAfter(dateEnd)
                                 }
                                 roomBlocksInView.forEach { block ->
-                                    val from      = LocalDate.parse(block.fromDate)
-                                    val to        = LocalDate.parse(block.toDate)
-                                    val clampFrom = if (from.isBefore(dateStart)) dateStart else from
-                                    val clampTo   = if (to.isAfter(dateEnd))     dateEnd   else to
-                                    val startOff  = ChronoUnit.DAYS.between(dateStart, clampFrom).toInt()
-                                    val endOff    = ChronoUnit.DAYS.between(dateStart, clampTo).toInt()
-                                    val bLeft     = DAY_W * startOff + 1.dp
-                                    val bWidth    = DAY_W * (endOff - startOff + 1) - 2.dp
+                                    val from = LocalDate.parse(block.fromDate)
+                                    val to   = LocalDate.parse(block.toDate)
+                                    val geo  = bandGeo(from, to) ?: return@forEach
+                                    val bLeft      = geo[0] as Dp
+                                    val bWidth     = geo[1] as Dp
+                                    val leftRound  = geo[2] as Boolean
+                                    val rightRound = geo[3] as Boolean
                                     val blockBandH = if (isExpanded) EXPANDED_BAND_H else BAND_H
-                                    val bTop      = (rowH - blockBandH) / 2
+                                    val bTop = if (showCancelled && !isExpanded)
+                                        LANE_H + (LANE_H - blockBandH) / 2
+                                    else
+                                        (rowH - blockBandH) / 2
                                     Box(
                                         Modifier
                                             .offset(x = bLeft, y = bTop)
                                             .width(bWidth).height(blockBandH)
                                             .clip(RoundedCornerShape(
-                                                topStart    = if (clampFrom == from) 4.dp else 0.dp,
-                                                bottomStart = if (clampFrom == from) 4.dp else 0.dp,
-                                                topEnd      = if (clampTo   == to)   4.dp else 0.dp,
-                                                bottomEnd   = if (clampTo   == to)   4.dp else 0.dp
+                                                topStart    = if (leftRound)  4.dp else 0.dp,
+                                                bottomStart = if (leftRound)  4.dp else 0.dp,
+                                                topEnd      = if (rightRound) 4.dp else 0.dp,
+                                                bottomEnd   = if (rightRound) 4.dp else 0.dp
                                             ))
                                             .background(Color(0xFF607D8B))
                                             .clickable { onBlockClick(block) },
@@ -1237,19 +1422,56 @@ private fun ReservationsTimelineView(
                                         )
                                     }
                                 }
-                                // Existing reservation bands
-                                roomRes.forEach { res ->
-                                    val from      = LocalDate.parse(res.checkInDate)
-                                    val to        = LocalDate.parse(res.checkOutDate)
-                                    val clampFrom = if (from.isBefore(dateStart)) dateStart else from
-                                    val clampTo   = if (to.isAfter(dateEnd))     dateEnd   else to
-                                    val startOff  = ChronoUnit.DAYS.between(dateStart, clampFrom).toInt()
-                                    val endOff    = ChronoUnit.DAYS.between(dateStart, clampTo).toInt()
-                                    val bLeft     = DAY_W * startOff + 1.dp
-                                    val bWidth    = DAY_W * (endOff - startOff + 1) - 2.dp
-                                    val bandH     = if (isExpanded) EXPANDED_BAND_H else BAND_H
-                                    val bTop      = (rowH - bandH) / 2
-                                    val (bg, fg)  = STATUS_PALETTE[res.status] ?: (Color(0xFFE0E0E0) to Color(0xFF424242))
+                                // Cancelled/no-show bands — top lane when split, otherwise centered
+                                cancelledRes.forEach { res ->
+                                    val from = LocalDate.parse(res.checkInDate)
+                                    val to   = LocalDate.parse(res.checkOutDate)
+                                    val geo  = bandGeo(from, to) ?: return@forEach
+                                    val bLeft      = geo[0] as Dp
+                                    val bWidth     = geo[1] as Dp
+                                    val leftRound  = geo[2] as Boolean
+                                    val rightRound = geo[3] as Boolean
+                                    val bandH      = BAND_H
+                                    val bTop       = (LANE_H - bandH) / 2
+                                    val (bg, fg)   = STATUS_PALETTE[res.status] ?: (Color(0xFFE0E0E0) to Color(0xFF424242))
+                                    Box(
+                                        Modifier
+                                            .offset(x = bLeft, y = bTop)
+                                            .width(bWidth).height(bandH)
+                                            .clip(RoundedCornerShape(
+                                                topStart    = if (leftRound)  4.dp else 0.dp,
+                                                bottomStart = if (leftRound)  4.dp else 0.dp,
+                                                topEnd      = if (rightRound) 4.dp else 0.dp,
+                                                bottomEnd   = if (rightRound) 4.dp else 0.dp
+                                            ))
+                                            .background(bg)
+                                            .clickable { onEditRequest(res) },
+                                        contentAlignment = Alignment.CenterStart
+                                    ) {
+                                        Text(
+                                            res.guestName,
+                                            modifier = Modifier.padding(horizontal = 4.dp),
+                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                            color = fg, maxLines = 1, overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                                // Active reservation bands — bottom lane when split, otherwise centered
+                                activeRes.forEach { res ->
+                                    val from = LocalDate.parse(res.checkInDate)
+                                    val to   = LocalDate.parse(res.checkOutDate)
+                                    val geo  = bandGeo(from, to) ?: return@forEach
+                                    val bLeft      = geo[0] as Dp
+                                    val bWidth     = geo[1] as Dp
+                                    val leftRound  = geo[2] as Boolean
+                                    val rightRound = geo[3] as Boolean
+                                    val bandH      = if (isExpanded) EXPANDED_BAND_H else BAND_H
+                                    val bTop = when {
+                                        isExpanded                   -> (rowH - bandH) / 2
+                                        showCancelled                -> LANE_H + (LANE_H - bandH) / 2
+                                        else                         -> (rowH - bandH) / 2
+                                    }
+                                    val (bg, fg) = STATUS_PALETTE[res.status] ?: (Color(0xFFE0E0E0) to Color(0xFF424242))
                                     val nights = remember(res.checkInDate, res.checkOutDate) {
                                         runCatching {
                                             ChronoUnit.DAYS.between(
@@ -1263,10 +1485,10 @@ private fun ReservationsTimelineView(
                                             .offset(x = bLeft, y = bTop)
                                             .width(bWidth).height(bandH)
                                             .clip(RoundedCornerShape(
-                                                topStart    = if (clampFrom == from) 4.dp else 0.dp,
-                                                bottomStart = if (clampFrom == from) 4.dp else 0.dp,
-                                                topEnd      = if (clampTo   == to)   4.dp else 0.dp,
-                                                bottomEnd   = if (clampTo   == to)   4.dp else 0.dp
+                                                topStart    = if (leftRound)  4.dp else 0.dp,
+                                                bottomStart = if (leftRound)  4.dp else 0.dp,
+                                                topEnd      = if (rightRound) 4.dp else 0.dp,
+                                                bottomEnd   = if (rightRound) 4.dp else 0.dp
                                             ))
                                             .background(bg)
                                             .clickable { onEditRequest(res) },
@@ -1284,7 +1506,6 @@ private fun ReservationsTimelineView(
                                                 Modifier.fillMaxSize().padding(horizontal = 6.dp, vertical = 5.dp),
                                                 verticalArrangement = Arrangement.spacedBy(3.dp)
                                             ) {
-                                                // Status chip + guest name
                                                 Row(
                                                     horizontalArrangement = Arrangement.spacedBy(5.dp),
                                                     verticalAlignment = Alignment.CenterVertically
@@ -1310,14 +1531,13 @@ private fun ReservationsTimelineView(
                                                         modifier = Modifier.weight(1f)
                                                     )
                                                 }
-                                                // Dates & nights
+                                                // Check-in date + nights only
                                                 Text(
-                                                    "${res.checkInDate} → ${res.checkOutDate}  ($nights n.)",
+                                                    "${res.checkInDate}  ($nights n.)",
                                                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                                                     color = fg.copy(alpha = 0.85f),
                                                     maxLines = 1, overflow = TextOverflow.Ellipsis
                                                 )
-                                                // People & amount
                                                 val people = buildString {
                                                     append("${res.adults} adult${if (res.adults != 1) "s" else ""}")
                                                     if (res.children > 0) append(" · ${res.children} ch.")
@@ -1346,19 +1566,31 @@ private fun ReservationsTimelineView(
                                     val ds    = dragState!!
                                     val s     = minOf(ds.startIdx, ds.endIdx)
                                     val e     = maxOf(ds.startIdx, ds.endIdx)
-                                    val bLeft = DAY_W * s + 1.dp
-                                    val bW    = DAY_W * (e - s + 1) - 2.dp
-                                    val bTop  = (rowH - BAND_H) / 2
+                                    // Both modes: checkout = days[e]+1, so (e-s+1) nights visible
+                                    // Half-shift shifts the left edge by +0.5 columns; width is the same
+                                    val previewLeft  = if (halfShift) DAY_W * (s + 0.5f) + 1.dp else DAY_W * s + 1.dp
+                                    val previewWidth = DAY_W * (e - s + 1) - 2.dp
+                                    val bTop  = when {
+                                        showCancelled && !isExpanded -> LANE_H + (LANE_H - BAND_H) / 2
+                                        else -> (rowH - BAND_H) / 2
+                                    }
+                                    val dragConflict = hasReservationConflict(
+                                        reservations, room.id,
+                                        days[s].toString(), days[e].plusDays(1).toString()
+                                    )
+                                    val previewColor = if (dragConflict)
+                                        MaterialTheme.colorScheme.error
+                                    else
+                                        MaterialTheme.colorScheme.primary
                                     Box(
                                         Modifier
-                                            .offset(x = bLeft, y = bTop)
-                                            .width(bW).height(BAND_H)
+                                            .offset(x = previewLeft, y = bTop)
+                                            .width(previewWidth).height(BAND_H)
                                             .clip(RoundedCornerShape(4.dp))
-                                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
-                                            .border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(4.dp))
+                                            .background(previewColor.copy(alpha = 0.3f))
+                                            .border(1.dp, previewColor, RoundedCornerShape(4.dp))
                                     )
                                 }
-
                             }
                             HorizontalDivider()
                         }
