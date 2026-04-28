@@ -30,7 +30,6 @@ data class GuestDto(
     val id: Int,
     val firstName: String,
     val lastName: String,
-    val email: String?,
     val countryCode: String?,
     val phoneNumber: String?,
     val nationality: String?,
@@ -49,9 +48,9 @@ data class ReservationDto(
     val checkInDate: String,
     val checkOutDate: String,
     val status: String,
-    val adults: Int,
-    val children: Int,
-    val totalAmount: Double?
+    val adults: Double,
+    val totalAmount: Double?,
+    val description: String? = null
 )
 
 @Serializable
@@ -107,8 +106,7 @@ data class CreateReservationRequest(
     val checkInDate: String,
     val checkOutDate: String,
     val status: String = "confirmed",
-    val adults: Int = 1,
-    val children: Int = 0,
+    val adults: Double = 1.0,
     val totalAmount: Double? = null
 )
 
@@ -119,16 +117,15 @@ data class UpdateReservationRequest(
     val checkInDate: String,
     val checkOutDate: String,
     val status: String,
-    val adults: Int,
-    val children: Int,
-    val totalAmount: Double? = null
+    val adults: Double,
+    val totalAmount: Double? = null,
+    val description: String? = null
 )
 
 @Serializable
 data class CreateGuestRequest(
     val firstName: String,
     val lastName: String,
-    val email: String? = null,
     val countryCode: String? = null,
     val phoneNumber: String? = null,
     val nationality: String? = null

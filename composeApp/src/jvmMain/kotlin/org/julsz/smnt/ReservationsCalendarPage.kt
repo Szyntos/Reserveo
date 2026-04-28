@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -61,6 +62,7 @@ private val RESERVATION_STATUSES = listOf(
 )
 
 private enum class ResView { Calendar, Timeline }
+private enum class TimelineScale { Center, Month, Year }
 
 // ─── Calendar helpers (same pattern as price rules) ───────────────────────────
 
@@ -86,7 +88,7 @@ private fun buildResWeeks(year: Int, month: Int): List<List<RCalDay>> {
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
 @Composable
-fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto) {
+fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, centerDays: Int = 30) {
     val scope = rememberCoroutineScope()
 
     var reservations by remember { mutableStateOf<List<ReservationDto>>(emptyList()) }
@@ -96,12 +98,15 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto) {
     var roomBlocks   by remember { mutableStateOf<List<RoomBlockDto>>(emptyList()) }
     var loading      by remember { mutableStateOf(true) }
     var error        by remember { mutableStateOf<String?>(null) }
-    var displayYear  by remember { mutableStateOf(LocalDate.now().year) }
-    var displayMonth by remember { mutableStateOf(LocalDate.now().monthValue) }
-    var currentView  by remember { mutableStateOf(ResView.Calendar) }
+    var displayYear    by remember { mutableStateOf(LocalDate.now().year) }
+    var displayMonth   by remember { mutableStateOf(LocalDate.now().monthValue) }
+    var currentView    by remember { mutableStateOf(ResView.Timeline) }
+    var timelineScale  by remember { mutableStateOf(TimelineScale.Center) }
     var showNewDialog     by remember { mutableStateOf(false) }
     var showBlockDialog   by remember { mutableStateOf(false) }
+    var optionRes         by remember { mutableStateOf<ReservationDto?>(null) }
     var editReservation   by remember { mutableStateOf<ReservationDto?>(null) }
+    var summaryRes        by remember { mutableStateOf<ReservationDto?>(null) }
     var editBlock         by remember { mutableStateOf<RoomBlockDto?>(null) }
     var prefillRoom       by remember { mutableStateOf<RoomDto?>(null) }
     var prefillCheckIn    by remember { mutableStateOf("") }
@@ -163,21 +168,36 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto) {
                     }
                 }
                 Spacer(Modifier.width(4.dp))
-                // Navigation
-                IconButton(onClick = {
-                    if (currentView == ResView.Calendar) displayYear--
-                    else if (displayMonth == 1) { displayMonth = 12; displayYear-- } else displayMonth--
-                }, Modifier.size(32.dp)) { Text("◀", style = MaterialTheme.typography.labelLarge) }
+                // Navigation — hidden for center scale (no anchor to navigate)
+                val showNav = !(currentView == ResView.Timeline && timelineScale == TimelineScale.Center)
+                if (showNav) {
+                    IconButton(onClick = {
+                        when {
+                            currentView == ResView.Calendar || timelineScale == TimelineScale.Year -> displayYear--
+                            displayMonth == 1 -> { displayMonth = 12; displayYear-- }
+                            else -> displayMonth--
+                        }
+                    }, Modifier.size(32.dp)) { Text("◀", style = MaterialTheme.typography.labelLarge) }
+                }
                 Text(
-                    if (currentView == ResView.Calendar) "$displayYear"
-                    else "${Month.of(displayMonth).getDisplayName(java.time.format.TextStyle.SHORT, Locale.ENGLISH)} $displayYear",
+                    when {
+                        currentView == ResView.Calendar -> "$displayYear"
+                        timelineScale == TimelineScale.Center -> "±${centerDays}d"
+                        timelineScale == TimelineScale.Year -> "$displayYear"
+                        else -> "${Month.of(displayMonth).getDisplayName(java.time.format.TextStyle.SHORT, Locale.ENGLISH)} $displayYear"
+                    },
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
-                IconButton(onClick = {
-                    if (currentView == ResView.Calendar) displayYear++
-                    else if (displayMonth == 12) { displayMonth = 1; displayYear++ } else displayMonth++
-                }, Modifier.size(32.dp)) { Text("▶", style = MaterialTheme.typography.labelLarge) }
+                if (showNav) {
+                    IconButton(onClick = {
+                        when {
+                            currentView == ResView.Calendar || timelineScale == TimelineScale.Year -> displayYear++
+                            displayMonth == 12 -> { displayMonth = 1; displayYear++ }
+                            else -> displayMonth++
+                        }
+                    }, Modifier.size(32.dp)) { Text("▶", style = MaterialTheme.typography.labelLarge) }
+                }
                 Spacer(Modifier.width(4.dp))
                 Button(onClick = { showBlockDialog = true }, enabled = rooms.isNotEmpty()) {
                     Text("Block Room")
@@ -221,7 +241,7 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto) {
                             year         = displayYear,
                             month        = m,
                             reservations = reservations,
-                            onResClick   = { editReservation = it }
+                            onResClick   = { optionRes = it }
                         )
                         if (m < 12) HorizontalDivider(Modifier.padding(vertical = 16.dp))
                         else Spacer(Modifier.height(16.dp))
@@ -234,7 +254,10 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto) {
                 blocks          = roomBlocks,
                 year            = displayYear,
                 month           = displayMonth,
-                onEditRequest   = { editReservation = it },
+                scale           = timelineScale,
+                onScaleChange   = { timelineScale = it },
+                centerDays      = centerDays,
+                onEditRequest   = { optionRes = it },
                 onBlockClick    = { editBlock = it },
                 onCreateRequest = { room, cin, cout ->
                     prefillRoom     = room
@@ -327,6 +350,53 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto) {
                     try {
                         client.delete("$BASE_URL/api/reservations/${res.id}")
                         editReservation = null
+                        loadData(showLoading = false)
+                    } catch (e: Exception) { error = e.message }
+                }
+            },
+            onCreateGuest = { req ->
+                try {
+                    val created: GuestDto = client.post("$BASE_URL/api/guests") {
+                        contentType(ContentType.Application.Json)
+                        setBody(req)
+                    }.body()
+                    guests = guests + created
+                    created
+                } catch (e: Exception) { error = e.message; null }
+            }
+        )
+    }
+
+    // ── Reservation options dialog ─────────────────────────────────────────────
+    optionRes?.let { res ->
+        ReservationOptionsDialog(
+            res       = res,
+            onDismiss = { optionRes = null },
+            onEdit    = { editReservation = res; optionRes = null },
+            onSummary = { summaryRes = res; optionRes = null }
+        )
+    }
+
+    // ── Reservation summary dialog ─────────────────────────────────────────────
+    summaryRes?.let { res ->
+        ReservationSummaryDialog(
+            res    = res,
+            rooms  = rooms,
+            guests = guests,
+            onDismiss = { summaryRes = null },
+            onSaveDescription = { desc ->
+                scope.launch {
+                    try {
+                        client.put("$BASE_URL/api/reservations/${res.id}") {
+                            contentType(ContentType.Application.Json)
+                            setBody(UpdateReservationRequest(
+                                roomId = res.roomId, guestId = res.guestId,
+                                checkInDate = res.checkInDate, checkOutDate = res.checkOutDate,
+                                status = res.status, adults = res.adults,
+                                totalAmount = res.totalAmount, description = desc
+                            ))
+                        }
+                        summaryRes = null
                         loadData(showLoading = false)
                     } catch (e: Exception) { error = e.message }
                 }
@@ -551,6 +621,110 @@ private fun hasReservationConflict(
     }
 }
 
+private fun formatAdults(a: Double): String =
+    if (a % 1.0 == 0.0) a.toLong().toString() else "%.1f".format(a)
+
+// ─── Options dialog (shown when clicking a reservation) ──────────────────────
+
+@Composable
+private fun ReservationOptionsDialog(
+    res: ReservationDto,
+    onDismiss: () -> Unit,
+    onEdit: () -> Unit,
+    onSummary: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Reservation #${res.id}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(res.guestName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Room ${res.roomNumber} · ${res.checkInDate} → ${res.checkOutDate}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Button(onClick = onEdit, modifier = Modifier.fillMaxWidth()) { Text("Edit Reservation") }
+                OutlinedButton(onClick = onSummary, modifier = Modifier.fillMaxWidth()) { Text("View Summary") }
+                TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Cancel") }
+            }
+        }
+    )
+}
+
+// ─── Summary dialog ───────────────────────────────────────────────────────────
+
+@Composable
+private fun ReservationSummaryDialog(
+    res: ReservationDto,
+    rooms: List<RoomDto>,
+    guests: List<GuestDto>,
+    onDismiss: () -> Unit,
+    onSaveDescription: (String?) -> Unit
+) {
+    var description by remember { mutableStateOf(res.description ?: "") }
+    val nights = remember(res.checkInDate, res.checkOutDate) {
+        runCatching { ChronoUnit.DAYS.between(LocalDate.parse(res.checkInDate), LocalDate.parse(res.checkOutDate)).toInt() }.getOrDefault(0)
+    }
+    val room  = rooms.find { it.id == res.roomId }
+    val guest = guests.find { it.id == res.guestId }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Reservation #${res.id}") },
+        text = {
+            Column(Modifier.width(420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                SummaryRow("Guest", res.guestName)
+                guest?.let { g ->
+                    val phone = listOfNotNull(g.countryCode?.let { "+$it" }, g.phoneNumber).joinToString(" ").ifBlank { null }
+                    val contact = listOfNotNull(phone, g.nationality).joinToString(" · ")
+                    if (contact.isNotBlank()) SummaryRow("Contact", contact)
+                }
+                SummaryRow("Room", room?.let { "Room ${it.number} · ${it.typeName}" } ?: "Room ${res.roomNumber}")
+                SummaryRow("Check-in", res.checkInDate)
+                SummaryRow("Check-out", res.checkOutDate)
+                SummaryRow("Nights", nights.toString())
+                SummaryRow("Adults", formatAdults(res.adults))
+                SummaryRow("Status", res.status.replace('_', ' ').replaceFirstChar { it.uppercaseChar() })
+                res.totalAmount?.let { SummaryRow("Total", "${"%.2f".format(it)} PLN") }
+                HorizontalDivider()
+                Text("Notes", style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp),
+                    placeholder = { Text("Add notes about this reservation…") },
+                    maxLines = 6
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onSaveDescription(description.trim().ifBlank { null }) }) {
+                Text("Save notes")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } }
+    )
+}
+
+@Composable
+private fun SummaryRow(label: String, value: String) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(label, style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(72.dp))
+        Text(value, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+    }
+}
+
 // ─── New Reservation dialog ───────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -573,19 +747,20 @@ private fun NewReservationDialog(
     var statusExpanded  by remember { mutableStateOf(false) }
     var checkIn   by remember { mutableStateOf(prefillCheckIn) }
     var checkOut  by remember { mutableStateOf(prefillCheckOut) }
-    var adults    by remember { mutableStateOf("1") }
-    var children  by remember { mutableStateOf("0") }
+    var adults    by remember { mutableStateOf(selectedRoom?.maxGuests?.toString() ?: "1") }
     var status    by remember { mutableStateOf("confirmed") }
     var ppnInput  by remember { mutableStateOf("") }
     // Guest form
     var guestFirstName   by remember { mutableStateOf("") }
     var guestLastName    by remember { mutableStateOf("") }
-    var guestEmail       by remember { mutableStateOf("") }
     var guestCountryCode by remember { mutableStateOf("") }
     var guestPhoneNumber by remember { mutableStateOf("") }
     var selectedGuest    by remember { mutableStateOf<GuestDto?>(null) }
     val scope = rememberCoroutineScope()
 
+    LaunchedEffect(selectedRoom?.id) {
+        selectedRoom?.let { adults = it.maxGuests.toString() }
+    }
     val nights = remember(checkIn, checkOut) {
         runCatching { ChronoUnit.DAYS.between(LocalDate.parse(checkIn.trim()), LocalDate.parse(checkOut.trim())).toInt() }.getOrDefault(0)
     }
@@ -596,7 +771,7 @@ private fun NewReservationDialog(
         matchingRule?.let { ppnInput = "%.2f".format(it.pricePerPersonPerNight) }
     }
     val ppn = ppnInput.toDoubleOrNull()
-    val totalGuests = (adults.toIntOrNull() ?: 1) + (children.toIntOrNull() ?: 0)
+    val totalGuests = adults.toDoubleOrNull() ?: 1.0
     val computedTotal = if (ppn != null && nights > 0) ppn * nights * totalGuests else null
     val guestReady = selectedGuest != null || (guestFirstName.isNotBlank() && guestLastName.isNotBlank())
     val conflict = remember(selectedRoom?.id, checkIn, checkOut) {
@@ -604,7 +779,7 @@ private fun NewReservationDialog(
         hasReservationConflict(reservations, selectedRoom!!.id, checkIn, checkOut)
     }
     val valid = selectedRoom != null && guestReady &&
-        checkIn.isNotBlank() && checkOut.isNotBlank() && adults.toIntOrNull() != null && !conflict
+        checkIn.isNotBlank() && checkOut.isNotBlank() && adults.toDoubleOrNull() != null && !conflict
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -637,8 +812,6 @@ private fun NewReservationDialog(
                     onFirstNameChange = { guestFirstName = it; selectedGuest = null },
                     lastName = guestLastName,
                     onLastNameChange = { guestLastName = it; selectedGuest = null },
-                    email = guestEmail,
-                    onEmailChange = { guestEmail = it; selectedGuest = null },
                     countryCode = guestCountryCode,
                     onCountryCodeChange = { guestCountryCode = it },
                     phoneNumber = guestPhoneNumber,
@@ -666,10 +839,7 @@ private fun NewReservationDialog(
                             color = MaterialTheme.colorScheme.onErrorContainer)
                     }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(adults,   { adults   = it }, label = { Text("Adults *") }, singleLine = true, modifier = Modifier.weight(1f))
-                    OutlinedTextField(children, { children = it }, label = { Text("Children") }, singleLine = true, modifier = Modifier.weight(1f))
-                }
+                OutlinedTextField(adults, { adults = it }, label = { Text("Adults") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 ExposedDropdownMenuBox(expanded = statusExpanded, onExpandedChange = { statusExpanded = it }) {
                     OutlinedTextField(
                         value = status.replace('_', ' '), onValueChange = {}, readOnly = true, label = { Text("Status") },
@@ -698,7 +868,6 @@ private fun NewReservationDialog(
                             onCreateGuest(CreateGuestRequest(
                                 firstName   = guestFirstName.trim(),
                                 lastName    = guestLastName.trim(),
-                                email       = guestEmail.trim().ifBlank { null },
                                 countryCode = guestCountryCode.trim().ifBlank { null },
                                 phoneNumber = guestPhoneNumber.trim().ifBlank { null }
                             ))?.id
@@ -706,8 +875,7 @@ private fun NewReservationDialog(
                         onConfirm(CreateReservationRequest(
                             hotelId = hotel.hotelId, roomId = selectedRoom!!.id, guestId = guestId,
                             checkInDate = checkIn.trim(), checkOutDate = checkOut.trim(), status = status,
-                            adults = adults.trim().toIntOrNull() ?: 1,
-                            children = children.trim().toIntOrNull() ?: 0,
+                            adults = adults.trim().toDoubleOrNull() ?: 1.0,
                             totalAmount = computedTotal
                         ))
                     }
@@ -730,17 +898,21 @@ private fun ReservationEditDialog(
     priceRules: List<PriceRuleDto>,
     onDismiss: () -> Unit,
     onConfirm: (UpdateReservationRequest) -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onCreateGuest: suspend (CreateGuestRequest) -> GuestDto?
 ) {
-    var selectedRoom   by remember { mutableStateOf(rooms.find { it.id == existing.roomId } ?: rooms.firstOrNull()) }
-    var selectedGuest  by remember { mutableStateOf(guests.find { it.id == existing.guestId } ?: guests.firstOrNull()) }
+    val scope = rememberCoroutineScope()
+    var selectedRoom     by remember { mutableStateOf(rooms.find { it.id == existing.roomId } ?: rooms.firstOrNull()) }
+    var selectedGuest    by remember { mutableStateOf(guests.find { it.id == existing.guestId }) }
+    var guestFirstName   by remember { mutableStateOf("") }
+    var guestLastName    by remember { mutableStateOf("") }
+    var guestCountryCode by remember { mutableStateOf("") }
+    var guestPhoneNumber by remember { mutableStateOf("") }
     var roomExpanded   by remember { mutableStateOf(false) }
-    var guestExpanded  by remember { mutableStateOf(false) }
     var statusExpanded by remember { mutableStateOf(false) }
     var checkIn  by remember { mutableStateOf(existing.checkInDate) }
     var checkOut by remember { mutableStateOf(existing.checkOutDate) }
-    var adults   by remember { mutableStateOf(existing.adults.toString()) }
-    var children by remember { mutableStateOf(existing.children.toString()) }
+    var adults   by remember { mutableStateOf(formatAdults(existing.adults)) }
     var status   by remember { mutableStateOf(existing.status) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
@@ -749,8 +921,8 @@ private fun ReservationEditDialog(
         val cin  = runCatching { LocalDate.parse(existing.checkInDate) }.getOrNull()
         val cout = runCatching { LocalDate.parse(existing.checkOutDate) }.getOrNull()
         val n    = if (cin != null && cout != null && cout.isAfter(cin)) ChronoUnit.DAYS.between(cin, cout).toInt() else 0
-        val g    = existing.adults + existing.children
-        val back = existing.totalAmount?.let { if (n > 0 && g > 0) "%.2f".format(it / (n * g)) else null } ?: ""
+        val g    = existing.adults
+        val back = existing.totalAmount?.let { if (n > 0 && g > 0.0) "%.2f".format(it / (n * g)) else null } ?: ""
         mutableStateOf(back)
     }
 
@@ -764,14 +936,15 @@ private fun ReservationEditDialog(
         matchingRule?.let { ppnInput = "%.2f".format(it.pricePerPersonPerNight) }
     }
     val ppn = ppnInput.toDoubleOrNull()
-    val totalGuests = (adults.toIntOrNull() ?: 1) + (children.toIntOrNull() ?: 0)
+    val totalGuests = adults.toDoubleOrNull() ?: 1.0
     val computedTotal = if (ppn != null && nights > 0) ppn * nights * totalGuests else null
     val conflict = remember(selectedRoom?.id, checkIn, checkOut) {
         selectedRoom != null && checkIn.isNotBlank() && checkOut.isNotBlank() &&
         hasReservationConflict(reservations, selectedRoom!!.id, checkIn, checkOut, excludeId = existing.id)
     }
-    val valid = selectedRoom != null && selectedGuest != null &&
-        checkIn.isNotBlank() && checkOut.isNotBlank() && adults.toIntOrNull() != null && !conflict
+    val guestReady = selectedGuest != null || (guestFirstName.isNotBlank() && guestLastName.isNotBlank())
+    val valid = selectedRoom != null && guestReady &&
+        checkIn.isNotBlank() && checkOut.isNotBlank() && adults.toDoubleOrNull() != null && !conflict
 
     if (showDeleteConfirm) {
         AlertDialog(
@@ -788,18 +961,25 @@ private fun ReservationEditDialog(
         onDismissRequest = onDismiss,
         title = { Text("Edit Reservation #${existing.id}") },
         text = {
-            Column(Modifier.width(420.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.width(420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                GuestInputSection(
+                    guests = guests,
+                    selectedGuest = selectedGuest,
+                    onSelectedGuestChange = { selectedGuest = it },
+                    firstName = guestFirstName, onFirstNameChange = { guestFirstName = it; selectedGuest = null },
+                    lastName = guestLastName, onLastNameChange = { guestLastName = it; selectedGuest = null },
+                    countryCode = guestCountryCode, onCountryCodeChange = { guestCountryCode = it },
+                    phoneNumber = guestPhoneNumber, onPhoneNumberChange = { guestPhoneNumber = it }
+                )
+                HorizontalDivider()
                 ReservationFormFields(
-                    rooms = rooms, guests = guests,
+                    rooms = rooms,
                     selectedRoom = selectedRoom, onRoomChange = { selectedRoom = it },
-                    selectedGuest = selectedGuest, onGuestChange = { selectedGuest = it },
                     roomExpanded = roomExpanded, onRoomExpandChange = { roomExpanded = it },
-                    guestExpanded = guestExpanded, onGuestExpandChange = { guestExpanded = it },
                     statusExpanded = statusExpanded, onStatusExpandChange = { statusExpanded = it },
                     checkIn = checkIn, onCheckInChange = { checkIn = it },
                     checkOut = checkOut, onCheckOutChange = { checkOut = it },
                     adults = adults, onAdultsChange = { adults = it },
-                    children = children, onChildrenChange = { children = it },
                     status = status, onStatusChange = { status = it }
                 )
                 if (conflict) {
@@ -829,13 +1009,23 @@ private fun ReservationEditDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    onConfirm(UpdateReservationRequest(
-                        roomId = selectedRoom!!.id, guestId = selectedGuest!!.id,
-                        checkInDate = checkIn.trim(), checkOutDate = checkOut.trim(), status = status,
-                        adults = adults.trim().toIntOrNull() ?: 1,
-                        children = children.trim().toIntOrNull() ?: 0,
-                        totalAmount = computedTotal
-                    ))
+                    scope.launch {
+                        val guestId = selectedGuest?.id ?: run {
+                            onCreateGuest(CreateGuestRequest(
+                                firstName   = guestFirstName.trim(),
+                                lastName    = guestLastName.trim(),
+                                countryCode = guestCountryCode.trim().ifBlank { null },
+                                phoneNumber = guestPhoneNumber.trim().ifBlank { null }
+                            ))?.id
+                        } ?: return@launch
+                        onConfirm(UpdateReservationRequest(
+                            roomId = selectedRoom!!.id, guestId = guestId,
+                            checkInDate = checkIn.trim(), checkOutDate = checkOut.trim(), status = status,
+                            adults = adults.trim().toDoubleOrNull() ?: 1.0,
+                            totalAmount = computedTotal,
+                            description = existing.description
+                        ))
+                    }
                 }, enabled = valid
             ) { Text("Save") }
         },
@@ -856,16 +1046,13 @@ private fun ReservationEditDialog(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ReservationFormFields(
-    rooms: List<RoomDto>, guests: List<GuestDto>,
+    rooms: List<RoomDto>,
     selectedRoom: RoomDto?, onRoomChange: (RoomDto) -> Unit,
-    selectedGuest: GuestDto?, onGuestChange: (GuestDto) -> Unit,
     roomExpanded: Boolean, onRoomExpandChange: (Boolean) -> Unit,
-    guestExpanded: Boolean, onGuestExpandChange: (Boolean) -> Unit,
     statusExpanded: Boolean, onStatusExpandChange: (Boolean) -> Unit,
     checkIn: String, onCheckInChange: (String) -> Unit,
     checkOut: String, onCheckOutChange: (String) -> Unit,
     adults: String, onAdultsChange: (String) -> Unit,
-    children: String, onChildrenChange: (String) -> Unit,
     status: String, onStatusChange: (String) -> Unit
 ) {
     ExposedDropdownMenuBox(expanded = roomExpanded, onExpandedChange = onRoomExpandChange) {
@@ -884,30 +1071,11 @@ private fun ReservationFormFields(
             }
         }
     }
-    ExposedDropdownMenuBox(expanded = guestExpanded, onExpandedChange = onGuestExpandChange) {
-        OutlinedTextField(
-            value = selectedGuest?.let { "${it.firstName} ${it.lastName}" } ?: "Select guest",
-            onValueChange = {}, readOnly = true, label = { Text("Guest *") },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(guestExpanded) },
-            modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(), singleLine = true
-        )
-        ExposedDropdownMenu(expanded = guestExpanded, onDismissRequest = { onGuestExpandChange(false) }) {
-            guests.forEach { guest ->
-                DropdownMenuItem(
-                    text = { Text("${guest.firstName} ${guest.lastName}${guest.nationality?.let { " · $it" } ?: ""}") },
-                    onClick = { onGuestChange(guest); onGuestExpandChange(false) }
-                )
-            }
-        }
-    }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         ResDatePickerField("Check-in *",  checkIn,  onCheckInChange,  Modifier.weight(1f))
         ResDatePickerField("Check-out *", checkOut, onCheckOutChange, Modifier.weight(1f))
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(adults,   onAdultsChange,   label = { Text("Adults *") }, singleLine = true, modifier = Modifier.weight(1f))
-        OutlinedTextField(children, onChildrenChange, label = { Text("Children") }, singleLine = true, modifier = Modifier.weight(1f))
-    }
+    OutlinedTextField(adults, onAdultsChange, label = { Text("Adults") }, singleLine = true, modifier = Modifier.fillMaxWidth())
     ExposedDropdownMenuBox(expanded = statusExpanded, onExpandedChange = onStatusExpandChange) {
         OutlinedTextField(
             value = status.replace('_', ' '), onValueChange = {}, readOnly = true, label = { Text("Status") },
@@ -928,7 +1096,7 @@ private fun PricePpnSection(
     onPpnChange: (String) -> Unit,
     matchingRule: PriceRuleDto?,
     nights: Int,
-    totalGuests: Int,
+    totalGuests: Double,
     computedTotal: Double?
 ) {
     Row(
@@ -947,7 +1115,7 @@ private fun PricePpnSection(
         Column {
             if (computedTotal != null) {
                 Text(
-                    "$nights night${if (nights != 1) "s" else ""} × $totalGuests person${if (totalGuests != 1) "s" else ""}",
+                    "$nights night${if (nights != 1) "s" else ""} × ${formatAdults(totalGuests)} person${if (totalGuests != 1.0) "s" else ""}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -973,8 +1141,6 @@ private fun PricePpnSection(
 
 // ─── Timeline view ────────────────────────────────────────────────────────────
 
-private enum class TimelineScale { Month, Year }
-
 private data class TimelineDragState(val room: RoomDto, val startIdx: Int, val endIdx: Int)
 
 @Composable
@@ -984,70 +1150,105 @@ private fun ReservationsTimelineView(
     blocks: List<RoomBlockDto>,
     year: Int,
     month: Int,
+    scale: TimelineScale,
+    onScaleChange: (TimelineScale) -> Unit,
+    centerDays: Int,
     onEditRequest: (ReservationDto) -> Unit,
     onBlockClick: (RoomBlockDto) -> Unit,
     onCreateRequest: (room: RoomDto, checkIn: LocalDate, checkOut: LocalDate) -> Unit
 ) {
+    val scope         = rememberCoroutineScope()
     var dragState     by remember { mutableStateOf<TimelineDragState?>(null) }
-    var scale         by remember { mutableStateOf(TimelineScale.Month) }
     var dayWidthPx    by remember { mutableStateOf(40f) }
+    var viewportWidthPx by remember { mutableStateOf(0) }
     var halfShift     by remember { mutableStateOf(false) }
     var showCancelled by remember { mutableStateOf(false) }
     // Round to an integer pixel so that (DAY_W * n) == n individual DAY_W cells,
     // preventing month-header dividers from drifting out of sync with day columns.
     val density      = LocalDensity.current
     val DAY_W        = with(density) { dayWidthPx.dp.roundToPx().toDp() }
+    val today        = LocalDate.now()
 
     // All days in view
-    val days: List<LocalDate> = remember(year, month, scale) {
+    val days: List<LocalDate> = remember(year, month, scale, centerDays) {
         when (scale) {
             TimelineScale.Month -> {
                 val n = LocalDate.of(year, month, 1).lengthOfMonth()
                 (1..n).map { LocalDate.of(year, month, it) }
             }
-            TimelineScale.Year  -> (1..12).flatMap { m ->
-                val n = LocalDate.of(year, m, 1).lengthOfMonth()
-                (1..n).map { LocalDate.of(year, m, it) }
+            TimelineScale.Year  -> buildList {
+                val decLen = LocalDate.of(year - 1, 12, 1).lengthOfMonth()
+                addAll((1..decLen).map { LocalDate.of(year - 1, 12, it) })
+                (1..12).forEach { m ->
+                    val n = LocalDate.of(year, m, 1).lengthOfMonth()
+                    addAll((1..n).map { LocalDate.of(year, m, it) })
+                }
+                val janLen = LocalDate.of(year + 1, 1, 1).lengthOfMonth()
+                addAll((1..janLen).map { LocalDate.of(year + 1, 1, it) })
+            }
+            TimelineScale.Center -> {
+                val start = today.minusDays(centerDays.toLong())
+                val totalDays = centerDays * 2 + 1
+                (0 until totalDays).map { start.plusDays(it.toLong()) }
             }
         }
     }
-    // Month label segments for year-scale header
-    val monthSegments: List<Pair<String, Int>> = remember(year, scale) {
-        if (scale == TimelineScale.Year) (1..12).map { m ->
-            Month.of(m).getDisplayName(java.time.format.TextStyle.SHORT, Locale.ENGLISH) to
-                LocalDate.of(year, m, 1).lengthOfMonth()
-        } else emptyList()
+    // Month label segments — shown for Year and Center scales
+    val monthSegments: List<Pair<String, Int>> = remember(year, month, scale, centerDays) {
+        when (scale) {
+            TimelineScale.Year -> buildList {
+                add(Month.DECEMBER.getDisplayName(java.time.format.TextStyle.SHORT, Locale.ENGLISH) to LocalDate.of(year - 1, 12, 1).lengthOfMonth())
+                (1..12).forEach { m -> add(Month.of(m).getDisplayName(java.time.format.TextStyle.SHORT, Locale.ENGLISH) to LocalDate.of(year, m, 1).lengthOfMonth()) }
+                add(Month.JANUARY.getDisplayName(java.time.format.TextStyle.SHORT, Locale.ENGLISH) to LocalDate.of(year + 1, 1, 1).lengthOfMonth())
+            }
+            TimelineScale.Center -> {
+                val start = today.minusDays(centerDays.toLong())
+                val end   = today.plusDays(centerDays.toLong())
+                val segments = mutableListOf<Pair<String, Int>>()
+                var d = start
+                while (!d.isAfter(end)) {
+                    val monthEnd   = d.with(TemporalAdjusters.lastDayOfMonth())
+                    val clampedEnd = if (monthEnd.isAfter(end)) end else monthEnd
+                    val count      = ChronoUnit.DAYS.between(d, clampedEnd).toInt() + 1
+                    segments += Month.of(d.monthValue).getDisplayName(java.time.format.TextStyle.SHORT, Locale.ENGLISH) to count
+                    d = clampedEnd.plusDays(1)
+                }
+                segments
+            }
+            else -> emptyList()
+        }
     }
 
     val dateStart    = days.first()
     val dateEnd      = days.last()
-    val today        = LocalDate.now()
     val totalWidth   = DAY_W * days.size
 
-    val ROW_H        = 34.dp
-    val LANE_H       = 30.dp          // each lane height when split (showCancelled)
+    val fs           = density.fontScale
+    val ROW_H        = 34.dp * fs
+    val LANE_H       = 30.dp * fs
     val SPLIT_ROW_H  = LANE_H * 2
-    val MONTH_ROW_H  = 18.dp
-    val DAY_ROW_H    = 46.dp
-    val HEAD_H       = if (scale == TimelineScale.Year) MONTH_ROW_H + DAY_ROW_H else DAY_ROW_H
-    val LABEL_W      = 96.dp
-    val BAND_H       = 22.dp
+    val MONTH_ROW_H  = 18.dp * fs
+    val DAY_ROW_H    = 46.dp * fs
+    val HEAD_H       = if (scale == TimelineScale.Month) DAY_ROW_H else MONTH_ROW_H + DAY_ROW_H
+    val LABEL_W      = 96.dp * fs
+    val BAND_H       = 22.dp * fs
 
     val resByRoom    = remember(reservations) { reservations.groupBy { it.roomId } }
     val blocksByRoom = remember(blocks) { blocks.groupBy { it.roomId } }
     var expandedRoomId  by remember { mutableStateOf<Int?>(null) }
-    val EXPANDED_ROW_H  = 100.dp
-    val EXPANDED_BAND_H = 88.dp
+    val EXPANDED_ROW_H  = 100.dp * fs
+    val EXPANDED_BAND_H = 88.dp * fs
     val hScroll      = rememberScrollState()
     val vScroll      = rememberScrollState()
     val divColor     = MaterialTheme.colorScheme.outlineVariant
 
     // Scroll to today when scale or period changes
-    LaunchedEffect(scale, year, month) {
+    LaunchedEffect(scale, year, month, centerDays) {
         val dayPx = with(density) { dayWidthPx.dp.roundToPx() }
         if (!today.isBefore(dateStart) && !today.isAfter(dateEnd)) {
             val dayOffset = ChronoUnit.DAYS.between(dateStart, today).toInt()
-            hScroll.scrollTo(dayOffset * dayPx)
+            val centered  = (dayOffset * dayPx - viewportWidthPx / 2 + dayPx / 2).coerceAtLeast(0)
+            hScroll.scrollTo(centered)
         } else {
             hScroll.scrollTo(0)
         }
@@ -1062,13 +1263,13 @@ private fun ReservationsTimelineView(
         ) {
             // Scale pill
             Row(Modifier.clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
-                listOf(TimelineScale.Month to "Month", TimelineScale.Year to "Year").forEach { (s, label) ->
+                listOf(TimelineScale.Center to "Center", TimelineScale.Month to "Month", TimelineScale.Year to "Year").forEach { (s, label) ->
                     val sel = scale == s
                     Box(
                         Modifier
                             .clip(RoundedCornerShape(6.dp))
                             .background(if (sel) MaterialTheme.colorScheme.secondary else Color.Transparent)
-                            .clickable { scale = s }
+                            .clickable { onScaleChange(s) }
                             .padding(horizontal = 10.dp, vertical = 5.dp)
                     ) {
                         Text(label, style = MaterialTheme.typography.labelMedium,
@@ -1076,6 +1277,26 @@ private fun ReservationsTimelineView(
                                     else MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
+            }
+            // Today button
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .clickable {
+                        scope.launch {
+                            val dayPx = with(density) { dayWidthPx.dp.roundToPx() }
+                            if (!today.isBefore(dateStart) && !today.isAfter(dateEnd)) {
+                                val dayOffset = ChronoUnit.DAYS.between(dateStart, today).toInt()
+                                val centered  = (dayOffset * dayPx - viewportWidthPx / 2 + dayPx / 2).coerceAtLeast(0)
+                                hScroll.animateScrollTo(centered)
+                            }
+                        }
+                    }
+                    .padding(horizontal = 10.dp, vertical = 5.dp)
+            ) {
+                Text("Today", style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             // Day width slider
             Text("Width:", style = MaterialTheme.typography.labelSmall,
@@ -1134,8 +1355,8 @@ private fun ReservationsTimelineView(
             Box(Modifier.width(1.dp).fillMaxHeight().background(divColor))
             Box(Modifier.weight(1f).horizontalScroll(hScroll)) {
                 Column(Modifier.width(totalWidth)) {
-                    // Month label row (year scale only)
-                    if (scale == TimelineScale.Year) {
+                    // Month label row (year and center scales)
+                    if (scale != TimelineScale.Month) {
                         Row(Modifier.fillMaxWidth().height(MONTH_ROW_H)) {
                             monthSegments.forEach { (name, count) ->
                                 Box(
@@ -1255,7 +1476,8 @@ private fun ReservationsTimelineView(
             Box(Modifier.width(1.dp).fillMaxHeight().background(divColor))
 
             // Scrollable content with scrollbars overlaid
-            Box(Modifier.weight(1f).fillMaxHeight()) {
+            Box(Modifier.weight(1f).fillMaxHeight()
+                .onGloballyPositioned { viewportWidthPx = it.size.width }) {
                 // Main scrollable content
                 Box(
                     Modifier.fillMaxSize()
@@ -1538,10 +1760,7 @@ private fun ReservationsTimelineView(
                                                     color = fg.copy(alpha = 0.85f),
                                                     maxLines = 1, overflow = TextOverflow.Ellipsis
                                                 )
-                                                val people = buildString {
-                                                    append("${res.adults} adult${if (res.adults != 1) "s" else ""}")
-                                                    if (res.children > 0) append(" · ${res.children} ch.")
-                                                }
+                                                val people = "${formatAdults(res.adults)} adult${if (res.adults != 1.0) "s" else ""}"
                                                 val amountStr = res.totalAmount?.let { " · ${"%.0f".format(it)} PLN" } ?: ""
                                                 Text(
                                                     "$people$amountStr",
@@ -1623,19 +1842,16 @@ private fun GuestInputSection(
     onSelectedGuestChange: (GuestDto?) -> Unit,
     firstName: String,    onFirstNameChange: (String) -> Unit,
     lastName: String,     onLastNameChange: (String) -> Unit,
-    email: String,        onEmailChange: (String) -> Unit,
     countryCode: String,  onCountryCodeChange: (String) -> Unit,
     phoneNumber: String,  onPhoneNumberChange: (String) -> Unit
 ) {
-    val suggestions = remember(firstName, lastName, email, guests) {
+    val suggestions = remember(firstName, lastName, guests) {
         val fn = firstName.trim().lowercase()
         val ln = lastName.trim().lowercase()
-        val em = email.trim().lowercase()
-        if (fn.isBlank() && ln.isBlank() && em.isBlank()) emptyList()
+        if (fn.isBlank() && ln.isBlank()) emptyList()
         else guests.filter { g ->
             (fn.isEmpty() || g.firstName.lowercase().contains(fn)) &&
-            (ln.isEmpty() || g.lastName.lowercase().contains(ln)) &&
-            (em.isEmpty() || g.email?.lowercase()?.contains(em) == true)
+            (ln.isEmpty() || g.lastName.lowercase().contains(ln))
         }.take(3)
     }
 
@@ -1659,7 +1875,7 @@ private fun GuestInputSection(
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                     val phone = listOfNotNull(selectedGuest.countryCode?.let { "+$it" }, selectedGuest.phoneNumber).joinToString(" ").ifBlank { null }
-                    val detail = listOfNotNull(selectedGuest.email, phone, selectedGuest.nationality).joinToString(" · ")
+                    val detail = listOfNotNull(phone, selectedGuest.nationality).joinToString(" · ")
                     if (detail.isNotBlank()) Text(
                         detail,
                         style = MaterialTheme.typography.labelSmall,
@@ -1681,7 +1897,6 @@ private fun GuestInputSection(
                 OutlinedTextField(firstName, onFirstNameChange, label = { Text("First name *") }, singleLine = true, modifier = Modifier.weight(1f))
                 OutlinedTextField(lastName,  onLastNameChange,  label = { Text("Last name *") },  singleLine = true, modifier = Modifier.weight(1f))
             }
-            OutlinedTextField(email, onEmailChange, label = { Text("Email") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = countryCode, onValueChange = onCountryCodeChange,
@@ -1718,7 +1933,7 @@ private fun GuestInputSection(
                                 fontWeight = FontWeight.SemiBold
                             )
                             val gPhone = listOfNotNull(guest.countryCode?.let { "+$it" }, guest.phoneNumber).joinToString(" ").ifBlank { null }
-                            val detail = listOfNotNull(guest.email, gPhone, guest.nationality).joinToString(" · ")
+                            val detail = listOfNotNull(gPhone, guest.nationality).joinToString(" · ")
                             if (detail.isNotBlank()) Text(
                                 detail,
                                 style = MaterialTheme.typography.labelSmall,

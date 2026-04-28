@@ -1,5 +1,9 @@
 package org.julsz.smnt
 
+import androidx.compose.foundation.LocalScrollbarStyle
+import androidx.compose.foundation.ScrollbarStyle
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Typography
@@ -7,11 +11,14 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.platform.Font as PlatformFont
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
@@ -28,35 +35,54 @@ fun AppRoot() {
     var currentUser   by remember { mutableStateOf<UserDto?>(null) }
     var selectedHotel by remember { mutableStateOf<UserHotelRoleDto?>(null) }
     var isDark        by remember { mutableStateOf(true) }
+    var fontScale     by remember { mutableStateOf(1.0f) }
+    var centerDays    by remember { mutableStateOf(30) }
 
     fun logout() { currentUser = null; selectedHotel = null }
 
     val colorScheme = if (isDark) darkColorScheme() else lightColorScheme()
 
     MaterialTheme(colorScheme = colorScheme, typography = rememberSansSerifTypography()) {
-        Surface(Modifier.fillMaxSize()) {
-            when {
-                currentUser == null ->
-                    LoginScreen(client, onLogin = { currentUser = it })
-                currentUser!!.appRole == "admin" ->
-                    DbViewerApp(client, onLogout = ::logout)
-                selectedHotel == null ->
-                    HotelPickerScreen(
-                        client          = client,
-                        currentUser     = currentUser!!,
-                        onHotelSelected = { selectedHotel = it },
-                        onLogout        = ::logout
-                    )
-                else ->
-                    MainApp(
-                        client        = client,
-                        currentUser   = currentUser!!,
-                        selectedHotel = selectedHotel!!,
-                        onSwitchHotel = { selectedHotel = null },
-                        onLogout      = ::logout,
-                        isDark        = isDark,
-                        onThemeToggle = { isDark = !isDark }
-                    )
+        val baseDensity = LocalDensity.current
+        CompositionLocalProvider(
+            LocalScrollbarStyle provides ScrollbarStyle(
+                minimalHeight       = 16.dp,
+                thickness           = 8.dp,
+                shape               = RoundedCornerShape(4.dp),
+                hoverDurationMillis = 300,
+                unhoverColor = if (isDark) Color.White.copy(alpha = 0.25f) else Color.Black.copy(alpha = 0.20f),
+                hoverColor   = if (isDark) Color.White.copy(alpha = 0.50f) else Color.Black.copy(alpha = 0.40f)
+            ),
+            LocalDensity provides Density(baseDensity.density, fontScale)
+        ) {
+            Surface(Modifier.fillMaxSize()) {
+                when {
+                    currentUser == null ->
+                        LoginScreen(client, onLogin = { currentUser = it })
+                    currentUser!!.appRole == "admin" ->
+                        DbViewerApp(client, onLogout = ::logout)
+                    selectedHotel == null ->
+                        HotelPickerScreen(
+                            client          = client,
+                            currentUser     = currentUser!!,
+                            onHotelSelected = { selectedHotel = it },
+                            onLogout        = ::logout
+                        )
+                    else ->
+                        MainApp(
+                            client             = client,
+                            currentUser        = currentUser!!,
+                            selectedHotel      = selectedHotel!!,
+                            onSwitchHotel      = { selectedHotel = null },
+                            onLogout           = ::logout,
+                            isDark             = isDark,
+                            onThemeToggle      = { isDark = !isDark },
+                            fontScale          = fontScale,
+                            onFontScaleChange  = { fontScale = it },
+                            centerDays         = centerDays,
+                            onCenterDaysChange = { centerDays = it }
+                        )
+                }
             }
         }
     }

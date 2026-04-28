@@ -13,11 +13,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.ktor.client.*
+import io.ktor.client.call.*
+import io.ktor.client.request.*
+import io.ktor.http.*
+import kotlinx.coroutines.launch
+import java.time.LocalDate
+import kotlin.math.roundToInt
 
 private enum class AppScreen(val label: String) {
     Dashboard("Dashboard"),
     Reservations("Reservations"),
     Config("Config"),
+    Settings("Settings"),
 }
 
 @Composable
@@ -28,7 +35,11 @@ fun MainApp(
     onSwitchHotel: () -> Unit,
     onLogout: () -> Unit,
     isDark: Boolean = true,
-    onThemeToggle: () -> Unit = {}
+    onThemeToggle: () -> Unit = {},
+    fontScale: Float = 1.0f,
+    onFontScaleChange: (Float) -> Unit = {},
+    centerDays: Int = 30,
+    onCenterDaysChange: (Int) -> Unit = {}
 ) {
     var currentScreen by remember { mutableStateOf(AppScreen.Dashboard) }
 
@@ -46,9 +57,10 @@ fun MainApp(
         VerticalDivider()
         Box(Modifier.fillMaxSize().padding(28.dp)) {
             when (currentScreen) {
-                AppScreen.Dashboard    -> DashboardPage(selectedHotel)
-                AppScreen.Reservations -> ReservationsCalendarPage(client, selectedHotel)
+                AppScreen.Dashboard    -> DashboardPage(client = client, hotel = selectedHotel)
+                AppScreen.Reservations -> ReservationsCalendarPage(client, selectedHotel, centerDays)
                 AppScreen.Config       -> ConfigPage(client, selectedHotel)
+                AppScreen.Settings     -> SettingsPage(fontScale = fontScale, onFontScaleChange = onFontScaleChange, centerDays = centerDays, onCenterDaysChange = onCenterDaysChange)
             }
         }
     }
@@ -185,18 +197,228 @@ private fun SidebarItem(label: String, selected: Boolean, onClick: () -> Unit) {
 // ─── Pages ────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun DashboardPage(hotel: UserHotelRoleDto) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            hotel.hotelName,
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            "Dashboard — stats, arrivals and quick actions will appear here.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+private fun DashboardPage(client: HttpClient, hotel: UserHotelRoleDto) {
+    val scope = rememberCoroutineScope()
+    var reservations by remember { mutableStateOf<List<ReservationDto>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    val todayStr = remember { LocalDate.now().toString() }
+
+    suspend fun reload() {
+        loading = true
+        try { reservations = client.get("$BASE_URL/api/reservations?hotelId=${hotel.hotelId}").body() }
+        catch (_: Exception) {}
+        loading = false
+    }
+
+    LaunchedEffect(hotel.hotelId) { reload() }
+
+    val arrivals   = remember(reservations, todayStr) { reservations.filter { it.checkInDate  == todayStr } }
+    val departures = remember(reservations, todayStr) { reservations.filter { it.checkOutDate == todayStr } }
+
+    fun updateStatus(res: ReservationDto, newStatus: String) {
+        scope.launch {
+            try {
+                client.put("$BASE_URL/api/reservations/${res.id}") {
+                    contentType(ContentType.Application.Json)
+                    setBody(UpdateReservationRequest(
+                        roomId = res.roomId, guestId = res.guestId,
+                        checkInDate = res.checkInDate, checkOutDate = res.checkOutDate,
+                        status = newStatus, adults = res.adults,
+                        totalAmount = res.totalAmount, description = res.description
+                    ))
+                }
+                reload()
+            } catch (_: Exception) {}
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        Text(hotel.hotelName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+
+        if (loading) {
+            CircularProgressIndicator()
+        } else {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                DashboardTile(
+                    title        = "Arrivals",
+                    date         = todayStr,
+                    pending      = arrivals.filter { it.status in listOf("confirmed", "pending") },
+                    done         = arrivals.filter { it.status == "checked_in" },
+                    pendingLabel = "Not arrived",
+                    doneLabel    = "Arrived",
+                    onAction     = { updateStatus(it, "checked_in") },
+                    modifier     = Modifier.weight(1f)
+                )
+                DashboardTile(
+                    title        = "Departures",
+                    date         = todayStr,
+                    pending      = departures.filter { it.status == "checked_in" },
+                    done         = departures.filter { it.status == "checked_out" },
+                    pendingLabel = "Not departed",
+                    doneLabel    = "Departed",
+                    onAction     = { updateStatus(it, "checked_out") },
+                    modifier     = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DashboardTile(
+    title: String,
+    date: String,
+    pending: List<ReservationDto>,
+    done: List<ReservationDto>,
+    pendingLabel: String,
+    doneLabel: String,
+    onAction: (ReservationDto) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically) {
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(date, style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        HorizontalDivider()
+
+        if (pending.isEmpty() && done.isEmpty()) {
+            Text("No ${title.lowercase()} today",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            if (pending.isNotEmpty()) {
+                Text("$pendingLabel (${pending.size})",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                pending.forEach { res ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween) {
+                        Column(Modifier.weight(1f)) {
+                            Text(res.guestName, style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium)
+                            Text("Room ${res.roomNumber}", style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        IconButton(onClick = { onAction(res) }, modifier = Modifier.size(36.dp)) {
+                            Text("✓", style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
+            }
+            if (done.isNotEmpty()) {
+                if (pending.isNotEmpty()) HorizontalDivider()
+                Text("$doneLabel (${done.size})",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                done.forEach { res ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween) {
+                        Column(Modifier.weight(1f)) {
+                            Text(res.guestName, style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Room ${res.roomNumber}", style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                        }
+                        Text("✓", style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                            modifier = Modifier.padding(end = 8.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsPage(
+    fontScale: Float, onFontScaleChange: (Float) -> Unit,
+    centerDays: Int, onCenterDaysChange: (Int) -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(24.dp)
+    ) {
+        Text("Settings", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth(0.55f)
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text("Appearance", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            HorizontalDivider()
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Font size", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "${(fontScale * 100).roundToInt()}%",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Slider(
+                value = fontScale,
+                onValueChange = onFontScaleChange,
+                valueRange = 0.75f..1.5f,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("75%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("100%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("150%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+
+            HorizontalDivider()
+            Text("Timeline", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            HorizontalDivider()
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Center view range", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "±${centerDays}d",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Slider(
+                value = centerDays.toFloat(),
+                onValueChange = { onCenterDaysChange(it.roundToInt()) },
+                valueRange = 7f..90f,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("7d", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("30d", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("90d", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
     }
 }
 

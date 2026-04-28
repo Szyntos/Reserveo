@@ -251,10 +251,10 @@ private fun CreateRoomDialog(
 @Composable
 private fun GuestsTab(rows: List<GuestDto>) = DataTable(
     headers = listOf("ID" to 45.dp, "First Name" to 120.dp, "Last Name" to 140.dp,
-                     "Email" to 200.dp, "Code" to 60.dp, "Phone" to 130.dp,
+                     "Code" to 60.dp, "Phone" to 130.dp,
                      "Nationality" to 95.dp, "Blacklisted" to 85.dp),
     rows = rows
-) { g -> listOf(g.id.toString(), g.firstName, g.lastName, g.email.d(),
+) { g -> listOf(g.id.toString(), g.firstName, g.lastName,
                 g.countryCode?.let { "+$it" }.d(), g.phoneNumber.d(),
                 g.nationality.d(), if (g.blacklisted) "YES" else "no") }
 
@@ -264,10 +264,10 @@ private fun GuestsTab(rows: List<GuestDto>) = DataTable(
 private fun ReservationsTab(rows: List<ReservationDto>) = DataTable(
     headers = listOf("ID" to 45.dp, "Hotel" to 155.dp, "Room" to 55.dp, "Guest" to 170.dp,
                      "Check-in" to 95.dp, "Check-out" to 95.dp, "Status" to 105.dp,
-                     "Pax" to 45.dp, "Total PLN" to 90.dp),
+                     "Adults" to 55.dp, "Total PLN" to 90.dp),
     rows = rows
 ) { r -> listOf(r.id.toString(), r.hotelName, r.roomNumber, r.guestName,
-                r.checkInDate, r.checkOutDate, r.status, "${r.adults}+${r.children}",
+                r.checkInDate, r.checkOutDate, r.status, r.adults.let { if (it % 1 == 0.0) it.toInt().toString() else "%.1f".format(it) },
                 r.totalAmount?.let { "%.2f".format(it) }.d()) }
 
 // ─── Users ────────────────────────────────────────────────────────────────────

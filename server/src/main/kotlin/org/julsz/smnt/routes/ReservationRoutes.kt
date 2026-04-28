@@ -97,8 +97,7 @@ private fun createReservation(req: CreateReservationRequest): ReservationDto = t
         it[Reservations.checkInDate]  = LocalDate.parse(req.checkInDate)
         it[Reservations.checkOutDate] = LocalDate.parse(req.checkOutDate)
         it[Reservations.status]       = req.status
-        it[Reservations.adults]       = req.adults
-        it[Reservations.children]     = req.children
+        it[Reservations.adults]       = java.math.BigDecimal.valueOf(req.adults)
         if (req.totalAmount != null) it[Reservations.totalAmount] = java.math.BigDecimal.valueOf(req.totalAmount!!)
     } get Reservations.id
 
@@ -114,7 +113,6 @@ private fun createReservation(req: CreateReservationRequest): ReservationDto = t
         checkOutDate = req.checkOutDate,
         status       = req.status,
         adults       = req.adults,
-        children     = req.children,
         totalAmount  = req.totalAmount
     )
 }
@@ -126,9 +124,9 @@ private fun updateReservation(id: Int, req: UpdateReservationRequest): Reservati
         it[Reservations.checkInDate]  = LocalDate.parse(req.checkInDate)
         it[Reservations.checkOutDate] = LocalDate.parse(req.checkOutDate)
         it[Reservations.status]       = req.status
-        it[Reservations.adults]       = req.adults
-        it[Reservations.children]     = req.children
+        it[Reservations.adults]       = java.math.BigDecimal.valueOf(req.adults)
         it[Reservations.totalAmount]  = req.totalAmount?.let { v -> java.math.BigDecimal.valueOf(v) }
+        it[Reservations.description]  = req.description
     }
     val hotelNames  = Hotels.selectAll().associate { it[Hotels.id] to it[Hotels.name] }
     val roomNumbers = Rooms.selectAll().associate { it[Rooms.id] to it[Rooms.number] }
@@ -156,7 +154,7 @@ private fun ResultRow.toDto(
     checkInDate  = this[Reservations.checkInDate].toString(),
     checkOutDate = this[Reservations.checkOutDate].toString(),
     status       = this[Reservations.status],
-    adults       = this[Reservations.adults],
-    children     = this[Reservations.children],
-    totalAmount  = this[Reservations.totalAmount]?.toDouble()
+    adults       = this[Reservations.adults].toDouble(),
+    totalAmount  = this[Reservations.totalAmount]?.toDouble(),
+    description  = this[Reservations.description]
 )

@@ -38,7 +38,6 @@ object Guests : Table("guests") {
     val id          = integer("id").autoIncrement()
     val firstName   = varchar("first_name", 100)
     val lastName    = varchar("last_name", 100)
-    val email       = varchar("email", 255).nullable()
     val countryCode = varchar("country_code", 10).nullable()
     val phoneNumber = varchar("phone_number", 50).nullable()
     val nationality = varchar("nationality", 10).nullable()
@@ -103,8 +102,8 @@ object Reservations : Table("reservations") {
         override fun notNullValueToDB(value: String): Any =
             PGobject().apply { type = "reservation_status"; this.value = value }
     })
-    val adults       = integer("adults")
-    val children     = integer("children")
+    val adults       = decimal("adults", 4, 1)
     val totalAmount  = decimal("total_amount", 10, 2).nullable()
+    val description  = text("description").nullable()
     override val primaryKey = PrimaryKey(id)
 }
