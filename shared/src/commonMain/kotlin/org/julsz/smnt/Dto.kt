@@ -50,7 +50,10 @@ data class ReservationDto(
     val status: String,
     val adults: Double,
     val totalAmount: Double?,
-    val description: String? = null
+    val description: String? = null,
+    val paidAmount: Double = 0.0,
+    val requiresDownPayment: Boolean = false,
+    val downPaymentAmount: Double? = null
 )
 
 @Serializable
@@ -107,7 +110,9 @@ data class CreateReservationRequest(
     val checkOutDate: String,
     val status: String = "confirmed",
     val adults: Double = 1.0,
-    val totalAmount: Double? = null
+    val totalAmount: Double? = null,
+    val requiresDownPayment: Boolean = false,
+    val downPaymentAmount: Double? = null
 )
 
 @Serializable
@@ -119,7 +124,9 @@ data class UpdateReservationRequest(
     val status: String,
     val adults: Double,
     val totalAmount: Double? = null,
-    val description: String? = null
+    val description: String? = null,
+    val requiresDownPayment: Boolean = false,
+    val downPaymentAmount: Double? = null
 )
 
 @Serializable
@@ -178,6 +185,30 @@ data class CreateRoomBlockRequest(
     val fromDate: String,
     val toDate: String,
     val reason: String? = null
+)
+
+@Serializable
+data class PaymentDto(
+    val id: Int,
+    val reservationId: Int,
+    val isDeposit: Boolean,
+    val amount: Double,
+    val currency: String?,
+    val paidAt: String?,
+    val notes: String?,
+    val receiptType: String? = null,
+    val receiptNumber: String? = null
+)
+
+@Serializable
+data class CreatePaymentRequest(
+    val isDeposit: Boolean = false,
+    val amount: Double,
+    val currency: String? = "PLN",
+    val paidAt: String? = null,
+    val notes: String? = null,
+    val receiptType: String? = null,
+    val receiptNumber: String? = null
 )
 
 @Serializable

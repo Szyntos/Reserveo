@@ -90,20 +90,35 @@ object RoomBlocks : Table("room_blocks") {
     override val primaryKey = PrimaryKey(id)
 }
 
+object Payments : Table("payments") {
+    val id            = integer("id").autoIncrement()
+    val reservationId = integer("reservation_id")
+    val isDeposit     = bool("is_deposit")
+    val amount        = decimal("amount", 10, 2)
+    val currency      = varchar("currency", 100).nullable()
+    val paidAt        = datetime("paid_at").nullable()
+    val notes         = text("notes").nullable()
+    val receiptType   = varchar("receipt_type", 10).nullable()
+    val receiptNumber = varchar("receipt_number", 100).nullable()
+    override val primaryKey = PrimaryKey(id)
+}
+
 object Reservations : Table("reservations") {
-    val id           = integer("id").autoIncrement()
-    val hotelId      = integer("hotel_id")
-    val roomId       = integer("room_id")
-    val guestId      = integer("guest_id")
-    val checkInDate  = date("check_in_date")
-    val checkOutDate = date("check_out_date")
-    val status       = registerColumn<String>("status", object : VarCharColumnType(50) {
+    val id                  = integer("id").autoIncrement()
+    val hotelId             = integer("hotel_id")
+    val roomId              = integer("room_id")
+    val guestId             = integer("guest_id")
+    val checkInDate         = date("check_in_date")
+    val checkOutDate        = date("check_out_date")
+    val status              = registerColumn<String>("status", object : VarCharColumnType(50) {
         override fun sqlType() = "reservation_status"
         override fun notNullValueToDB(value: String): Any =
             PGobject().apply { type = "reservation_status"; this.value = value }
     })
-    val adults       = decimal("adults", 4, 1)
-    val totalAmount  = decimal("total_amount", 10, 2).nullable()
-    val description  = text("description").nullable()
+    val adults              = decimal("adults", 4, 1)
+    val totalAmount         = decimal("total_amount", 10, 2).nullable()
+    val description         = text("description").nullable()
+    val requiresDownPayment = bool("requires_down_payment")
+    val downPaymentAmount   = decimal("down_payment_amount", 10, 2).nullable()
     override val primaryKey = PrimaryKey(id)
 }

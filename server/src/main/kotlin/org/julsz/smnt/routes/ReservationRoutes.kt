@@ -12,6 +12,7 @@ import org.julsz.smnt.ReservationDto
 import org.julsz.smnt.UpdateReservationRequest
 import org.julsz.smnt.db.Guests
 import org.julsz.smnt.db.Hotels
+import org.julsz.smnt.db.Payments
 import org.julsz.smnt.db.Reservations
 import org.julsz.smnt.db.Rooms
 import java.time.LocalDate
@@ -54,15 +55,14 @@ private fun hasOverlap(roomId: Int, checkIn: String, checkOut: String, excludeId
     transaction {
         val cin  = LocalDate.parse(checkIn)
         val cout = LocalDate.parse(checkOut)
+        val nonBlocking = setOf("cancelled", "no_show")
         var query = Reservations.selectAll().where {
             (Reservations.roomId eq roomId) and
             (Reservations.checkInDate less cout) and
-            (Reservations.checkOutDate greater cin) and
-            (Reservations.status neq "cancelled") and
-            (Reservations.status neq "no_show")
+            (Reservations.checkOutDate greater cin)
         }
         if (excludeId != null) query = query.andWhere { Reservations.id neq excludeId }
-        query.count() > 0
+        query.any { it[Reservations.status] !in nonBlocking }
     }
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
@@ -73,13 +73,18 @@ private fun queryReservations(hotelId: Int?): List<ReservationDto> = transaction
     val guestNames  = Guests.selectAll().associate {
         it[Guests.id] to "${it[Guests.firstName]} ${it[Guests.lastName]}"
     }
+    val paidAmounts = Payments
+        .select(Payments.reservationId, Payments.amount.sum())
+        .groupBy(Payments.reservationId)
+        .associate { it[Payments.reservationId] to (it[Payments.amount.sum()]?.toDouble() ?: 0.0) }
 
     val query = if (hotelId != null)
         Reservations.selectAll().where { Reservations.hotelId eq hotelId }
     else
         Reservations.selectAll()
 
-    query.orderBy(Reservations.checkInDate to SortOrder.DESC).map { it.toDto(hotelNames, roomNumbers, guestNames) }
+    query.orderBy(Reservations.checkInDate to SortOrder.DESC)
+        .map { it.toDto(hotelNames, roomNumbers, guestNames, paidAmounts) }
 }
 
 // ─── Mutations ────────────────────────────────────────────────────────────────
@@ -91,42 +96,48 @@ private fun createReservation(req: CreateReservationRequest): ReservationDto = t
     val guestName  = "${guest[Guests.firstName]} ${guest[Guests.lastName]}"
 
     val newId = Reservations.insert {
-        it[Reservations.hotelId]      = req.hotelId
-        it[Reservations.roomId]       = req.roomId
-        it[Reservations.guestId]      = req.guestId
-        it[Reservations.checkInDate]  = LocalDate.parse(req.checkInDate)
-        it[Reservations.checkOutDate] = LocalDate.parse(req.checkOutDate)
-        it[Reservations.status]       = req.status
-        it[Reservations.adults]       = java.math.BigDecimal.valueOf(req.adults)
-        if (req.totalAmount != null) it[Reservations.totalAmount] = java.math.BigDecimal.valueOf(req.totalAmount!!)
+        it[Reservations.hotelId]             = req.hotelId
+        it[Reservations.roomId]              = req.roomId
+        it[Reservations.guestId]             = req.guestId
+        it[Reservations.checkInDate]         = LocalDate.parse(req.checkInDate)
+        it[Reservations.checkOutDate]        = LocalDate.parse(req.checkOutDate)
+        it[Reservations.status]              = req.status
+        it[Reservations.adults]              = java.math.BigDecimal.valueOf(req.adults)
+        it[Reservations.totalAmount]         = req.totalAmount?.let { v -> java.math.BigDecimal.valueOf(v) }
+        it[Reservations.requiresDownPayment] = req.requiresDownPayment
+        it[Reservations.downPaymentAmount]   = req.downPaymentAmount?.let { v -> java.math.BigDecimal.valueOf(v) }
     } get Reservations.id
 
     ReservationDto(
-        id           = newId,
-        hotelId      = req.hotelId,
-        roomId       = req.roomId,
-        guestId      = req.guestId,
-        hotelName    = hotelName,
-        roomNumber   = roomNumber,
-        guestName    = guestName,
-        checkInDate  = req.checkInDate,
-        checkOutDate = req.checkOutDate,
-        status       = req.status,
-        adults       = req.adults,
-        totalAmount  = req.totalAmount
+        id                  = newId,
+        hotelId             = req.hotelId,
+        roomId              = req.roomId,
+        guestId             = req.guestId,
+        hotelName           = hotelName,
+        roomNumber          = roomNumber,
+        guestName           = guestName,
+        checkInDate         = req.checkInDate,
+        checkOutDate        = req.checkOutDate,
+        status              = req.status,
+        adults              = req.adults,
+        totalAmount         = req.totalAmount,
+        requiresDownPayment = req.requiresDownPayment,
+        downPaymentAmount   = req.downPaymentAmount
     )
 }
 
 private fun updateReservation(id: Int, req: UpdateReservationRequest): ReservationDto = transaction {
     Reservations.update({ Reservations.id eq id }) {
-        it[Reservations.roomId]       = req.roomId
-        it[Reservations.guestId]      = req.guestId
-        it[Reservations.checkInDate]  = LocalDate.parse(req.checkInDate)
-        it[Reservations.checkOutDate] = LocalDate.parse(req.checkOutDate)
-        it[Reservations.status]       = req.status
-        it[Reservations.adults]       = java.math.BigDecimal.valueOf(req.adults)
-        it[Reservations.totalAmount]  = req.totalAmount?.let { v -> java.math.BigDecimal.valueOf(v) }
-        it[Reservations.description]  = req.description
+        it[Reservations.roomId]              = req.roomId
+        it[Reservations.guestId]             = req.guestId
+        it[Reservations.checkInDate]         = LocalDate.parse(req.checkInDate)
+        it[Reservations.checkOutDate]        = LocalDate.parse(req.checkOutDate)
+        it[Reservations.status]              = req.status
+        it[Reservations.adults]              = java.math.BigDecimal.valueOf(req.adults)
+        it[Reservations.totalAmount]         = req.totalAmount?.let { v -> java.math.BigDecimal.valueOf(v) }
+        it[Reservations.description]         = req.description
+        it[Reservations.requiresDownPayment] = req.requiresDownPayment
+        it[Reservations.downPaymentAmount]   = req.downPaymentAmount?.let { v -> java.math.BigDecimal.valueOf(v) }
     }
     val hotelNames  = Hotels.selectAll().associate { it[Hotels.id] to it[Hotels.name] }
     val roomNumbers = Rooms.selectAll().associate { it[Rooms.id] to it[Rooms.number] }
@@ -142,7 +153,8 @@ private fun updateReservation(id: Int, req: UpdateReservationRequest): Reservati
 private fun ResultRow.toDto(
     hotelNames: Map<Int, String>,
     roomNumbers: Map<Int, String>,
-    guestNames: Map<Int, String>
+    guestNames: Map<Int, String>,
+    paidAmounts: Map<Int, Double> = emptyMap()
 ) = ReservationDto(
     id           = this[Reservations.id],
     hotelId      = this[Reservations.hotelId],
@@ -155,6 +167,9 @@ private fun ResultRow.toDto(
     checkOutDate = this[Reservations.checkOutDate].toString(),
     status       = this[Reservations.status],
     adults       = this[Reservations.adults].toDouble(),
-    totalAmount  = this[Reservations.totalAmount]?.toDouble(),
-    description  = this[Reservations.description]
+    totalAmount         = this[Reservations.totalAmount]?.toDouble(),
+    description         = this[Reservations.description],
+    paidAmount          = paidAmounts[this[Reservations.id]] ?: 0.0,
+    requiresDownPayment = this[Reservations.requiresDownPayment],
+    downPaymentAmount   = this[Reservations.downPaymentAmount]?.toDouble()
 )

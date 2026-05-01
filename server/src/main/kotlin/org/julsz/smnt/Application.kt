@@ -49,6 +49,7 @@ fun Application.module() {
             userRoutes()
             priceRoutes()
             roomBlockRoutes()
+            paymentRoutes()
         }
     }
 }

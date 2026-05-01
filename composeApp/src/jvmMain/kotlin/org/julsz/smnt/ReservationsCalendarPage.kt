@@ -106,8 +106,8 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
     var showBlockDialog   by remember { mutableStateOf(false) }
     var optionRes         by remember { mutableStateOf<ReservationDto?>(null) }
     var editReservation   by remember { mutableStateOf<ReservationDto?>(null) }
-    var summaryRes        by remember { mutableStateOf<ReservationDto?>(null) }
     var editBlock         by remember { mutableStateOf<RoomBlockDto?>(null) }
+    var paymentsRes       by remember { mutableStateOf<ReservationDto?>(null) }
     var prefillRoom       by remember { mutableStateOf<RoomDto?>(null) }
     var prefillCheckIn    by remember { mutableStateOf("") }
     var prefillCheckOut   by remember { mutableStateOf("") }
@@ -367,23 +367,15 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
         )
     }
 
-    // ── Reservation options dialog ─────────────────────────────────────────────
+    // ── Reservation detail dialog ──────────────────────────────────────────────
     optionRes?.let { res ->
-        ReservationOptionsDialog(
+        ReservationDetailDialog(
             res       = res,
+            rooms     = rooms,
+            guests    = guests,
             onDismiss = { optionRes = null },
             onEdit    = { editReservation = res; optionRes = null },
-            onSummary = { summaryRes = res; optionRes = null }
-        )
-    }
-
-    // ── Reservation summary dialog ─────────────────────────────────────────────
-    summaryRes?.let { res ->
-        ReservationSummaryDialog(
-            res    = res,
-            rooms  = rooms,
-            guests = guests,
-            onDismiss = { summaryRes = null },
+            onPayments = { paymentsRes = res; optionRes = null },
             onSaveDescription = { desc ->
                 scope.launch {
                     try {
@@ -393,14 +385,26 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
                                 roomId = res.roomId, guestId = res.guestId,
                                 checkInDate = res.checkInDate, checkOutDate = res.checkOutDate,
                                 status = res.status, adults = res.adults,
-                                totalAmount = res.totalAmount, description = desc
+                                totalAmount = res.totalAmount, description = desc,
+                                requiresDownPayment = res.requiresDownPayment,
+                                downPaymentAmount   = res.downPaymentAmount
                             ))
                         }
-                        summaryRes = null
+                        optionRes = null
                         loadData(showLoading = false)
                     } catch (e: Exception) { error = e.message }
                 }
             }
+        )
+    }
+
+    // ── Manage Payments dialog ─────────────────────────────────────────────────
+    paymentsRes?.let { res ->
+        ManagePaymentsDialog(
+            res               = res,
+            client            = client,
+            onDismiss         = { paymentsRes = null },
+            onPaymentsChanged = { scope.launch { loadData(showLoading = false) } }
         )
     }
 
@@ -548,6 +552,8 @@ private fun ResWeekRow(
 
             val showLabel = clampFrom == from || clampFrom == weekStart
             val label = "Rm ${res.roomNumber} · ${res.guestName}"
+            val dotColor = paymentDotColor(res.totalAmount, res.paidAmount)
+            val showDpBadge = dpPending(res) && clampFrom == from
 
             Box(
                 Modifier
@@ -561,17 +567,41 @@ private fun ResWeekRow(
                         bottomEnd   = if (clampTo   == to)   3.dp else 0.dp
                     ))
                     .background(bg)
-                    .clickable { onResClick(res) },
-                contentAlignment = Alignment.CenterStart
+                    .clickable { onResClick(res) }
             ) {
+                if (showDpBadge) {
+                    Box(
+                        Modifier
+                            .align(Alignment.CenterStart)
+                            .padding(start = 2.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(Color(0xFFE65100))
+                            .padding(horizontal = 2.dp, vertical = 1.dp)
+                    ) {
+                        Text("DP", style = MaterialTheme.typography.labelSmall.copy(fontSize = 7.sp),
+                            color = Color.White)
+                    }
+                }
                 if (showLabel) {
                     Text(
                         label,
-                        modifier = Modifier.padding(horizontal = 4.dp),
+                        modifier = Modifier.padding(start = if (showDpBadge) 18.dp else 4.dp,
+                            end = if (dotColor != null) 12.dp else 4.dp)
+                            .align(Alignment.CenterStart),
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                         color = fg,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
+                    )
+                }
+                if (dotColor != null && clampTo == to) {
+                    Box(
+                        Modifier
+                            .align(Alignment.CenterEnd)
+                            .padding(end = 3.dp)
+                            .size(5.dp)
+                            .clip(CircleShape)
+                            .background(dotColor)
                     )
                 }
             }
@@ -624,93 +654,454 @@ private fun hasReservationConflict(
 private fun formatAdults(a: Double): String =
     if (a % 1.0 == 0.0) a.toLong().toString() else "%.1f".format(a)
 
-// ─── Options dialog (shown when clicking a reservation) ──────────────────────
-
-@Composable
-private fun ReservationOptionsDialog(
-    res: ReservationDto,
-    onDismiss: () -> Unit,
-    onEdit: () -> Unit,
-    onSummary: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Reservation #${res.id}") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(res.guestName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                Text(
-                    "Room ${res.roomNumber} · ${res.checkInDate} → ${res.checkOutDate}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        },
-        confirmButton = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Button(onClick = onEdit, modifier = Modifier.fillMaxWidth()) { Text("Edit Reservation") }
-                OutlinedButton(onClick = onSummary, modifier = Modifier.fillMaxWidth()) { Text("View Summary") }
-                TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Cancel") }
-            }
-        }
-    )
+private fun dpPending(res: ReservationDto): Boolean {
+    if (!res.requiresDownPayment) return false
+    val required = res.downPaymentAmount ?: return true
+    return res.paidAmount < required
 }
 
-// ─── Summary dialog ───────────────────────────────────────────────────────────
+private fun paymentDotColor(totalAmount: Double?, paidAmount: Double): Color? = when {
+    totalAmount == null || totalAmount <= 0 -> null
+    paidAmount >= totalAmount               -> Color(0xFF4CAF50)
+    paidAmount > 0                          -> Color(0xFFFFC107)
+    else                                    -> Color(0xFFF44336)
+}
+
+// ─── Detail dialog (shown when clicking a reservation) ───────────────────────
 
 @Composable
-private fun ReservationSummaryDialog(
+private fun ReservationDetailDialog(
     res: ReservationDto,
     rooms: List<RoomDto>,
     guests: List<GuestDto>,
     onDismiss: () -> Unit,
+    onEdit: () -> Unit,
+    onPayments: () -> Unit,
     onSaveDescription: (String?) -> Unit
 ) {
-    var description by remember { mutableStateOf(res.description ?: "") }
     val nights = remember(res.checkInDate, res.checkOutDate) {
         runCatching { ChronoUnit.DAYS.between(LocalDate.parse(res.checkInDate), LocalDate.parse(res.checkOutDate)).toInt() }.getOrDefault(0)
     }
     val room  = rooms.find { it.id == res.roomId }
     val guest = guests.find { it.id == res.guestId }
+    var description by remember(res.id) { mutableStateOf(res.description ?: "") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Reservation #${res.id}") },
         text = {
-            Column(Modifier.width(420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                SummaryRow("Guest", res.guestName)
+            Column(
+                Modifier.width(440.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                // Guest header
+                Text(res.guestName, style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold)
                 guest?.let { g ->
                     val phone = listOfNotNull(g.countryCode?.let { "+$it" }, g.phoneNumber).joinToString(" ").ifBlank { null }
                     val contact = listOfNotNull(phone, g.nationality).joinToString(" · ")
-                    if (contact.isNotBlank()) SummaryRow("Contact", contact)
+                    if (contact.isNotBlank())
+                        Text(contact, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+
+                HorizontalDivider(Modifier.padding(vertical = 2.dp))
+
+                // Dates — shown prominently
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column {
+                        Text("Check-in", style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(res.checkInDate, style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold)
+                    }
+                    Column {
+                        Text("Check-out", style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(res.checkOutDate, style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold)
+                    }
+                    Column {
+                        Text("Nights", style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(nights.toString(), style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold)
+                    }
+                }
+
+                HorizontalDivider(Modifier.padding(vertical = 2.dp))
+
                 SummaryRow("Room", room?.let { "Room ${it.number} · ${it.typeName}" } ?: "Room ${res.roomNumber}")
-                SummaryRow("Check-in", res.checkInDate)
-                SummaryRow("Check-out", res.checkOutDate)
-                SummaryRow("Nights", nights.toString())
                 SummaryRow("Adults", formatAdults(res.adults))
                 SummaryRow("Status", res.status.replace('_', ' ').replaceFirstChar { it.uppercaseChar() })
-                res.totalAmount?.let { SummaryRow("Total", "${"%.2f".format(it)} PLN") }
-                HorizontalDivider()
+                if (dpPending(res)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Text("Down Pmt", style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.width(72.dp))
+                        Text(
+                            res.downPaymentAmount?.let { "${"%.2f".format(it)} PLN required" } ?: "Required",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFFE65100)
+                        )
+                    }
+                }
+                res.totalAmount?.let { total ->
+                    SummaryRow("Total", "${"%.2f".format(total)} PLN")
+                    SummaryRow("Paid",  "${"%.2f".format(res.paidAmount)} PLN")
+                    val remaining = total - res.paidAmount
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Remaining", style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.width(72.dp))
+                        Text(
+                            "${"%.2f".format(remaining)} PLN",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (remaining <= 0) Color(0xFF4CAF50) else Color(0xFFF44336)
+                        )
+                    }
+                }
+
+                HorizontalDivider(Modifier.padding(vertical = 2.dp))
+
                 Text("Notes", style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp),
                     placeholder = { Text("Add notes about this reservation…") },
-                    maxLines = 6
+                    maxLines = 5
                 )
             }
         },
         confirmButton = {
-            Button(onClick = { onSaveDescription(description.trim().ifBlank { null }) }) {
-                Text("Save notes")
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Button(onClick = { onSaveDescription(description.trim().ifBlank { null }) },
+                    modifier = Modifier.fillMaxWidth()) { Text("Save Notes") }
+                OutlinedButton(onClick = onEdit, modifier = Modifier.fillMaxWidth()) { Text("Edit Reservation") }
+                OutlinedButton(onClick = onPayments, modifier = Modifier.fillMaxWidth()) { Text("Manage Payments") }
+                TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Close") }
+            }
+        }
+    )
+}
+
+// ─── Manage Payments dialog ───────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ManagePaymentsDialog(
+    res: ReservationDto,
+    client: HttpClient,
+    onDismiss: () -> Unit,
+    onPaymentsChanged: () -> Unit = {}
+) {
+    val scope = rememberCoroutineScope()
+    var payments    by remember { mutableStateOf<List<PaymentDto>>(emptyList()) }
+    var loading     by remember { mutableStateOf(true) }
+    var error       by remember { mutableStateOf<String?>(null) }
+
+    // Add-payment form state
+    var isDeposit          by remember { mutableStateOf(false) }
+    var amountInput        by remember { mutableStateOf("") }
+    var paidAtInput        by remember { mutableStateOf(LocalDate.now().toString()) }
+    var notesInput         by remember { mutableStateOf("") }
+    var receiptType        by remember { mutableStateOf("") }
+    var receiptNumberInput by remember { mutableStateOf("") }
+    var showDatePicker     by remember { mutableStateOf(false) }
+
+    suspend fun reload() {
+        loading = true
+        try { payments = client.get("$BASE_URL/api/reservations/${res.id}/payments").body() }
+        catch (e: Exception) { error = e.message }
+        loading = false
+    }
+
+    LaunchedEffect(res.id) { reload() }
+
+    val totalPaid = remember(payments) { payments.sumOf { it.amount } }
+    val remaining = res.totalAmount?.let { it - totalPaid }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Payments · Reservation #${res.id}") },
+        text = {
+            Column(
+                Modifier.width(460.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Summary row
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    res.totalAmount?.let {
+                        Column {
+                            Text("Total", style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("${"%.2f".format(it)} PLN", style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                    Column {
+                        Text("Paid", style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${"%.2f".format(totalPaid)} PLN", style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary)
+                    }
+                    remaining?.let {
+                        Column {
+                            Text("Remaining", style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("${"%.2f".format(it)} PLN", style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (it > 0) MaterialTheme.colorScheme.error
+                                        else MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
+
+                HorizontalDivider()
+
+                // Payments table
+                if (loading) {
+                    CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
+                } else if (payments.isEmpty()) {
+                    Text("No payments recorded yet.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    var expandedId by remember { mutableStateOf<Int?>(null) }
+                    // Header
+                    Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant)
+                        .padding(horizontal = 8.dp, vertical = 4.dp)) {
+                        Text("Type",    style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1.3f))
+                        Text("Amount", style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1.2f))
+                        Text("Date",   style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1.1f))
+                        Text("Doc",    style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1.5f))
+                        Spacer(Modifier.width(28.dp))
+                    }
+                    payments.forEach { p ->
+                        val expanded = expandedId == p.id
+                        val docLabel = when (p.receiptType) {
+                            "receipt" -> "R: ${p.receiptNumber ?: "—"}"
+                            "invoice" -> "I: ${p.receiptNumber ?: "—"}"
+                            else      -> "—"
+                        }
+                        Column(
+                            Modifier.fillMaxWidth()
+                                .clickable { expandedId = if (expanded) null else p.id }
+                        ) {
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    if (p.isDeposit) "Down Payment" else "Payment",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.weight(1.3f)
+                                )
+                                Text("${"%.2f".format(p.amount)} ${p.currency ?: "PLN"}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.weight(1.2f))
+                                Text(p.paidAt ?: "—",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.weight(1.1f),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(docLabel,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.weight(1.5f),
+                                    color = if (p.receiptType != null) MaterialTheme.colorScheme.primary
+                                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                IconButton(
+                                    onClick = {
+                                        scope.launch {
+                                            try {
+                                                client.delete("$BASE_URL/api/payments/${p.id}")
+                                                reload()
+                                                onPaymentsChanged()
+                                            } catch (e: Exception) { error = e.message }
+                                        }
+                                    },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Text("✕", style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.error)
+                                }
+                            }
+                            if (expanded) {
+                                Column(
+                                    Modifier.fillMaxWidth()
+                                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                                ) {
+                                    SummaryRow("Type",  if (p.isDeposit) "Down Payment" else "Payment")
+                                    SummaryRow("Amount","${"%.2f".format(p.amount)} ${p.currency ?: "PLN"}")
+                                    SummaryRow("Date",  p.paidAt ?: "—")
+                                    if (!p.notes.isNullOrBlank()) SummaryRow("Notes", p.notes!!)
+                                    val rType = p.receiptType
+                                    if (rType != null) {
+                                        SummaryRow("Doc type", rType.replaceFirstChar { it.uppercaseChar() })
+                                        SummaryRow("Doc #",    p.receiptNumber ?: "—")
+                                    }
+                                }
+                            }
+                        }
+                        HorizontalDivider(thickness = 0.5.dp)
+                    }
+                }
+
+                error?.let {
+                    Text("Error: $it", color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.labelSmall)
+                }
+
+                HorizontalDivider()
+                Text("Add Payment", style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold)
+
+                // Type toggle
+                Row(
+                    Modifier.clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    listOf(false to "Payment", true to "Down Payment").forEach { (deposit, label) ->
+                        val sel = isDeposit == deposit
+                        Box(
+                            Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (sel) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                .clickable { isDeposit = deposit }
+                                .padding(horizontal = 14.dp, vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(label, style = MaterialTheme.typography.labelMedium,
+                                color = if (sel) MaterialTheme.colorScheme.onPrimary
+                                        else MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = amountInput,
+                        onValueChange = { amountInput = it },
+                        label = { Text("Amount (PLN) *") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = paidAtInput,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Date") },
+                        trailingIcon = {
+                            TextButton(onClick = { showDatePicker = true },
+                                contentPadding = PaddingValues(horizontal = 8.dp)) {
+                                Text("Pick", style = MaterialTheme.typography.labelSmall)
+                            }
+                        },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                if (showDatePicker) {
+                    val initMillis = remember(paidAtInput) {
+                        runCatching { LocalDate.parse(paidAtInput).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() }
+                            .getOrElse { LocalDate.now().atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() }
+                    }
+                    val dpState = rememberDatePickerState(initialSelectedDateMillis = initMillis)
+                    DatePickerDialog(
+                        onDismissRequest = { showDatePicker = false },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                dpState.selectedDateMillis?.let { millis ->
+                                    paidAtInput = Instant.ofEpochMilli(millis)
+                                        .atZone(ZoneOffset.UTC).toLocalDate().toString()
+                                }
+                                showDatePicker = false
+                            }) { Text("OK") }
+                        },
+                        dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel") } }
+                    ) { DatePicker(state = dpState) }
+                }
+                OutlinedTextField(
+                    value = notesInput,
+                    onValueChange = { notesInput = it },
+                    label = { Text("Notes") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Receipt/invoice type toggle
+                Row(
+                    Modifier.clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    listOf("" to "Nothing", "receipt" to "Receipt", "invoice" to "Invoice").forEach { (value, label) ->
+                        val sel = receiptType == value
+                        Box(
+                            Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (sel) MaterialTheme.colorScheme.secondary else Color.Transparent)
+                                .clickable { receiptType = value; if (value.isEmpty()) receiptNumberInput = "" }
+                                .padding(horizontal = 12.dp, vertical = 7.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(label, style = MaterialTheme.typography.labelMedium,
+                                color = if (sel) MaterialTheme.colorScheme.onSecondary
+                                        else MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+                if (receiptType.isNotEmpty()) {
+                    OutlinedTextField(
+                        value = receiptNumberInput,
+                        onValueChange = { receiptNumberInput = it },
+                        label = { Text("${receiptType.replaceFirstChar { it.uppercaseChar() }} number") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                val canAdd = amountInput.toDoubleOrNull() != null && amountInput.toDouble() > 0
+                Button(
+                    onClick = {
+                        scope.launch {
+                            try {
+                                client.post("$BASE_URL/api/reservations/${res.id}/payments") {
+                                    contentType(ContentType.Application.Json)
+                                    setBody(CreatePaymentRequest(
+                                        isDeposit     = isDeposit,
+                                        amount        = amountInput.toDouble(),
+                                        paidAt        = paidAtInput.trim().ifBlank { null },
+                                        notes         = notesInput.trim().ifBlank { null },
+                                        receiptType   = receiptType.ifBlank { null },
+                                        receiptNumber = receiptNumberInput.trim().ifBlank { null }
+                                    ))
+                                }
+                                amountInput        = ""
+                                paidAtInput        = LocalDate.now().toString()
+                                notesInput         = ""
+                                isDeposit          = false
+                                receiptType        = ""
+                                receiptNumberInput = ""
+                                reload()
+                                onPaymentsChanged()
+                            } catch (e: Exception) { error = e.message }
+                        }
+                    },
+                    enabled = canAdd,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Add Payment") }
             }
         },
+        confirmButton = {},
         dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } }
     )
 }
@@ -750,6 +1141,8 @@ private fun NewReservationDialog(
     var adults    by remember { mutableStateOf(selectedRoom?.maxGuests?.toString() ?: "1") }
     var status    by remember { mutableStateOf("confirmed") }
     var ppnInput  by remember { mutableStateOf("") }
+    var requiresDownPayment    by remember { mutableStateOf(false) }
+    var downPaymentAmountInput by remember { mutableStateOf("") }
     // Guest form
     var guestFirstName   by remember { mutableStateOf("") }
     var guestLastName    by remember { mutableStateOf("") }
@@ -858,6 +1251,24 @@ private fun NewReservationDialog(
                     matchingRule = matchingRule, nights = nights,
                     totalGuests = totalGuests, computedTotal = computedTotal
                 )
+                HorizontalDivider()
+                Row(
+                    Modifier.fillMaxWidth().clickable { requiresDownPayment = !requiresDownPayment },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Checkbox(checked = requiresDownPayment, onCheckedChange = { requiresDownPayment = it })
+                    Text("Requires down payment", style = MaterialTheme.typography.bodyMedium)
+                }
+                if (requiresDownPayment) {
+                    OutlinedTextField(
+                        value = downPaymentAmountInput,
+                        onValueChange = { downPaymentAmountInput = it },
+                        label = { Text("Down payment amount (PLN)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
         },
         confirmButton = {
@@ -876,7 +1287,9 @@ private fun NewReservationDialog(
                             hotelId = hotel.hotelId, roomId = selectedRoom!!.id, guestId = guestId,
                             checkInDate = checkIn.trim(), checkOutDate = checkOut.trim(), status = status,
                             adults = adults.trim().toDoubleOrNull() ?: 1.0,
-                            totalAmount = computedTotal
+                            totalAmount = computedTotal,
+                            requiresDownPayment = requiresDownPayment,
+                            downPaymentAmount   = if (requiresDownPayment) downPaymentAmountInput.toDoubleOrNull() else null
                         ))
                     }
                 }, enabled = valid
@@ -914,6 +1327,8 @@ private fun ReservationEditDialog(
     var checkOut by remember { mutableStateOf(existing.checkOutDate) }
     var adults   by remember { mutableStateOf(formatAdults(existing.adults)) }
     var status   by remember { mutableStateOf(existing.status) }
+    var requiresDownPayment    by remember(existing.id) { mutableStateOf(existing.requiresDownPayment) }
+    var downPaymentAmountInput by remember(existing.id) { mutableStateOf(existing.downPaymentAmount?.let { "%.2f".format(it) } ?: "") }
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
     // Initialise ppn: from back-computed existing total, rule will override via LaunchedEffect
@@ -1004,6 +1419,24 @@ private fun ReservationEditDialog(
                     matchingRule = matchingRule, nights = nights,
                     totalGuests = totalGuests, computedTotal = computedTotal
                 )
+                HorizontalDivider()
+                Row(
+                    Modifier.fillMaxWidth().clickable { requiresDownPayment = !requiresDownPayment },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Checkbox(checked = requiresDownPayment, onCheckedChange = { requiresDownPayment = it })
+                    Text("Requires down payment", style = MaterialTheme.typography.bodyMedium)
+                }
+                if (requiresDownPayment) {
+                    OutlinedTextField(
+                        value = downPaymentAmountInput,
+                        onValueChange = { downPaymentAmountInput = it },
+                        label = { Text("Down payment amount (PLN)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
         },
         confirmButton = {
@@ -1023,7 +1456,9 @@ private fun ReservationEditDialog(
                             checkInDate = checkIn.trim(), checkOutDate = checkOut.trim(), status = status,
                             adults = adults.trim().toDoubleOrNull() ?: 1.0,
                             totalAmount = computedTotal,
-                            description = existing.description
+                            description = existing.description,
+                            requiresDownPayment = requiresDownPayment,
+                            downPaymentAmount   = if (requiresDownPayment) downPaymentAmountInput.toDoubleOrNull() else null
                         ))
                     }
                 }, enabled = valid
@@ -1656,6 +2091,8 @@ private fun ReservationsTimelineView(
                                     val bandH      = BAND_H
                                     val bTop       = (LANE_H - bandH) / 2
                                     val (bg, fg)   = STATUS_PALETTE[res.status] ?: (Color(0xFFE0E0E0) to Color(0xFF424242))
+                                    val dotColorC  = paymentDotColor(res.totalAmount, res.paidAmount)
+                                    val showDpC    = dpPending(res) && leftRound
                                     Box(
                                         Modifier
                                             .offset(x = bLeft, y = bTop)
@@ -1667,15 +2104,27 @@ private fun ReservationsTimelineView(
                                                 bottomEnd   = if (rightRound) 4.dp else 0.dp
                                             ))
                                             .background(bg)
-                                            .clickable { onEditRequest(res) },
-                                        contentAlignment = Alignment.CenterStart
+                                            .clickable { onEditRequest(res) }
                                     ) {
+                                        if (showDpC) {
+                                            Box(Modifier.align(Alignment.CenterStart).padding(start = 2.dp)
+                                                .clip(RoundedCornerShape(2.dp)).background(Color(0xFFE65100))
+                                                .padding(horizontal = 2.dp, vertical = 1.dp)) {
+                                                Text("DP", style = MaterialTheme.typography.labelSmall.copy(fontSize = 7.sp), color = Color.White)
+                                            }
+                                        }
                                         Text(
                                             res.guestName,
-                                            modifier = Modifier.padding(horizontal = 4.dp),
+                                            modifier = Modifier.padding(start = if (showDpC) 18.dp else 4.dp,
+                                                end = if (dotColorC != null) 12.dp else 4.dp)
+                                                .align(Alignment.CenterStart),
                                             style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                                             color = fg, maxLines = 1, overflow = TextOverflow.Ellipsis
                                         )
+                                        if (dotColorC != null && rightRound) {
+                                            Box(Modifier.align(Alignment.CenterEnd).padding(end = 3.dp)
+                                                .size(6.dp).clip(CircleShape).background(dotColorC))
+                                        }
                                     }
                                 }
                                 // Active reservation bands — bottom lane when split, otherwise centered
@@ -1694,6 +2143,8 @@ private fun ReservationsTimelineView(
                                         else                         -> (rowH - bandH) / 2
                                     }
                                     val (bg, fg) = STATUS_PALETTE[res.status] ?: (Color(0xFFE0E0E0) to Color(0xFF424242))
+                                    val dotColorA = paymentDotColor(res.totalAmount, res.paidAmount)
+                                    val showDpA   = dpPending(res) && leftRound
                                     val nights = remember(res.checkInDate, res.checkOutDate) {
                                         runCatching {
                                             ChronoUnit.DAYS.between(
@@ -1713,16 +2164,28 @@ private fun ReservationsTimelineView(
                                                 bottomEnd   = if (rightRound) 4.dp else 0.dp
                                             ))
                                             .background(bg)
-                                            .clickable { onEditRequest(res) },
-                                        contentAlignment = Alignment.TopStart
+                                            .clickable { onEditRequest(res) }
                                     ) {
                                         if (!isExpanded) {
+                                            if (showDpA) {
+                                                Box(Modifier.align(Alignment.CenterStart).padding(start = 2.dp)
+                                                    .clip(RoundedCornerShape(2.dp)).background(Color(0xFFE65100))
+                                                    .padding(horizontal = 2.dp, vertical = 1.dp)) {
+                                                    Text("DP", style = MaterialTheme.typography.labelSmall.copy(fontSize = 7.sp), color = Color.White)
+                                                }
+                                            }
                                             Text(
                                                 res.guestName,
-                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+                                                modifier = Modifier.padding(start = if (showDpA) 18.dp else 4.dp,
+                                                    top = 4.dp,
+                                                    end = if (dotColorA != null && rightRound) 12.dp else 4.dp),
                                                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                                                 color = fg, maxLines = 1, overflow = TextOverflow.Ellipsis
                                             )
+                                            if (dotColorA != null && rightRound) {
+                                                Box(Modifier.align(Alignment.TopEnd).padding(top = 4.dp, end = 3.dp)
+                                                    .size(6.dp).clip(CircleShape).background(dotColorA))
+                                            }
                                         } else {
                                             Column(
                                                 Modifier.fillMaxSize().padding(horizontal = 6.dp, vertical = 5.dp),
@@ -1752,6 +2215,9 @@ private fun ReservationsTimelineView(
                                                         overflow = TextOverflow.Ellipsis,
                                                         modifier = Modifier.weight(1f)
                                                     )
+                                                    if (dotColorA != null) {
+                                                        Box(Modifier.size(7.dp).clip(CircleShape).background(dotColorA))
+                                                    }
                                                 }
                                                 // Check-in date + nights only
                                                 Text(
@@ -1768,6 +2234,14 @@ private fun ReservationsTimelineView(
                                                     color = fg.copy(alpha = 0.85f),
                                                     maxLines = 1, overflow = TextOverflow.Ellipsis
                                                 )
+                                                if (res.requiresDownPayment) {
+                                                    Text(
+                                                        "DP: ${res.downPaymentAmount?.let { "${"%.0f".format(it)} PLN" } ?: "required"}",
+                                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                                        color = Color(0xFFE65100),
+                                                        maxLines = 1, overflow = TextOverflow.Ellipsis
+                                                    )
+                                                }
                                                 Spacer(Modifier.weight(1f))
                                                 TextButton(
                                                     onClick = { onEditRequest(res) },
