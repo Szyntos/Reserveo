@@ -56,6 +56,7 @@ fun RoomsConfigPage(client: HttpClient, hotel: UserHotelRoleDto, onBack: () -> U
         } catch (e: Exception) { error = e.message }
     }
 
+    val s = LocalStrings.current
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(0.dp)) {
         // ── Breadcrumb ────────────────────────────────────────────────────────
         Row(
@@ -64,7 +65,7 @@ fun RoomsConfigPage(client: HttpClient, hotel: UserHotelRoleDto, onBack: () -> U
             modifier = Modifier.padding(bottom = 4.dp)
         ) {
             TextButton(onClick = onBack, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)) {
-                Text("← Config", style = MaterialTheme.typography.labelMedium)
+                Text(s.breadcrumbConfig, style = MaterialTheme.typography.labelMedium)
             }
         }
 
@@ -75,23 +76,23 @@ fun RoomsConfigPage(client: HttpClient, hotel: UserHotelRoleDto, onBack: () -> U
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column {
-                Text("Rooms", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text(s.roomsTitle, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Text(
-                    "${rooms.count { it.archivedAt == null }} active · ${rooms.count { it.archivedAt != null }} archived",
+                    s.roomsStats(rooms.count { it.archivedAt == null }, rooms.count { it.archivedAt != null }),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 error?.let {
-                    Text("Error: $it", color = MaterialTheme.colorScheme.error,
+                    Text(s.errorMsg(it), color = MaterialTheme.colorScheme.error,
                          style = MaterialTheme.typography.bodySmall)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Checkbox(checked = showArchived, onCheckedChange = { showArchived = it })
-                    Text("Show archived", style = MaterialTheme.typography.bodySmall)
+                    Text(s.showArchived, style = MaterialTheme.typography.bodySmall)
                 }
-                Button(onClick = { showAddDialog = true }) { Text("Add Room") }
+                Button(onClick = { showAddDialog = true }) { Text(s.addRoomBtn) }
             }
         }
 
@@ -105,8 +106,7 @@ fun RoomsConfigPage(client: HttpClient, hotel: UserHotelRoleDto, onBack: () -> U
             if (visible.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
-                        if (rooms.isEmpty()) "No rooms yet. Add the first room."
-                        else "All rooms are archived.",
+                        if (rooms.isEmpty()) s.noRoomsYet else s.allRoomsArchived,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -172,6 +172,7 @@ fun RoomsConfigPage(client: HttpClient, hotel: UserHotelRoleDto, onBack: () -> U
 
 @Composable
 private fun RoomCard(room: RoomDto, onEdit: () -> Unit, onArchive: () -> Unit) {
+    val s        = LocalStrings.current
     val archived = room.archivedAt != null
     val alpha    = if (archived) 0.5f else 1f
 
@@ -193,13 +194,13 @@ private fun RoomCard(room: RoomDto, onEdit: () -> Unit, onArchive: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    "Room ${room.number}",
+                    s.roomLabel(room.number),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha)
                 )
                 if (archived) {
-                    SuggestionChip(onClick = {}, label = { Text("archived", style = MaterialTheme.typography.labelSmall) })
+                    SuggestionChip(onClick = {}, label = { Text(s.archivedChip, style = MaterialTheme.typography.labelSmall) })
                 } else {
                     StatusChip(room.status)
                 }
@@ -234,10 +235,10 @@ private fun RoomCard(room: RoomDto, onEdit: () -> Unit, onArchive: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (!archived) {
-                    TextButton(onClick = onEdit) { Text("Edit") }
+                    TextButton(onClick = onEdit) { Text(s.edit) }
                 }
                 TextButton(onClick = onArchive) {
-                    Text(if (archived) "Unarchive" else "Archive")
+                    Text(if (archived) s.unarchive else s.archive)
                 }
             }
         }
@@ -280,9 +281,10 @@ private fun AddRoomDialog(
     var maxGuests   by remember { mutableStateOf("2") }
     var description by remember { mutableStateOf("") }
 
+    val s = LocalStrings.current
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add Room") },
+        title = { Text(s.addRoomTitle) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 RoomFormFields(
@@ -309,9 +311,9 @@ private fun AddRoomDialog(
                     onDismiss()
                 },
                 enabled = typeName.isNotBlank() && number.isNotBlank() && maxGuests.trim().toIntOrNull() != null
-            ) { Text("Add") }
+            ) { Text(s.add) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(s.cancel) } }
     )
 }
 
@@ -330,9 +332,10 @@ private fun EditRoomDialog(
     var maxGuests   by remember { mutableStateOf(room.maxGuests.toString()) }
     var description by remember { mutableStateOf(room.description ?: "") }
 
+    val s = LocalStrings.current
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Edit Room ${room.number}") },
+        title = { Text(s.editRoomTitle(room.number)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 RoomFormFields(
@@ -358,9 +361,9 @@ private fun EditRoomDialog(
                     onDismiss()
                 },
                 enabled = typeName.isNotBlank() && number.isNotBlank() && maxGuests.trim().toIntOrNull() != null
-            ) { Text("Save") }
+            ) { Text(s.save) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(s.cancel) } }
     )
 }
 
@@ -376,16 +379,17 @@ private fun RoomFormFields(
     description: String, onDescription: (String) -> Unit,
     status: String?, onStatus: (String) -> Unit
 ) {
-    OutlinedTextField(typeName, onTypeName, label = { Text("Room Type *") },
-        placeholder = { Text("Single / Double / Suite …") },
+    val s = LocalStrings.current
+    OutlinedTextField(typeName, onTypeName, label = { Text(s.roomTypeLabel) },
+        placeholder = { Text(s.roomTypePlaceholder) },
         singleLine = true, modifier = Modifier.fillMaxWidth())
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(number, onNumber, label = { Text("Number *") },
+        OutlinedTextField(number, onNumber, label = { Text(s.numberLabel) },
             singleLine = true, modifier = Modifier.weight(1f))
-        OutlinedTextField(floor, onFloor, label = { Text("Floor") },
+        OutlinedTextField(floor, onFloor, label = { Text(s.floorLabel) },
             singleLine = true, modifier = Modifier.weight(1f))
     }
-    OutlinedTextField(maxGuests, onMaxGuests, label = { Text("Max Guests *") },
+    OutlinedTextField(maxGuests, onMaxGuests, label = { Text(s.maxGuestsLabel) },
         singleLine = true, modifier = Modifier.fillMaxWidth())
 
     if (status != null) {
@@ -395,7 +399,7 @@ private fun RoomFormFields(
                 value = status.replace('_', ' '),
                 onValueChange = {},
                 readOnly = true,
-                label = { Text("Status") },
+                label = { Text(s.statusLabel) },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
                 modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
                 singleLine = true
@@ -411,6 +415,6 @@ private fun RoomFormFields(
         }
     }
 
-    OutlinedTextField(description, onDescription, label = { Text("Description") },
+    OutlinedTextField(description, onDescription, label = { Text(s.descriptionLabel) },
         singleLine = true, modifier = Modifier.fillMaxWidth())
 }

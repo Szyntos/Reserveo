@@ -127,12 +127,13 @@ private fun RoomTileGrid(
     onBack: () -> Unit,
     onSelect: (RoomDto) -> Unit
 ) {
+    val s = LocalStrings.current
     Column(Modifier.fillMaxSize()) {
         TextButton(
             onClick = onBack,
             contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
             modifier = Modifier.padding(bottom = 4.dp)
-        ) { Text("← Config", style = MaterialTheme.typography.labelMedium) }
+        ) { Text(s.breadcrumbConfig, style = MaterialTheme.typography.labelMedium) }
 
         Row(
             Modifier.fillMaxWidth().padding(bottom = 20.dp),
@@ -140,13 +141,13 @@ private fun RoomTileGrid(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column {
-                Text("Base Price", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text("Select a room to manage its price rules",
+                Text(s.basePriceTitle, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text(s.basePriceSubtitle,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             error?.let {
-                Text("Error: $it", color = MaterialTheme.colorScheme.error,
+                Text(s.errorMsg(it), color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall)
             }
         }
@@ -156,7 +157,7 @@ private fun RoomTileGrid(
                 CircularProgressIndicator()
             }
             rooms.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Add rooms first before setting price rules.",
+                Text(s.addRoomsFirst,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -179,24 +180,25 @@ private fun RoomTileGrid(
 
 @Composable
 private fun RoomPriceTile(room: RoomDto, ruleCount: Int, onClick: () -> Unit) {
+    val s = LocalStrings.current
     Card(
         modifier  = Modifier.fillMaxWidth().clickable(onClick = onClick),
         elevation = CardDefaults.cardElevation(2.dp)
     ) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Room ${room.number}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(s.roomLabel(room.number), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(room.typeName, style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(4.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    if (ruleCount == 0) "No rules" else "$ruleCount rule${if (ruleCount != 1) "s" else ""}",
+                    if (ruleCount == 0) s.noRules else s.rulesCount(ruleCount),
                     style = MaterialTheme.typography.labelSmall,
                     color = if (ruleCount == 0) MaterialTheme.colorScheme.onSurfaceVariant
                             else MaterialTheme.colorScheme.primary
                 )
-                Text("Manage →", style = MaterialTheme.typography.labelMedium,
+                Text(s.configManage, style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary)
             }
         }
@@ -229,13 +231,14 @@ private fun RoomCalendarView(
             .toMap()
     }
 
+    val s = LocalStrings.current
     Column(Modifier.fillMaxSize()) {
         // Breadcrumb
         TextButton(
             onClick = onBack,
             contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
             modifier = Modifier.padding(bottom = 4.dp)
-        ) { Text("← Base Price", style = MaterialTheme.typography.labelMedium) }
+        ) { Text(s.breadcrumbBasePrice, style = MaterialTheme.typography.labelMedium) }
 
         // Header row
         Row(
@@ -244,16 +247,16 @@ private fun RoomCalendarView(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column {
-                Text("Room ${room.number}", style = MaterialTheme.typography.headlineSmall,
+                Text(s.roomLabel(room.number), style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold)
-                Text("${room.typeName} · ${rules.size} rule${if (rules.size != 1) "s" else ""}",
+                Text("${room.typeName} · ${s.rulesCount(rules.size)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 error?.let {
-                    Text("Error: $it", color = MaterialTheme.colorScheme.error,
+                    Text(s.errorMsg(it), color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall)
                 }
                 // Year navigation
@@ -266,7 +269,7 @@ private fun RoomCalendarView(
                     Text("▶", style = MaterialTheme.typography.labelLarge)
                 }
                 Spacer(Modifier.width(8.dp))
-                Button(onClick = { showAddDialog = true }) { Text("Add Rule") }
+                Button(onClick = { showAddDialog = true }) { Text(s.addRule) }
             }
         }
 
@@ -291,7 +294,7 @@ private fun RoomCalendarView(
     // Add dialog
     if (showAddDialog) {
         PriceRuleDialog(
-            title     = "Add Rule — Room ${room.number}",
+            title     = "${s.addRule} — ${s.roomLabel(room.number)}",
             rooms     = allRooms,
             initial   = null,
             fixedRoom = room,
@@ -313,7 +316,7 @@ private fun RoomCalendarView(
     // Edit dialog
     editingRule?.let { rule ->
         PriceRuleDialog(
-            title     = "Edit Rule — Room ${room.number}",
+            title     = "${s.edit} — ${s.roomLabel(room.number)}",
             rooms     = allRooms,
             initial   = rule,
             fixedRoom = room,
@@ -350,7 +353,7 @@ private fun RoomCalendarView(
 
 // ─── Month grid ───────────────────────────────────────────────────────────────
 
-private val DOW_LABELS = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+// DOW labels come from LocalStrings at render time
 
 @Composable
 private fun MonthCalendar(
@@ -360,8 +363,9 @@ private fun MonthCalendar(
     periodPalette: Map<String, Pair<Color, Color>>,
     onRuleClick: (PriceRuleDto) -> Unit
 ) {
+    val s = LocalStrings.current
     val weeks = remember(year, month) { buildWeeks(year, month) }
-    val monthName = Month.of(month).getDisplayName(java.time.format.TextStyle.FULL, Locale.ENGLISH)
+    val monthName = Month.of(month).getDisplayName(java.time.format.TextStyle.FULL, s.locale)
 
     Column(Modifier.fillMaxWidth()) {
         Text(
@@ -372,7 +376,7 @@ private fun MonthCalendar(
         )
         // Day-of-week header
         Row(Modifier.fillMaxWidth()) {
-            DOW_LABELS.forEach { dow ->
+            s.dowLabels.forEach { dow ->
                 Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                     Text(dow, style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -527,13 +531,14 @@ private fun PriceRuleDialog(
         title = { Text(title) },
         text = {
             Column(Modifier.width(380.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                val s = LocalStrings.current
                 if (fixedRoom == null) {
                     ExposedDropdownMenuBox(expanded = roomExpanded, onExpandedChange = { roomExpanded = it }) {
                         OutlinedTextField(
-                            value         = selectedRoom?.number?.let { "Room $it" } ?: "Select room",
+                            value         = selectedRoom?.number?.let { s.roomLabel(it) } ?: s.selectRoomHint,
                             onValueChange = {},
                             readOnly      = true,
-                            label         = { Text("Room *") },
+                            label         = { Text(s.roomFieldLabel) },
                             trailingIcon  = { ExposedDropdownMenuDefaults.TrailingIcon(roomExpanded) },
                             modifier      = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
                             singleLine    = true,
@@ -542,7 +547,7 @@ private fun PriceRuleDialog(
                         ExposedDropdownMenu(expanded = roomExpanded, onDismissRequest = { roomExpanded = false }) {
                             rooms.forEach { room ->
                                 DropdownMenuItem(
-                                    text    = { Text("Room ${room.number} · ${room.typeName}") },
+                                    text    = { Text("${s.roomLabel(room.number)} · ${room.typeName}") },
                                     onClick = { selectedRoom = room; roomExpanded = false }
                                 )
                             }
@@ -550,20 +555,20 @@ private fun PriceRuleDialog(
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    DatePickerField("From *", fromDate, { fromDate = it }, Modifier.weight(1f))
-                    DatePickerField("To *",   toDate,  { toDate   = it }, Modifier.weight(1f))
+                    DatePickerField(s.fromLabel, fromDate, { fromDate = it }, Modifier.weight(1f))
+                    DatePickerField(s.toLabel,   toDate,  { toDate   = it }, Modifier.weight(1f))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(minNights, { minNights = it }, label = { Text("Min nights *") },
+                    OutlinedTextField(minNights, { minNights = it }, label = { Text(s.minNightsLabel) },
                         singleLine = true, modifier = Modifier.weight(1f))
-                    OutlinedTextField(maxNights, { maxNights = it }, label = { Text("Max nights") },
-                        placeholder = { Text("blank = no limit") }, singleLine = true,
+                    OutlinedTextField(maxNights, { maxNights = it }, label = { Text(s.maxNightsLabel) },
+                        placeholder = { Text(s.blankNoLimit) }, singleLine = true,
                         modifier = Modifier.weight(1f))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(price, { price = it }, label = { Text("Price / person / night *") },
+                    OutlinedTextField(price, { price = it }, label = { Text(s.priceLabel) },
                         singleLine = true, modifier = Modifier.weight(2f))
-                    OutlinedTextField(currency, { currency = it }, label = { Text("Currency") },
+                    OutlinedTextField(currency, { currency = it }, label = { Text(s.currencyLabel) },
                         singleLine = true, modifier = Modifier.weight(1f))
                 }
             }
@@ -582,16 +587,17 @@ private fun PriceRuleDialog(
                     ))
                 },
                 enabled = valid
-            ) { Text(if (initial == null) "Add" else "Save") }
+            ) { Text(if (initial == null) LocalStrings.current.add else LocalStrings.current.save) }
         },
         dismissButton = {
+            val s = LocalStrings.current
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (onDelete != null) {
                     TextButton(onClick = onDelete) {
-                        Text("Delete", color = MaterialTheme.colorScheme.error)
+                        Text(s.delete, color = MaterialTheme.colorScheme.error)
                     }
                 }
-                TextButton(onClick = onDismiss) { Text("Cancel") }
+                TextButton(onClick = onDismiss) { Text(s.cancel) }
             }
         }
     )
@@ -629,6 +635,7 @@ private fun DatePickerField(
     )
 
     if (showPicker) {
+        val s = LocalStrings.current
         DatePickerDialog(
             onDismissRequest = { showPicker = false },
             confirmButton = {
@@ -637,9 +644,9 @@ private fun DatePickerField(
                         onDateSelected(Instant.ofEpochMilli(ms).atZone(ZoneOffset.UTC).toLocalDate().toString())
                     }
                     showPicker = false
-                }) { Text("OK") }
+                }) { Text(s.ok) }
             },
-            dismissButton = { TextButton(onClick = { showPicker = false }) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = { showPicker = false }) { Text(s.cancel) } }
         ) { DatePicker(state = pickerState) }
     }
 }

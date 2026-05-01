@@ -37,6 +37,7 @@ fun HotelPickerScreen(
         }
     }
 
+    val s = LocalStrings.current
     Column(Modifier.fillMaxSize()) {
         // Top bar
         Row(
@@ -46,14 +47,14 @@ fun HotelPickerScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Reserveo", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(s.appName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(
                     currentUser.name,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                TextButton(onClick = onLogout) { Text("Logout") }
+                TextButton(onClick = onLogout) { Text(s.logout) }
             }
         }
         HorizontalDivider()
@@ -66,11 +67,11 @@ fun HotelPickerScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text("Error: $error", color = MaterialTheme.colorScheme.error)
-                    Button(onClick = { error = null; loading = true }) { Text("Retry") }
+                    Text(s.errorMsg(error!!), color = MaterialTheme.colorScheme.error)
+                    Button(onClick = { error = null; loading = true }) { Text(s.retry) }
                 }
                 hotels.isEmpty() -> Text(
-                    "No hotels assigned to your account.",
+                    s.noHotelsAssigned,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -80,12 +81,12 @@ fun HotelPickerScreen(
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            "Welcome back, ${currentUser.name}",
+                            s.welcomeBack(currentUser.name),
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            "Select a hotel to manage",
+                            s.selectHotelToManage,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

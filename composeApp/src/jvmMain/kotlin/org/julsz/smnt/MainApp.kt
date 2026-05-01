@@ -20,12 +20,7 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import kotlin.math.roundToInt
 
-private enum class AppScreen(val label: String) {
-    Dashboard("Dashboard"),
-    Reservations("Reservations"),
-    Config("Config"),
-    Settings("Settings"),
-}
+private enum class AppScreen { Dashboard, Reservations, Config, Settings }
 
 @Composable
 fun MainApp(
@@ -39,20 +34,22 @@ fun MainApp(
     fontScale: Float = 1.0f,
     onFontScaleChange: (Float) -> Unit = {},
     centerDays: Int = 30,
-    onCenterDaysChange: (Int) -> Unit = {}
+    onCenterDaysChange: (Int) -> Unit = {},
+    language: AppLanguage = AppLanguage.English,
+    onLanguageChange: (AppLanguage) -> Unit = {}
 ) {
     var currentScreen by remember { mutableStateOf(AppScreen.Dashboard) }
 
     Row(Modifier.fillMaxSize()) {
         AppSidebar(
-            currentUser   = currentUser,
-            selectedHotel = selectedHotel,
-            currentScreen = currentScreen,
+            currentUser    = currentUser,
+            selectedHotel  = selectedHotel,
+            currentScreen  = currentScreen,
             onScreenChange = { currentScreen = it },
-            onSwitchHotel = onSwitchHotel,
-            onLogout      = onLogout,
-            isDark        = isDark,
-            onThemeToggle = onThemeToggle
+            onSwitchHotel  = onSwitchHotel,
+            onLogout       = onLogout,
+            isDark         = isDark,
+            onThemeToggle  = onThemeToggle
         )
         VerticalDivider()
         Box(Modifier.fillMaxSize().padding(28.dp)) {
@@ -60,7 +57,7 @@ fun MainApp(
                 AppScreen.Dashboard    -> DashboardPage(client = client, hotel = selectedHotel)
                 AppScreen.Reservations -> ReservationsCalendarPage(client, selectedHotel, centerDays)
                 AppScreen.Config       -> ConfigPage(client, selectedHotel)
-                AppScreen.Settings     -> SettingsPage(fontScale = fontScale, onFontScaleChange = onFontScaleChange, centerDays = centerDays, onCenterDaysChange = onCenterDaysChange)
+                AppScreen.Settings     -> SettingsPage(fontScale = fontScale, onFontScaleChange = onFontScaleChange, centerDays = centerDays, onCenterDaysChange = onCenterDaysChange, language = language, onLanguageChange = onLanguageChange)
             }
         }
     }
@@ -79,6 +76,7 @@ private fun AppSidebar(
     isDark: Boolean,
     onThemeToggle: () -> Unit
 ) {
+    val s = LocalStrings.current
     Column(
         modifier = Modifier
             .width(220.dp)
@@ -111,8 +109,14 @@ private fun AppSidebar(
             Spacer(Modifier.height(8.dp))
 
             AppScreen.entries.forEach { screen ->
+                val label = when (screen) {
+                    AppScreen.Dashboard    -> s.navDashboard
+                    AppScreen.Reservations -> s.navReservations
+                    AppScreen.Config       -> s.navConfig
+                    AppScreen.Settings     -> s.navSettings
+                }
                 SidebarItem(
-                    label    = screen.label,
+                    label    = label,
                     selected = currentScreen == screen,
                     onClick  = { onScreenChange(screen) }
                 )
@@ -135,8 +139,8 @@ private fun AppSidebar(
                 )
             }
             HorizontalDivider()
-            SidebarItem(label = "Switch Hotel", selected = false, onClick = onSwitchHotel)
-            SidebarItem(label = "Logout", selected = false, onClick = onLogout)
+            SidebarItem(label = s.switchHotel, selected = false, onClick = onSwitchHotel)
+            SidebarItem(label = s.logout,      selected = false, onClick = onLogout)
             // Theme toggle pill
             Row(
                 Modifier
@@ -149,7 +153,7 @@ private fun AppSidebar(
                         .clip(RoundedCornerShape(20.dp))
                         .background(MaterialTheme.colorScheme.surface)
                 ) {
-                    listOf(true to "Dark", false to "Light").forEach { (dark, label) ->
+                    listOf(true to s.themeDark, false to s.themeLight).forEach { (dark, label) ->
                         val selected = isDark == dark
                         Box(
                             Modifier
@@ -232,6 +236,7 @@ private fun DashboardPage(client: HttpClient, hotel: UserHotelRoleDto) {
         }
     }
 
+    val s = LocalStrings.current
     Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
         Text(hotel.hotelName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
 
@@ -240,22 +245,24 @@ private fun DashboardPage(client: HttpClient, hotel: UserHotelRoleDto) {
         } else {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 DashboardTile(
-                    title        = "Arrivals",
+                    title        = s.arrivals,
                     date         = todayStr,
                     pending      = arrivals.filter { it.status in listOf("confirmed", "pending") },
                     done         = arrivals.filter { it.status == "checked_in" },
-                    pendingLabel = "Not arrived",
-                    doneLabel    = "Arrived",
+                    pendingLabel = s.notArrived,
+                    doneLabel    = s.arrived,
+                    emptyLabel   = s.noArrivalsToday,
                     onAction     = { updateStatus(it, "checked_in") },
                     modifier     = Modifier.weight(1f)
                 )
                 DashboardTile(
-                    title        = "Departures",
+                    title        = s.departures,
                     date         = todayStr,
                     pending      = departures.filter { it.status == "checked_in" },
                     done         = departures.filter { it.status == "checked_out" },
-                    pendingLabel = "Not departed",
-                    doneLabel    = "Departed",
+                    pendingLabel = s.notDeparted,
+                    doneLabel    = s.departed,
+                    emptyLabel   = s.noDeparturesToday,
                     onAction     = { updateStatus(it, "checked_out") },
                     modifier     = Modifier.weight(1f)
                 )
@@ -272,9 +279,11 @@ private fun DashboardTile(
     done: List<ReservationDto>,
     pendingLabel: String,
     doneLabel: String,
+    emptyLabel: String,
     onAction: (ReservationDto) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val s = LocalStrings.current
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
@@ -291,7 +300,7 @@ private fun DashboardTile(
         HorizontalDivider()
 
         if (pending.isEmpty() && done.isEmpty()) {
-            Text("No ${title.lowercase()} today",
+            Text(emptyLabel,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
@@ -306,7 +315,7 @@ private fun DashboardTile(
                         Column(Modifier.weight(1f)) {
                             Text(res.guestName, style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Medium)
-                            Text("Room ${res.roomNumber}", style = MaterialTheme.typography.labelSmall,
+                            Text(s.roomShort(res.roomNumber), style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         IconButton(onClick = { onAction(res) }, modifier = Modifier.size(36.dp)) {
@@ -328,7 +337,7 @@ private fun DashboardTile(
                         Column(Modifier.weight(1f)) {
                             Text(res.guestName, style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text("Room ${res.roomNumber}", style = MaterialTheme.typography.labelSmall,
+                            Text(s.roomShort(res.roomNumber), style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
                         }
                         Text("✓", style = MaterialTheme.typography.bodyMedium,
@@ -344,13 +353,16 @@ private fun DashboardTile(
 @Composable
 private fun SettingsPage(
     fontScale: Float, onFontScaleChange: (Float) -> Unit,
-    centerDays: Int, onCenterDaysChange: (Int) -> Unit
+    centerDays: Int, onCenterDaysChange: (Int) -> Unit,
+    language: AppLanguage = AppLanguage.English,
+    onLanguageChange: (AppLanguage) -> Unit = {}
 ) {
+    val s = LocalStrings.current
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
-        Text("Settings", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text(s.settingsTitle, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
 
         Column(
             modifier = Modifier
@@ -360,14 +372,14 @@ private fun SettingsPage(
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text("Appearance", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Text(s.settingsAppearance, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
             HorizontalDivider()
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Font size", style = MaterialTheme.typography.bodyMedium)
+                Text(s.settingsFontSize, style = MaterialTheme.typography.bodyMedium)
                 Text(
                     "${(fontScale * 100).roundToInt()}%",
                     style = MaterialTheme.typography.bodySmall,
@@ -390,14 +402,42 @@ private fun SettingsPage(
             }
 
             HorizontalDivider()
-            Text("Timeline", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Text(s.settingsLanguage, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            HorizontalDivider()
+            Row(
+                Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+            ) {
+                AppLanguage.entries.forEach { lang ->
+                    val selected = language == lang
+                    Box(
+                        Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent)
+                            .clickable(enabled = !selected) { onLanguageChange(lang) }
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            lang.displayName,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (selected) MaterialTheme.colorScheme.onPrimary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            HorizontalDivider()
+            Text(s.settingsTimeline, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
             HorizontalDivider()
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Center view range", style = MaterialTheme.typography.bodyMedium)
+                Text(s.settingsCenterViewRange, style = MaterialTheme.typography.bodyMedium)
                 Text(
                     "±${centerDays}d",
                     style = MaterialTheme.typography.bodySmall,

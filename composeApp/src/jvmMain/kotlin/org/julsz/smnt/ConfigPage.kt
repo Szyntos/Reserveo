@@ -10,10 +10,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.ktor.client.*
 
-private enum class ConfigSection(val title: String, val description: String) {
-    Rooms("Rooms", "Manage rooms, statuses and availability"),
-    BasePrice("Base Price", "Set pricing rules by room, period and stay length"),
-}
+private enum class ConfigSection { Rooms, BasePrice }
 
 @Composable
 fun ConfigPage(client: HttpClient, hotel: UserHotelRoleDto) {
@@ -33,10 +30,11 @@ fun ConfigPage(client: HttpClient, hotel: UserHotelRoleDto) {
 
 @Composable
 private fun ConfigHub(hotel: UserHotelRoleDto, onNavigate: (ConfigSection) -> Unit) {
+    val s = LocalStrings.current
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(24.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
-                "Config",
+                s.configTitle,
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold
             )
@@ -49,9 +47,17 @@ private fun ConfigHub(hotel: UserHotelRoleDto, onNavigate: (ConfigSection) -> Un
 
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             ConfigSection.entries.forEach { entity ->
+                val title = when (entity) {
+                    ConfigSection.Rooms     -> s.configRoomsTitle
+                    ConfigSection.BasePrice -> s.configBasePriceTitle
+                }
+                val description = when (entity) {
+                    ConfigSection.Rooms     -> s.configRoomsDesc
+                    ConfigSection.BasePrice -> s.configBasePriceDesc
+                }
                 ConfigCard(
-                    title       = entity.title,
-                    description = entity.description,
+                    title       = title,
+                    description = description,
                     onClick     = { onNavigate(entity) },
                     modifier    = Modifier.width(220.dp)
                 )
@@ -88,7 +94,7 @@ private fun ConfigCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    "Manage →",
+                    LocalStrings.current.configManage,
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary
                 )

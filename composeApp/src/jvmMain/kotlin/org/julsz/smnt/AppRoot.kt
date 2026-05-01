@@ -37,6 +37,7 @@ fun AppRoot() {
     var isDark        by remember { mutableStateOf(true) }
     var fontScale     by remember { mutableStateOf(1.0f) }
     var centerDays    by remember { mutableStateOf(30) }
+    var language      by remember { mutableStateOf(AppLanguage.English) }
 
     fun logout() { currentUser = null; selectedHotel = null }
 
@@ -45,6 +46,7 @@ fun AppRoot() {
     MaterialTheme(colorScheme = colorScheme, typography = rememberSansSerifTypography()) {
         val baseDensity = LocalDensity.current
         CompositionLocalProvider(
+            LocalStrings provides language.strings,
             LocalScrollbarStyle provides ScrollbarStyle(
                 minimalHeight       = 16.dp,
                 thickness           = 8.dp,
@@ -80,7 +82,9 @@ fun AppRoot() {
                             fontScale          = fontScale,
                             onFontScaleChange  = { fontScale = it },
                             centerDays         = centerDays,
-                            onCenterDaysChange = { centerDays = it }
+                            onCenterDaysChange = { centerDays = it },
+                            language           = language,
+                            onLanguageChange   = { language = it }
                         )
                 }
             }

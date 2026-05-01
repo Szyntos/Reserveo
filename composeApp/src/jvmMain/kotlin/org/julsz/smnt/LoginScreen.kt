@@ -34,6 +34,7 @@ fun LoginScreen(client: HttpClient, onLogin: (UserDto) -> Unit) {
         }
     }
 
+    val s = LocalStrings.current
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Card(Modifier.width(360.dp)) {
             Column(
@@ -43,12 +44,12 @@ fun LoginScreen(client: HttpClient, onLogin: (UserDto) -> Unit) {
                 // Header
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        "Reserveo",
+                        s.appName,
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        "Select your account to continue",
+                        s.loginSubtitle,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -65,10 +66,10 @@ fun LoginScreen(client: HttpClient, onLogin: (UserDto) -> Unit) {
                         onExpandedChange = { if (users.isNotEmpty()) expanded = it }
                     ) {
                         OutlinedTextField(
-                            value = selected?.let { "${it.name} (${it.appRole})" } ?: "No users found",
+                            value = selected?.let { "${it.name} (${it.appRole})" } ?: s.loginNoUsers,
                             onValueChange = {},
                             readOnly = true,
-                            label = { Text("User") },
+                            label = { Text(s.loginUserLabel) },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
                             modifier = Modifier
                                 .menuAnchor(MenuAnchorType.PrimaryNotEditable)
@@ -114,7 +115,7 @@ fun LoginScreen(client: HttpClient, onLogin: (UserDto) -> Unit) {
                     enabled = selected != null && !loadingUsers,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Enter")
+                    Text(s.loginEnter)
                 }
             }
         }
