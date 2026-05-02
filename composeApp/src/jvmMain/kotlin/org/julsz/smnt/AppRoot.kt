@@ -24,8 +24,48 @@ import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
 import java.io.File
+import java.util.Properties
 
 internal const val BASE_URL = "http://localhost:8080"
+
+// ─── Settings persistence ─────────────────────────────────────────────────────
+
+private data class AppSettings(
+    val isDark: Boolean = true,
+    val fontScale: Float = 1.0f,
+    val centerDays: Int = 30,
+    val noShowAfterDays: Int = 14,
+    val autoCheckOutAfterDays: Int = 3,
+    val language: String = "English"
+)
+
+private val settingsFile = File(System.getProperty("user.home"), ".reserveo_settings.properties")
+
+private fun loadSettings(): AppSettings {
+    val props = Properties()
+    try { settingsFile.inputStream().use { props.load(it) } } catch (_: Exception) {}
+    return AppSettings(
+        isDark                = props.getProperty("isDark", "true").toBoolean(),
+        fontScale             = props.getProperty("fontScale", "1.0").toFloat(),
+        centerDays            = props.getProperty("centerDays", "30").toInt(),
+        noShowAfterDays       = props.getProperty("noShowAfterDays", "14").toInt(),
+        autoCheckOutAfterDays = props.getProperty("autoCheckOutAfterDays", "3").toInt(),
+        language              = props.getProperty("language", "English")
+    )
+}
+
+private fun saveSettings(s: AppSettings) {
+    try {
+        val props = Properties()
+        props["isDark"]                = s.isDark.toString()
+        props["fontScale"]             = s.fontScale.toString()
+        props["centerDays"]            = s.centerDays.toString()
+        props["noShowAfterDays"]       = s.noShowAfterDays.toString()
+        props["autoCheckOutAfterDays"] = s.autoCheckOutAfterDays.toString()
+        props["language"]              = s.language
+        settingsFile.outputStream().use { props.store(it, null) }
+    } catch (_: Exception) {}
+}
 
 @Composable
 fun AppRoot() {
@@ -34,10 +74,20 @@ fun AppRoot() {
 
     var currentUser   by remember { mutableStateOf<UserDto?>(null) }
     var selectedHotel by remember { mutableStateOf<UserHotelRoleDto?>(null) }
-    var isDark        by remember { mutableStateOf(true) }
-    var fontScale     by remember { mutableStateOf(1.0f) }
-    var centerDays    by remember { mutableStateOf(30) }
-    var language      by remember { mutableStateOf(AppLanguage.English) }
+
+    val initial = remember { loadSettings() }
+    var isDark                by remember { mutableStateOf(initial.isDark) }
+    var fontScale             by remember { mutableStateOf(initial.fontScale) }
+    var centerDays            by remember { mutableStateOf(initial.centerDays) }
+    var noShowAfterDays       by remember { mutableStateOf(initial.noShowAfterDays) }
+    var autoCheckOutAfterDays by remember { mutableStateOf(initial.autoCheckOutAfterDays) }
+    var language              by remember { mutableStateOf(
+        AppLanguage.entries.firstOrNull { it.name == initial.language } ?: AppLanguage.English
+    ) }
+
+    LaunchedEffect(isDark, fontScale, centerDays, noShowAfterDays, autoCheckOutAfterDays, language) {
+        saveSettings(AppSettings(isDark, fontScale, centerDays, noShowAfterDays, autoCheckOutAfterDays, language.name))
+    }
 
     fun logout() { currentUser = null; selectedHotel = null }
 
@@ -72,19 +122,23 @@ fun AppRoot() {
                         )
                     else ->
                         MainApp(
-                            client             = client,
-                            currentUser        = currentUser!!,
-                            selectedHotel      = selectedHotel!!,
-                            onSwitchHotel      = { selectedHotel = null },
-                            onLogout           = ::logout,
-                            isDark             = isDark,
-                            onThemeToggle      = { isDark = !isDark },
-                            fontScale          = fontScale,
-                            onFontScaleChange  = { fontScale = it },
-                            centerDays         = centerDays,
-                            onCenterDaysChange = { centerDays = it },
-                            language           = language,
-                            onLanguageChange   = { language = it }
+                            client                       = client,
+                            currentUser                  = currentUser!!,
+                            selectedHotel                = selectedHotel!!,
+                            onSwitchHotel                = { selectedHotel = null },
+                            onLogout                     = ::logout,
+                            isDark                       = isDark,
+                            onThemeToggle                = { isDark = !isDark },
+                            fontScale                    = fontScale,
+                            onFontScaleChange            = { fontScale = it },
+                            centerDays                   = centerDays,
+                            onCenterDaysChange           = { centerDays = it },
+                            noShowAfterDays              = noShowAfterDays,
+                            onNoShowAfterDaysChange      = { noShowAfterDays = it },
+                            autoCheckOutAfterDays        = autoCheckOutAfterDays,
+                            onAutoCheckOutAfterDaysChange = { autoCheckOutAfterDays = it },
+                            language                     = language,
+                            onLanguageChange             = { language = it }
                         )
                 }
             }

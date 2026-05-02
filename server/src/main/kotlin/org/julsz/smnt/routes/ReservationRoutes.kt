@@ -44,7 +44,10 @@ fun Route.reservationRoutes() {
     delete("/reservations/{id}") {
         val id = call.parameters["id"]?.toIntOrNull()
             ?: return@delete call.respond(HttpStatusCode.BadRequest, "Invalid id")
-        transaction { Reservations.deleteWhere { Reservations.id eq id } }
+        transaction {
+            Payments.deleteWhere { Payments.reservationId eq id }
+            Reservations.deleteWhere { Reservations.id eq id }
+        }
         call.respond(HttpStatusCode.NoContent)
     }
 }

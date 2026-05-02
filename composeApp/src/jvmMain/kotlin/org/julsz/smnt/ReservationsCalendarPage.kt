@@ -88,7 +88,7 @@ private fun buildResWeeks(year: Int, month: Int): List<List<RCalDay>> {
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
 @Composable
-fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, centerDays: Int = 30) {
+fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, centerDays: Int = 30, noShowAfterDays: Int = 14, autoCheckOutAfterDays: Int = 3) {
     val scope = rememberCoroutineScope()
 
     var reservations by remember { mutableStateOf<List<ReservationDto>>(emptyList()) }
@@ -97,7 +97,8 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
     var priceRules   by remember { mutableStateOf<List<PriceRuleDto>>(emptyList()) }
     var roomBlocks   by remember { mutableStateOf<List<RoomBlockDto>>(emptyList()) }
     var loading      by remember { mutableStateOf(true) }
-    var error        by remember { mutableStateOf<String?>(null) }
+    val s        = LocalStrings.current
+    val snackbar = LocalSnackbar.current
     var displayYear    by remember { mutableStateOf(LocalDate.now().year) }
     var displayMonth   by remember { mutableStateOf(LocalDate.now().monthValue) }
     var currentView    by remember { mutableStateOf(ResView.Timeline) }
@@ -111,10 +112,10 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
     var prefillRoom       by remember { mutableStateOf<RoomDto?>(null) }
     var prefillCheckIn    by remember { mutableStateOf("") }
     var prefillCheckOut   by remember { mutableStateOf("") }
+    var hiddenStatuses    by remember { mutableStateOf<Set<String>>(emptySet()) }
 
     suspend fun loadData(showLoading: Boolean = true) {
         if (showLoading) loading = true
-        error = null
         try {
             reservations = client.get("$BASE_URL/api/reservations?hotelId=${hotel.hotelId}").body()
             rooms        = client.get("$BASE_URL/api/rooms?hotelId=${hotel.hotelId}").body<List<RoomDto>>()
@@ -122,12 +123,60 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
             guests       = client.get("$BASE_URL/api/guests").body()
             priceRules   = client.get("$BASE_URL/api/hotels/${hotel.hotelId}/price-rules").body()
             roomBlocks   = client.get("$BASE_URL/api/room-blocks?hotelId=${hotel.hotelId}").body()
-        } catch (e: Exception) { error = e.message } finally { if (showLoading) loading = false }
+
+            val cutoff = LocalDate.now().minusDays(noShowAfterDays.toLong())
+            val autoNoShow = reservations.filter { r ->
+                r.status in setOf("pending", "confirmed") &&
+                LocalDate.parse(r.checkInDate).isBefore(cutoff) &&
+                r.paidAmount <= (r.downPaymentAmount ?: 0.0)
+            }
+            if (autoNoShow.isNotEmpty()) {
+                autoNoShow.forEach { res ->
+                    try {
+                        client.put("$BASE_URL/api/reservations/${res.id}") {
+                            contentType(ContentType.Application.Json)
+                            setBody(UpdateReservationRequest(
+                                roomId = res.roomId, guestId = res.guestId,
+                                checkInDate = res.checkInDate, checkOutDate = res.checkOutDate,
+                                status = "no_show", adults = res.adults,
+                                totalAmount = res.totalAmount, description = res.description,
+                                requiresDownPayment = res.requiresDownPayment,
+                                downPaymentAmount = res.downPaymentAmount
+                            ))
+                        }
+                    } catch (_: Exception) {}
+                }
+                reservations = client.get("$BASE_URL/api/reservations?hotelId=${hotel.hotelId}").body()
+            }
+
+            val checkOutCutoff = LocalDate.now().minusDays(autoCheckOutAfterDays.toLong())
+            val autoCheckOut = reservations.filter { r ->
+                r.status == "checked_in" &&
+                LocalDate.parse(r.checkOutDate).isBefore(checkOutCutoff)
+            }
+            if (autoCheckOut.isNotEmpty()) {
+                autoCheckOut.forEach { res ->
+                    try {
+                        client.put("$BASE_URL/api/reservations/${res.id}") {
+                            contentType(ContentType.Application.Json)
+                            setBody(UpdateReservationRequest(
+                                roomId = res.roomId, guestId = res.guestId,
+                                checkInDate = res.checkInDate, checkOutDate = res.checkOutDate,
+                                status = "checked_out", adults = res.adults,
+                                totalAmount = res.totalAmount, description = res.description,
+                                requiresDownPayment = res.requiresDownPayment,
+                                downPaymentAmount = res.downPaymentAmount
+                            ))
+                        }
+                    } catch (_: Exception) {}
+                }
+                reservations = client.get("$BASE_URL/api/reservations?hotelId=${hotel.hotelId}").body()
+            }
+        } catch (e: Exception) { snackbar.showSnackbar(s.errorMsg(e.message ?: "?")) } finally { if (showLoading) loading = false }
     }
 
     LaunchedEffect(hotel.hotelId) { loadData() }
 
-    val s = LocalStrings.current
     Column(Modifier.fillMaxSize()) {
         // ── Header ────────────────────────────────────────────────────────────
         Row(
@@ -144,10 +193,6 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically) {
-                error?.let {
-                    Text(s.errorMsg(it), color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall)
-                }
                 // View toggle
                 Row(
                     Modifier.clip(RoundedCornerShape(6.dp))
@@ -209,7 +254,7 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
             }
         }
 
-        // ── Status legend ─────────────────────────────────────────────────────
+        // ── Status legend (clickable — toggles filter) ────────────────────────
         Row(
             Modifier.padding(bottom = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -217,14 +262,27 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
         ) {
             STATUS_PALETTE.entries.forEach { (status, colors) ->
                 val (bg, fg) = colors
+                val hidden = status in hiddenStatuses
                 Box(
                     Modifier
                         .clip(RoundedCornerShape(4.dp))
-                        .background(bg)
+                        .background(if (hidden) Color.Transparent else bg)
+                        .border(
+                            width = 1.dp,
+                            color = fg.copy(alpha = if (hidden) 0.35f else 0f),
+                            shape = RoundedCornerShape(4.dp)
+                        )
+                        .clickable {
+                            hiddenStatuses = if (hidden) hiddenStatuses - status
+                                            else         hiddenStatuses + status
+                        }
                         .padding(horizontal = 8.dp, vertical = 3.dp)
                 ) {
-                    Text(s.statusLabel(status),
-                        style = MaterialTheme.typography.labelSmall, color = fg)
+                    Text(
+                        s.statusName(status),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = fg.copy(alpha = if (hidden) 0.35f else 1f)
+                    )
                 }
             }
         }
@@ -234,14 +292,19 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }
-        } else when (currentView) {
+        } else {
+            val visibleReservations = remember(reservations, hiddenStatuses) {
+                if (hiddenStatuses.isEmpty()) reservations
+                else reservations.filter { it.status !in hiddenStatuses }
+            }
+            when (currentView) {
             ResView.Calendar -> LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
                 (1..12).forEach { m ->
                     item(key = "month_${displayYear}_$m") {
                         ResMonthCalendar(
                             year         = displayYear,
                             month        = m,
-                            reservations = reservations,
+                            reservations = visibleReservations,
                             onResClick   = { optionRes = it }
                         )
                         if (m < 12) HorizontalDivider(Modifier.padding(vertical = 16.dp))
@@ -251,7 +314,7 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
             }
             ResView.Timeline -> ReservationsTimelineView(
                 rooms           = rooms.sortedWith(compareBy({ it.number.toIntOrNull() ?: Int.MAX_VALUE }, { it.number })),
-                reservations    = reservations,
+                reservations    = visibleReservations,
                 blocks          = roomBlocks,
                 year            = displayYear,
                 month           = displayMonth,
@@ -267,6 +330,7 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
                     showNewDialog   = true
                 }
             )
+        }
         }
     }
 
@@ -293,16 +357,16 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
                             setBody(req)
                         }
                         if (!response.status.isSuccess()) {
-                            error = if (response.status == HttpStatusCode.Conflict)
-                                s.conflictError
-                            else
-                                s.serverError(response.status)
+                            snackbar.showSnackbar(
+                                if (response.status == HttpStatusCode.Conflict) s.conflictError
+                                else s.serverError(response.status)
+                            )
                             return@launch
                         }
                         showNewDialog = false
                         prefillRoom = null; prefillCheckIn = ""; prefillCheckOut = ""
                         loadData(showLoading = false)
-                    } catch (e: Exception) { error = e.message }
+                    } catch (e: Exception) { snackbar.showSnackbar(s.errorMsg(e.message ?: "?")) }
                 }
             },
             onCreateGuest = { req ->
@@ -313,7 +377,10 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
                     }.body()
                     guests = guests + created
                     created
-                } catch (e: Exception) { error = e.message; null }
+                } catch (e: Exception) {
+                    scope.launch { snackbar.showSnackbar(s.errorMsg(e.message ?: "?")) }
+                    null
+                }
             }
         )
     }
@@ -335,24 +402,25 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
                             setBody(req)
                         }
                         if (!response.status.isSuccess()) {
-                            error = if (response.status == HttpStatusCode.Conflict)
-                                s.conflictError
-                            else
-                                s.serverError(response.status)
+                            snackbar.showSnackbar(
+                                if (response.status == HttpStatusCode.Conflict) s.conflictError
+                                else s.serverError(response.status)
+                            )
                             return@launch
                         }
                         editReservation = null
                         loadData(showLoading = false)
-                    } catch (e: Exception) { error = e.message }
+                    } catch (e: Exception) { snackbar.showSnackbar(s.errorMsg(e.message ?: "?")) }
                 }
             },
             onDelete = {
                 scope.launch {
                     try {
                         client.delete("$BASE_URL/api/reservations/${res.id}")
+                        reservations = reservations.filter { it.id != res.id }
                         editReservation = null
                         loadData(showLoading = false)
-                    } catch (e: Exception) { error = e.message }
+                    } catch (e: Exception) { snackbar.showSnackbar(s.errorMsg(e.message ?: "?")) }
                 }
             },
             onCreateGuest = { req ->
@@ -363,7 +431,10 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
                     }.body()
                     guests = guests + created
                     created
-                } catch (e: Exception) { error = e.message; null }
+                } catch (e: Exception) {
+                    scope.launch { snackbar.showSnackbar(s.errorMsg(e.message ?: "?")) }
+                    null
+                }
             }
         )
     }
@@ -393,7 +464,7 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
                         }
                         optionRes = null
                         loadData(showLoading = false)
-                    } catch (e: Exception) { error = e.message }
+                    } catch (e: Exception) { snackbar.showSnackbar(s.errorMsg(e.message ?: "?")) }
                 }
             }
         )
@@ -423,7 +494,7 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
                         }
                         showBlockDialog = false
                         loadData(showLoading = false)
-                    } catch (e: Exception) { error = e.message }
+                    } catch (e: Exception) { snackbar.showSnackbar(s.errorMsg(e.message ?: "?")) }
                 }
             }
         )
@@ -440,7 +511,7 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
                         client.delete("$BASE_URL/api/room-blocks/${block.id}")
                         editBlock = null
                         loadData(showLoading = false)
-                    } catch (e: Exception) { error = e.message }
+                    } catch (e: Exception) { snackbar.showSnackbar(s.errorMsg(e.message ?: "?")) }
                 }
             }
         )
@@ -735,7 +806,7 @@ private fun ReservationDetailDialog(
 
                 SummaryRow(s.roomDetailLabel, room?.let { "${s.roomLabel(it.number)} · ${it.typeName}" } ?: s.roomLabel(res.roomNumber))
                 SummaryRow(s.adultsLabel, formatAdults(res.adults))
-                SummaryRow(s.statusLabel, s.statusLabel(res.status))
+                SummaryRow(s.statusLabel, s.statusName(res.status))
                 if (dpPending(res)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically) {
@@ -802,10 +873,11 @@ private fun ManagePaymentsDialog(
     onDismiss: () -> Unit,
     onPaymentsChanged: () -> Unit = {}
 ) {
-    val scope = rememberCoroutineScope()
-    var payments    by remember { mutableStateOf<List<PaymentDto>>(emptyList()) }
-    var loading     by remember { mutableStateOf(true) }
-    var error       by remember { mutableStateOf<String?>(null) }
+    val scope    = rememberCoroutineScope()
+    val s        = LocalStrings.current
+    val snackbar = LocalSnackbar.current
+    var payments by remember { mutableStateOf<List<PaymentDto>>(emptyList()) }
+    var loading  by remember { mutableStateOf(true) }
 
     // Add-payment form state
     var isDeposit          by remember { mutableStateOf(false) }
@@ -819,7 +891,7 @@ private fun ManagePaymentsDialog(
     suspend fun reload() {
         loading = true
         try { payments = client.get("$BASE_URL/api/reservations/${res.id}/payments").body() }
-        catch (e: Exception) { error = e.message }
+        catch (e: Exception) { snackbar.showSnackbar(s.errorMsg(e.message ?: "?")) }
         loading = false
     }
 
@@ -827,7 +899,6 @@ private fun ManagePaymentsDialog(
 
     val totalPaid = remember(payments) { payments.sumOf { it.amount } }
     val remaining = res.totalAmount?.let { it - totalPaid }
-    val s = LocalStrings.current
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -922,7 +993,7 @@ private fun ManagePaymentsDialog(
                                                 client.delete("$BASE_URL/api/payments/${p.id}")
                                                 reload()
                                                 onPaymentsChanged()
-                                            } catch (e: Exception) { error = e.message }
+                                            } catch (e: Exception) { snackbar.showSnackbar(s.errorMsg(e.message ?: "?")) }
                                         }
                                     },
                                     modifier = Modifier.size(28.dp)
@@ -954,10 +1025,6 @@ private fun ManagePaymentsDialog(
                     }
                 }
 
-                error?.let {
-                    Text(s.errorMsg(it), color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.labelSmall)
-                }
 
                 HorizontalDivider()
                 Text(s.addPaymentSection, style = MaterialTheme.typography.titleSmall,
@@ -1092,7 +1159,7 @@ private fun ManagePaymentsDialog(
                                 receiptNumberInput = ""
                                 reload()
                                 onPaymentsChanged()
-                            } catch (e: Exception) { error = e.message }
+                            } catch (e: Exception) { snackbar.showSnackbar(s.errorMsg(e.message ?: "?")) }
                         }
                     },
                     enabled = canAdd,
@@ -1166,7 +1233,7 @@ private fun NewReservationDialog(
     val totalGuests = adults.toDoubleOrNull() ?: 1.0
     val computedTotal = if (ppn != null && nights > 0) ppn * nights * totalGuests else null
     val guestReady = selectedGuest != null || (guestFirstName.isNotBlank() && guestLastName.isNotBlank())
-    val conflict = remember(selectedRoom?.id, checkIn, checkOut) {
+    val conflict = remember(selectedRoom?.id, checkIn, checkOut, reservations) {
         selectedRoom != null && checkIn.isNotBlank() && checkOut.isNotBlank() &&
         hasReservationConflict(reservations, selectedRoom!!.id, checkIn, checkOut)
     }
@@ -1235,13 +1302,13 @@ private fun NewReservationDialog(
                 OutlinedTextField(adults, { adults = it }, label = { Text(s.adultsLabel) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 ExposedDropdownMenuBox(expanded = statusExpanded, onExpandedChange = { statusExpanded = it }) {
                     OutlinedTextField(
-                        value = s.statusLabel(status), onValueChange = {}, readOnly = true, label = { Text(s.statusLabel) },
+                        value = s.statusName(status), onValueChange = {}, readOnly = true, label = { Text(s.statusLabel) },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(statusExpanded) },
                         modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(), singleLine = true
                     )
                     ExposedDropdownMenu(expanded = statusExpanded, onDismissRequest = { statusExpanded = false }) {
                         RESERVATION_STATUSES.forEach { code ->
-                            DropdownMenuItem(text = { Text(s.statusLabel(code)) }, onClick = { status = code; statusExpanded = false })
+                            DropdownMenuItem(text = { Text(s.statusName(code)) }, onClick = { status = code; statusExpanded = false })
                         }
                     }
                 }
@@ -1353,7 +1420,7 @@ private fun ReservationEditDialog(
     val ppn = ppnInput.toDoubleOrNull()
     val totalGuests = adults.toDoubleOrNull() ?: 1.0
     val computedTotal = if (ppn != null && nights > 0) ppn * nights * totalGuests else null
-    val conflict = remember(selectedRoom?.id, checkIn, checkOut) {
+    val conflict = remember(selectedRoom?.id, checkIn, checkOut, reservations) {
         selectedRoom != null && checkIn.isNotBlank() && checkOut.isNotBlank() &&
         hasReservationConflict(reservations, selectedRoom!!.id, checkIn, checkOut, excludeId = existing.id)
     }
@@ -1521,7 +1588,7 @@ private fun ReservationFormFields(
         )
         ExposedDropdownMenu(expanded = statusExpanded, onDismissRequest = { onStatusExpandChange(false) }) {
             RESERVATION_STATUSES.forEach { code ->
-                DropdownMenuItem(text = { Text(s.statusLabel(code)) }, onClick = { onStatusChange(code); onStatusExpandChange(false) })
+                DropdownMenuItem(text = { Text(s.statusName(code)) }, onClick = { onStatusChange(code); onStatusExpandChange(false) })
             }
         }
     }
@@ -1840,18 +1907,18 @@ private fun ReservationsTimelineView(
                                     .padding(top = 5.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                if (scale == TimelineScale.Month) {
-                                    Text(
-                                        day.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, s.locale).take(2),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = when {
-                                            isToday   -> MaterialTheme.colorScheme.onPrimaryContainer
-                                            isWeekend -> MaterialTheme.colorScheme.error.copy(alpha = 0.65f)
-                                            else      -> MaterialTheme.colorScheme.onSurfaceVariant
-                                        }
-                                    )
-                                    Spacer(Modifier.height(2.dp))
-                                }
+                                Text(
+                                    day.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, s.locale).take(
+                                        if (scale == TimelineScale.Year) 1 else 2
+                                    ),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = when {
+                                        isToday   -> MaterialTheme.colorScheme.onPrimaryContainer
+                                        isWeekend -> MaterialTheme.colorScheme.error.copy(alpha = 0.65f)
+                                        else      -> MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
+                                )
+                                Spacer(Modifier.height(2.dp))
                                 Text(
                                     day.dayOfMonth.toString(),
                                     style = MaterialTheme.typography.labelSmall,
@@ -2206,7 +2273,7 @@ private fun ReservationsTimelineView(
                                                             .padding(horizontal = 4.dp, vertical = 1.dp)
                                                     ) {
                                                         Text(
-                                                            s.statusLabel(res.status),
+                                                            s.statusName(res.status),
                                                             style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                                                             color = fg
                                                         )

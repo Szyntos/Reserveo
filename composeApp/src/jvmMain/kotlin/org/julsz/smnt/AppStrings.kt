@@ -53,6 +53,8 @@ interface AppStrings {
     val settingsFontSize: String
     val settingsTimeline: String
     val settingsCenterViewRange: String
+    val settingsNoShowAfterDays: String
+    val settingsAutoCheckOutAfterDays: String
     val settingsLanguage: String
 
     // Config hub
@@ -212,12 +214,25 @@ interface AppStrings {
     fun removeBlockConfirm(roomNumber: String, fromDate: String, toDate: String, reason: String?): String
 
     // Reservation status labels
-    fun statusLabel(status: String): String
+    fun statusName(status: String): String
 
     // Price breakdown
     fun nightsPersonsLine(nights: Int, guests: Double): String
     fun priceTotalLine(total: Double): String
     fun priceRuleLine(minNights: Int, maxNights: Int?): String
+
+    // Dashboard statistics
+    val statCheckedIn: String
+    val statOccupancy: String
+    val statMonthRevenue: String
+    val statUpcoming7d: String
+    val statPendingDp: String
+
+    // Dashboard — overdue panes
+    val overdueCheckIns: String
+    val noOverdueCheckIns: String
+    val overdueCheckOuts: String
+    val noOverdueCheckOuts: String
 }
 
 // ─── English ──────────────────────────────────────────────────────────────────
@@ -258,6 +273,8 @@ object EnglishStrings : AppStrings {
     override val settingsFontSize = "Font size"
     override val settingsTimeline = "Timeline"
     override val settingsCenterViewRange = "Center view range"
+    override val settingsNoShowAfterDays = "Auto no-show after"
+    override val settingsAutoCheckOutAfterDays = "Auto check-out after"
     override val settingsLanguage = "Language"
     override val configTitle = "Config"
     override val configRoomsTitle = "Rooms"
@@ -401,8 +418,17 @@ object EnglishStrings : AppStrings {
     override val removeBlockTitle = "Remove Block"
     override fun removeBlockConfirm(roomNumber: String, fromDate: String, toDate: String, reason: String?) =
         "Remove block for Room $roomNumber from $fromDate to $toDate${reason?.let { " ($it)" } ?: ""}?"
-    override fun statusLabel(status: String) =
+    override fun statusName(status: String) =
         status.replace('_', ' ').replaceFirstChar { it.uppercaseChar() }
+    override val statCheckedIn    = "Checked In"
+    override val statOccupancy    = "occupancy"
+    override val statMonthRevenue = "Month Collected"
+    override val statUpcoming7d   = "Arrivals · Next 7d"
+    override val statPendingDp    = "Pending Down Pmts"
+    override val overdueCheckIns   = "Overdue Check-ins"
+    override val noOverdueCheckIns = "No overdue check-ins"
+    override val overdueCheckOuts   = "Overdue Check-outs"
+    override val noOverdueCheckOuts = "No overdue check-outs"
     override fun nightsPersonsLine(nights: Int, guests: Double): String {
         val g = if (guests % 1.0 == 0.0) guests.toLong().toString() else "%.1f".format(guests)
         return "$nights night${if (nights != 1) "s" else ""} × $g person${if (guests != 1.0) "s" else ""}"
@@ -450,6 +476,8 @@ object PolishStrings : AppStrings {
     override val settingsFontSize = "Rozmiar czcionki"
     override val settingsTimeline = "Oś czasu"
     override val settingsCenterViewRange = "Zakres widoku"
+    override val settingsNoShowAfterDays = "Automatyczna nieobecność po"
+    override val settingsAutoCheckOutAfterDays = "Automatyczne wymeldowanie po"
     override val settingsLanguage = "Język"
     override val configTitle = "Konfiguracja"
     override val configRoomsTitle = "Pokoje"
@@ -597,7 +625,7 @@ object PolishStrings : AppStrings {
     override val removeBlockTitle = "Usuń blokadę"
     override fun removeBlockConfirm(roomNumber: String, fromDate: String, toDate: String, reason: String?) =
         "Usunąć blokadę pokoju $roomNumber od $fromDate do $toDate${reason?.let { " ($it)" } ?: ""}?"
-    override fun statusLabel(status: String) = when (status) {
+    override fun statusName(status: String) = when (status) {
         "pending"     -> "Oczekujące"
         "confirmed"   -> "Potwierdzone"
         "checked_in"  -> "Zameldowany"
@@ -606,6 +634,15 @@ object PolishStrings : AppStrings {
         "no_show"     -> "Nieobecność"
         else          -> status.replace('_', ' ').replaceFirstChar { it.uppercaseChar() }
     }
+    override val statCheckedIn    = "Zameldowani"
+    override val statOccupancy    = "obłożenie"
+    override val statMonthRevenue = "Zebrany przychód"
+    override val statUpcoming7d   = "Przyjazdy · Następne 7 dni"
+    override val statPendingDp    = "Zaległe zadatki"
+    override val overdueCheckIns   = "Zaległe zameldowania"
+    override val noOverdueCheckIns = "Brak zaległych zameldowań"
+    override val overdueCheckOuts   = "Zaległe wymeldowania"
+    override val noOverdueCheckOuts = "Brak zaległych wymeldowań"
     override fun nightsPersonsLine(nights: Int, guests: Double): String {
         val g = if (guests % 1.0 == 0.0) guests.toLong().toString() else "%.1f".format(guests)
         val nightsStr = when {
