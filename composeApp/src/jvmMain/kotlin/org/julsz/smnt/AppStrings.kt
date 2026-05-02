@@ -121,6 +121,8 @@ interface AppStrings {
     val viewCalendar: String
     val viewTimeline: String
     val blockRoomBtn: String
+    val blockModeLabel: String
+    val blockConflictError: String
     val newReservationBtn: String
     val dowLabels: List<String>
     val conflictError: String
@@ -142,7 +144,13 @@ interface AppStrings {
     val notesPlaceholder: String
     val saveNotesBtn: String
     val editReservationBtn: String
+    val editGuestBtn: String
     val managePaymentsBtn: String
+    val blacklistedLabel: String
+    val blacklistedWarning: String
+    val guestNotesLabel: String
+    val guestNotesPlaceholder: String
+    val saveGuestBtn: String
 
     // Payments dialog
     fun paymentsTitle(id: Int): String
@@ -153,6 +161,7 @@ interface AppStrings {
     val docCol: String
     val downPaymentName: String
     val paymentName: String
+    fun downPaymentNeeded(amount: String): String
     val addPaymentSection: String
     val amountFieldLabel: String
     val dateFieldLabel: String
@@ -188,6 +197,7 @@ interface AppStrings {
     val lastNameLabel: String
     val codeLabel: String
     val phoneNumberLabel: String
+    val nationalityLabel: String
     val didYouMean: String
 
     // Timeline controls
@@ -331,6 +341,8 @@ object EnglishStrings : AppStrings {
     override val viewCalendar = "Calendar"
     override val viewTimeline = "Timeline"
     override val blockRoomBtn = "Block Room"
+    override val blockModeLabel = "Block Mode"
+    override val blockConflictError = "Blocked: room is blocked for these dates"
     override val newReservationBtn = "New Reservation"
     override val dowLabels = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
     override val conflictError = "Double booking: room already reserved for these dates"
@@ -350,7 +362,13 @@ object EnglishStrings : AppStrings {
     override val notesPlaceholder = "Add notes about this reservation…"
     override val saveNotesBtn = "Save Notes"
     override val editReservationBtn = "Edit Reservation"
+    override val editGuestBtn = "Edit Guest"
     override val managePaymentsBtn = "Manage Payments"
+    override val blacklistedLabel = "Blacklisted"
+    override val blacklistedWarning = "⛔ This guest is on the blacklist"
+    override val guestNotesLabel = "Guest note / blacklist reason"
+    override val guestNotesPlaceholder = "Reason for blacklist or general note…"
+    override val saveGuestBtn = "Save Guest"
     override fun paymentsTitle(id: Int) = "Payments · Reservation #$id"
     override val noPayments = "No payments recorded yet."
     override val typeCol = "Type"
@@ -359,6 +377,7 @@ object EnglishStrings : AppStrings {
     override val docCol = "Doc"
     override val downPaymentName = "Down Payment"
     override val paymentName = "Payment"
+    override fun downPaymentNeeded(amount: String) = "Down payment needed: $amount PLN"
     override val addPaymentSection = "Add Payment"
     override val amountFieldLabel = "Amount (PLN) *"
     override val dateFieldLabel = "Date"
@@ -394,6 +413,7 @@ object EnglishStrings : AppStrings {
     override val lastNameLabel = "Last name *"
     override val codeLabel = "Code"
     override val phoneNumberLabel = "Phone number"
+    override val nationalityLabel = "Nationality"
     override val didYouMean = "Did you mean?"
     override val scaleCenter = "Center"
     override val scaleMonth = "Month"
@@ -538,6 +558,8 @@ object PolishStrings : AppStrings {
     override val viewCalendar = "Kalendarz"
     override val viewTimeline = "Oś czasu"
     override val blockRoomBtn = "Zablokuj pokój"
+    override val blockModeLabel = "Tryb blokady"
+    override val blockConflictError = "Zablokowane: pokój jest zablokowany w tych datach"
     override val newReservationBtn = "Nowa rezerwacja"
     override val dowLabels = listOf("Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd")
     override val conflictError = "Podwójna rezerwacja: pokój jest już zajęty w tych datach"
@@ -557,7 +579,13 @@ object PolishStrings : AppStrings {
     override val notesPlaceholder = "Dodaj notatki do tej rezerwacji…"
     override val saveNotesBtn = "Zapisz notatki"
     override val editReservationBtn = "Edytuj rezerwację"
+    override val editGuestBtn = "Edytuj gościa"
     override val managePaymentsBtn = "Zarządzaj płatnościami"
+    override val blacklistedLabel = "Na czarnej liście"
+    override val blacklistedWarning = "⛔ Ten gość jest na czarnej liście"
+    override val guestNotesLabel = "Notatka / powód czarnej listy"
+    override val guestNotesPlaceholder = "Powód lub ogólna notatka o gościu…"
+    override val saveGuestBtn = "Zapisz gościa"
     override fun paymentsTitle(id: Int) = "Płatności · Rezerwacja #$id"
     override val noPayments = "Brak zarejestrowanych płatności."
     override val typeCol = "Typ"
@@ -566,6 +594,7 @@ object PolishStrings : AppStrings {
     override val docCol = "Dok."
     override val downPaymentName = "Zadatek"
     override val paymentName = "Płatność"
+    override fun downPaymentNeeded(amount: String) = "Wymagany zadatek: $amount PLN"
     override val addPaymentSection = "Dodaj płatność"
     override val amountFieldLabel = "Kwota (PLN) *"
     override val dateFieldLabel = "Data"
@@ -601,6 +630,7 @@ object PolishStrings : AppStrings {
     override val lastNameLabel = "Nazwisko *"
     override val codeLabel = "Kod"
     override val phoneNumberLabel = "Numer telefonu"
+    override val nationalityLabel = "Narodowość"
     override val didYouMean = "Czy chodziło o?"
     override val scaleCenter = "Środek"
     override val scaleMonth = "Miesiąc"

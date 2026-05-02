@@ -42,6 +42,7 @@ object Guests : Table("guests") {
     val phoneNumber = varchar("phone_number", 50).nullable()
     val nationality = varchar("nationality", 10).nullable()
     val blacklisted = bool("blacklisted")
+    val notes       = text("notes").nullable()
     override val primaryKey = PrimaryKey(id)
 }
 

@@ -7,6 +7,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
@@ -104,7 +107,7 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
     var currentView    by remember { mutableStateOf(ResView.Timeline) }
     var timelineScale  by remember { mutableStateOf(TimelineScale.Center) }
     var showNewDialog     by remember { mutableStateOf(false) }
-    var showBlockDialog   by remember { mutableStateOf(false) }
+    var blockMode         by remember { mutableStateOf(false) }
     var optionRes         by remember { mutableStateOf<ReservationDto?>(null) }
     var editReservation   by remember { mutableStateOf<ReservationDto?>(null) }
     var editBlock         by remember { mutableStateOf<RoomBlockDto?>(null) }
@@ -113,6 +116,7 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
     var prefillCheckIn    by remember { mutableStateOf("") }
     var prefillCheckOut   by remember { mutableStateOf("") }
     var hiddenStatuses    by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var editGuestRes      by remember { mutableStateOf<ReservationDto?>(null) }
 
     suspend fun loadData(showLoading: Boolean = true) {
         if (showLoading) loading = true
@@ -245,9 +249,6 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
                     }, Modifier.size(32.dp)) { Text("▶", style = MaterialTheme.typography.labelLarge) }
                 }
                 Spacer(Modifier.width(4.dp))
-                Button(onClick = { showBlockDialog = true }, enabled = rooms.isNotEmpty()) {
-                    Text(s.blockRoomBtn)
-                }
                 Button(onClick = { showNewDialog = true }, enabled = rooms.isNotEmpty()) {
                     Text(s.newReservationBtn)
                 }
@@ -313,17 +314,35 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
                 }
             }
             ResView.Timeline -> ReservationsTimelineView(
-                rooms           = rooms.sortedWith(compareBy({ it.number.toIntOrNull() ?: Int.MAX_VALUE }, { it.number })),
-                reservations    = visibleReservations,
-                blocks          = roomBlocks,
-                year            = displayYear,
-                month           = displayMonth,
-                scale           = timelineScale,
-                onScaleChange   = { timelineScale = it },
-                centerDays      = centerDays,
-                onEditRequest   = { optionRes = it },
-                onBlockClick    = { editBlock = it },
-                onCreateRequest = { room, cin, cout ->
+                rooms            = rooms.sortedWith(compareBy({ it.number.toIntOrNull() ?: Int.MAX_VALUE }, { it.number })),
+                reservations     = visibleReservations,
+                blocks           = roomBlocks,
+                year             = displayYear,
+                month            = displayMonth,
+                scale            = timelineScale,
+                onScaleChange    = { timelineScale = it },
+                centerDays       = centerDays,
+                onEditRequest    = { optionRes = it },
+                onBlockClick     = { editBlock = it },
+                blockMode        = blockMode,
+                onBlockModeChange = { blockMode = it },
+                onBlockRequest   = { room, cin, cout ->
+                    scope.launch {
+                        try {
+                            client.post("$BASE_URL/api/room-blocks") {
+                                contentType(ContentType.Application.Json)
+                                setBody(CreateRoomBlockRequest(
+                                    roomId   = room.id,
+                                    fromDate = cin.toString(),
+                                    toDate   = cout.toString(),
+                                    reason   = null
+                                ))
+                            }
+                            loadData(showLoading = false)
+                        } catch (e: Exception) { snackbar.showSnackbar(s.errorMsg(e.message ?: "?")) }
+                    }
+                },
+                onCreateRequest  = { room, cin, cout ->
                     prefillRoom     = room
                     prefillCheckIn  = cin.toString()
                     prefillCheckOut = cout.toString()
@@ -341,6 +360,7 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
             rooms           = rooms,
             guests          = guests,
             reservations    = reservations,
+            blocks          = roomBlocks,
             priceRules      = priceRules,
             prefillRoom     = prefillRoom,
             prefillCheckIn  = prefillCheckIn,
@@ -392,6 +412,7 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
             rooms      = rooms,
             guests     = guests,
             reservations = reservations,
+            blocks     = roomBlocks,
             priceRules = priceRules,
             onDismiss  = { editReservation = null },
             onConfirm  = { req ->
@@ -448,6 +469,7 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
             onDismiss = { optionRes = null },
             onEdit    = { editReservation = res; optionRes = null },
             onPayments = { paymentsRes = res; optionRes = null },
+            onEditGuest = { editGuestRes = res; optionRes = null },
             onSaveDescription = { desc ->
                 scope.launch {
                     try {
@@ -480,26 +502,6 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
         )
     }
 
-    // ── Block Room dialog ──────────────────────────────────────────────────────
-    if (showBlockDialog) {
-        BlockRoomDialog(
-            rooms     = rooms,
-            onDismiss = { showBlockDialog = false },
-            onConfirm = { req ->
-                scope.launch {
-                    try {
-                        client.post("$BASE_URL/api/room-blocks") {
-                            contentType(ContentType.Application.Json)
-                            setBody(req)
-                        }
-                        showBlockDialog = false
-                        loadData(showLoading = false)
-                    } catch (e: Exception) { snackbar.showSnackbar(s.errorMsg(e.message ?: "?")) }
-                }
-            }
-        )
-    }
-
     // ── Block delete dialog ────────────────────────────────────────────────────
     editBlock?.let { block ->
         RoomBlockDeleteDialog(
@@ -515,6 +517,30 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
                 }
             }
         )
+    }
+
+    // ── Edit Guest dialog ──────────────────────────────────────────────────────
+    editGuestRes?.let { res ->
+        val guest = guests.find { it.id == res.guestId }
+        if (guest != null) {
+            EditGuestDialog(
+                guest     = guest,
+                onDismiss = { editGuestRes = null },
+                onConfirm = { req ->
+                    scope.launch {
+                        try {
+                            val updated: GuestDto = client.put("$BASE_URL/api/guests/${guest.id}") {
+                                contentType(ContentType.Application.Json)
+                                setBody(req)
+                            }.body()
+                            guests = guests.map { if (it.id == updated.id) updated else it }
+                            editGuestRes = null
+                            loadData(showLoading = false)
+                        } catch (e: Exception) { snackbar.showSnackbar(s.errorMsg(e.message ?: "?")) }
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -681,25 +707,52 @@ private fun ResWeekRow(
     }
 }
 
-// ─── Shared price helper ──────────────────────────────────────────────────────
+// ─── Shared price helpers ─────────────────────────────────────────────────────
 
-private fun matchPriceRule(
+private data class PriceSegment(
+    val fromDate: LocalDate,
+    val toDate: LocalDate,   // exclusive (= checkout of this segment)
+    val rule: PriceRuleDto?
+) {
+    val nights: Int get() = ChronoUnit.DAYS.between(fromDate, toDate).toInt()
+}
+
+private fun buildPriceSegments(
     priceRules: List<PriceRuleDto>,
     roomId: Int,
     checkIn: String,
     checkOut: String
-): PriceRuleDto? {
-    val cin  = runCatching { LocalDate.parse(checkIn.trim())  }.getOrNull() ?: return null
-    val cout = runCatching { LocalDate.parse(checkOut.trim()) }.getOrNull() ?: return null
-    if (!cout.isAfter(cin)) return null
-    val nights = ChronoUnit.DAYS.between(cin, cout).toInt()
-    return priceRules.filter { r ->
-        r.roomId == roomId &&
-        !LocalDate.parse(r.fromDate).isAfter(cin) &&
-        !LocalDate.parse(r.toDate).isBefore(cin) &&
-        nights >= r.minNights &&
-        (r.maxNights == null || nights <= r.maxNights!!)
-    }.maxByOrNull { it.minNights }
+): List<PriceSegment> {
+    val cin  = runCatching { LocalDate.parse(checkIn.trim())  }.getOrNull() ?: return emptyList()
+    val cout = runCatching { LocalDate.parse(checkOut.trim()) }.getOrNull() ?: return emptyList()
+    if (!cout.isAfter(cin)) return emptyList()
+    val totalNights = ChronoUnit.DAYS.between(cin, cout).toInt()
+    val roomRules   = priceRules.filter { it.roomId == roomId }
+
+    fun ruleForDay(day: LocalDate): PriceRuleDto? = roomRules
+        .filter { r ->
+            !LocalDate.parse(r.fromDate).isAfter(day) &&
+            !LocalDate.parse(r.toDate).isBefore(day) &&
+            totalNights >= r.minNights &&
+            (r.maxNights == null || totalNights <= r.maxNights!!)
+        }
+        .maxByOrNull { it.minNights }
+
+    val segments = mutableListOf<PriceSegment>()
+    var segStart    = cin
+    var currentRule = ruleForDay(cin)
+    var day         = cin.plusDays(1)
+    while (day.isBefore(cout)) {
+        val rule = ruleForDay(day)
+        if (rule?.id != currentRule?.id) {
+            segments += PriceSegment(segStart, day, currentRule)
+            segStart    = day
+            currentRule = rule
+        }
+        day = day.plusDays(1)
+    }
+    segments += PriceSegment(segStart, cout, currentRule)
+    return segments
 }
 
 // ─── Booking conflict helper ─────────────────────────────────────────────────
@@ -720,6 +773,22 @@ private fun hasReservationConflict(
         r.status !in listOf("cancelled", "no_show") &&
         LocalDate.parse(r.checkInDate).isBefore(cout) &&
         LocalDate.parse(r.checkOutDate).isAfter(cin)
+    }
+}
+
+private fun hasBlockConflict(
+    blocks: List<RoomBlockDto>,
+    roomId: Int,
+    checkIn: String,
+    checkOut: String
+): Boolean {
+    val cin  = runCatching { LocalDate.parse(checkIn.trim())  }.getOrNull() ?: return false
+    val cout = runCatching { LocalDate.parse(checkOut.trim()) }.getOrNull() ?: return false
+    if (!cout.isAfter(cin)) return false
+    return blocks.any { b ->
+        b.roomId == roomId &&
+        LocalDate.parse(b.fromDate).isBefore(cout) &&
+        LocalDate.parse(b.toDate).isAfter(cin)
     }
 }
 
@@ -749,6 +818,7 @@ private fun ReservationDetailDialog(
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
     onPayments: () -> Unit,
+    onEditGuest: () -> Unit,
     onSaveDescription: (String?) -> Unit
 ) {
     val nights = remember(res.checkInDate, res.checkOutDate) {
@@ -776,6 +846,14 @@ private fun ReservationDetailDialog(
                     if (contact.isNotBlank())
                         Text(contact, style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (g.blacklisted) {
+                        Text(
+                            s.blacklistedWarning,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
 
                 HorizontalDivider(Modifier.padding(vertical = 2.dp))
@@ -857,6 +935,7 @@ private fun ReservationDetailDialog(
                     modifier = Modifier.fillMaxWidth()) { Text(s.saveNotesBtn) }
                 OutlinedButton(onClick = onEdit, modifier = Modifier.fillMaxWidth()) { Text(s.editReservationBtn) }
                 OutlinedButton(onClick = onPayments, modifier = Modifier.fillMaxWidth()) { Text(s.managePaymentsBtn) }
+                OutlinedButton(onClick = onEditGuest, modifier = Modifier.fillMaxWidth()) { Text(s.editGuestBtn) }
                 TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text(s.close) }
             }
         }
@@ -936,6 +1015,33 @@ private fun ManagePaymentsDialog(
                         }
                     }
                 }
+                if (res.requiresDownPayment && res.downPaymentAmount != null) {
+                    val dpCovered = totalPaid >= res.downPaymentAmount!!
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(
+                                if (dpCovered) MaterialTheme.colorScheme.primaryContainer
+                                else MaterialTheme.colorScheme.errorContainer
+                            )
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            if (dpCovered) "✓" else "⚠",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (dpCovered) MaterialTheme.colorScheme.onPrimaryContainer
+                                    else MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Text(
+                            s.downPaymentNeeded("%.2f".format(res.downPaymentAmount)),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (dpCovered) MaterialTheme.colorScheme.onPrimaryContainer
+                                    else MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
 
                 HorizontalDivider()
 
@@ -992,6 +1098,26 @@ private fun ManagePaymentsDialog(
                                             try {
                                                 client.delete("$BASE_URL/api/payments/${p.id}")
                                                 reload()
+                                                // Revert to pending if down payment is no longer covered
+                                                if (res.status == "confirmed" && res.requiresDownPayment) {
+                                                    val required = res.downPaymentAmount
+                                                    val newTotalPaid = payments.sumOf { it.amount }
+                                                    if (required != null && newTotalPaid < required) {
+                                                        try {
+                                                            client.put("$BASE_URL/api/reservations/${res.id}") {
+                                                                contentType(ContentType.Application.Json)
+                                                                setBody(UpdateReservationRequest(
+                                                                    roomId = res.roomId, guestId = res.guestId,
+                                                                    checkInDate = res.checkInDate, checkOutDate = res.checkOutDate,
+                                                                    status = "pending", adults = res.adults,
+                                                                    totalAmount = res.totalAmount, description = res.description,
+                                                                    requiresDownPayment = res.requiresDownPayment,
+                                                                    downPaymentAmount = res.downPaymentAmount
+                                                                ))
+                                                            }
+                                                        } catch (_: Exception) {}
+                                                    }
+                                                }
                                                 onPaymentsChanged()
                                             } catch (e: Exception) { snackbar.showSnackbar(s.errorMsg(e.message ?: "?")) }
                                         }
@@ -1158,6 +1284,26 @@ private fun ManagePaymentsDialog(
                                 receiptType        = ""
                                 receiptNumberInput = ""
                                 reload()
+                                // Auto-confirm if pending down payment is now covered
+                                if (res.status == "pending" && res.requiresDownPayment) {
+                                    val required = res.downPaymentAmount
+                                    val newTotalPaid = payments.sumOf { it.amount }
+                                    if (required != null && newTotalPaid >= required) {
+                                        try {
+                                            client.put("$BASE_URL/api/reservations/${res.id}") {
+                                                contentType(ContentType.Application.Json)
+                                                setBody(UpdateReservationRequest(
+                                                    roomId = res.roomId, guestId = res.guestId,
+                                                    checkInDate = res.checkInDate, checkOutDate = res.checkOutDate,
+                                                    status = "confirmed", adults = res.adults,
+                                                    totalAmount = res.totalAmount, description = res.description,
+                                                    requiresDownPayment = res.requiresDownPayment,
+                                                    downPaymentAmount = res.downPaymentAmount
+                                                ))
+                                            }
+                                        } catch (_: Exception) {}
+                                    }
+                                }
                                 onPaymentsChanged()
                             } catch (e: Exception) { snackbar.showSnackbar(s.errorMsg(e.message ?: "?")) }
                         }
@@ -1191,6 +1337,7 @@ private fun NewReservationDialog(
     rooms: List<RoomDto>,
     guests: List<GuestDto>,
     reservations: List<ReservationDto>,
+    blocks: List<RoomBlockDto>,
     priceRules: List<PriceRuleDto>,
     prefillRoom: RoomDto? = null,
     prefillCheckIn: String = "",
@@ -1201,12 +1348,9 @@ private fun NewReservationDialog(
 ) {
     var selectedRoom    by remember { mutableStateOf(prefillRoom ?: rooms.firstOrNull()) }
     var roomExpanded    by remember { mutableStateOf(false) }
-    var statusExpanded  by remember { mutableStateOf(false) }
     var checkIn   by remember { mutableStateOf(prefillCheckIn) }
     var checkOut  by remember { mutableStateOf(prefillCheckOut) }
     var adults    by remember { mutableStateOf(selectedRoom?.maxGuests?.toString() ?: "1") }
-    var status    by remember { mutableStateOf("confirmed") }
-    var ppnInput  by remember { mutableStateOf("") }
     var requiresDownPayment    by remember { mutableStateOf(false) }
     var downPaymentAmountInput by remember { mutableStateOf("") }
     // Guest form
@@ -1220,22 +1364,23 @@ private fun NewReservationDialog(
     LaunchedEffect(selectedRoom?.id) {
         selectedRoom?.let { adults = it.maxGuests.toString() }
     }
-    val nights = remember(checkIn, checkOut) {
-        runCatching { ChronoUnit.DAYS.between(LocalDate.parse(checkIn.trim()), LocalDate.parse(checkOut.trim())).toInt() }.getOrDefault(0)
+    val segments = remember(selectedRoom?.id, checkIn, checkOut, priceRules) {
+        buildPriceSegments(priceRules, selectedRoom?.id ?: -1, checkIn, checkOut)
     }
-    val matchingRule = remember(selectedRoom?.id, checkIn, checkOut, priceRules) {
-        selectedRoom?.let { matchPriceRule(priceRules, it.id, checkIn, checkOut) }
+    var segmentPpns by remember { mutableStateOf<List<String>>(emptyList()) }
+    LaunchedEffect(segments) {
+        segmentPpns = segments.map { it.rule?.pricePerPersonPerNight?.let { p -> "%.2f".format(p) } ?: "" }
     }
-    LaunchedEffect(matchingRule, selectedRoom?.id) {
-        matchingRule?.let { ppnInput = "%.2f".format(it.pricePerPersonPerNight) }
-    }
-    val ppn = ppnInput.toDoubleOrNull()
     val totalGuests = adults.toDoubleOrNull() ?: 1.0
-    val computedTotal = if (ppn != null && nights > 0) ppn * nights * totalGuests else null
+    val computedTotal = segments.indices
+        .mapNotNull { i -> segmentPpns.getOrNull(i)?.toDoubleOrNull()?.let { it * segments[i].nights * totalGuests } }
+        .takeIf { it.size == segments.size && segments.isNotEmpty() }
+        ?.sum()
     val guestReady = selectedGuest != null || (guestFirstName.isNotBlank() && guestLastName.isNotBlank())
-    val conflict = remember(selectedRoom?.id, checkIn, checkOut, reservations) {
+    val conflict = remember(selectedRoom?.id, checkIn, checkOut, reservations, blocks) {
         selectedRoom != null && checkIn.isNotBlank() && checkOut.isNotBlank() &&
-        hasReservationConflict(reservations, selectedRoom!!.id, checkIn, checkOut)
+        (hasReservationConflict(reservations, selectedRoom!!.id, checkIn, checkOut) ||
+         hasBlockConflict(blocks, selectedRoom!!.id, checkIn, checkOut))
     }
     val valid = selectedRoom != null && guestReady &&
         checkIn.isNotBlank() && checkOut.isNotBlank() && adults.toDoubleOrNull() != null && !conflict
@@ -1300,23 +1445,12 @@ private fun NewReservationDialog(
                     }
                 }
                 OutlinedTextField(adults, { adults = it }, label = { Text(s.adultsLabel) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                ExposedDropdownMenuBox(expanded = statusExpanded, onExpandedChange = { statusExpanded = it }) {
-                    OutlinedTextField(
-                        value = s.statusName(status), onValueChange = {}, readOnly = true, label = { Text(s.statusLabel) },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(statusExpanded) },
-                        modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(), singleLine = true
-                    )
-                    ExposedDropdownMenu(expanded = statusExpanded, onDismissRequest = { statusExpanded = false }) {
-                        RESERVATION_STATUSES.forEach { code ->
-                            DropdownMenuItem(text = { Text(s.statusName(code)) }, onClick = { status = code; statusExpanded = false })
-                        }
-                    }
-                }
                 HorizontalDivider()
-                PricePpnSection(
-                    ppnInput = ppnInput, onPpnChange = { ppnInput = it },
-                    matchingRule = matchingRule, nights = nights,
-                    totalGuests = totalGuests, computedTotal = computedTotal
+                PriceBreakdownSection(
+                    segments     = segments,
+                    segmentPpns  = segmentPpns,
+                    onPpnChange  = { i, v -> segmentPpns = segmentPpns.toMutableList().also { it[i] = v } },
+                    totalGuests  = totalGuests
                 )
                 HorizontalDivider()
                 Row(
@@ -1352,7 +1486,8 @@ private fun NewReservationDialog(
                         } ?: return@launch
                         onConfirm(CreateReservationRequest(
                             hotelId = hotel.hotelId, roomId = selectedRoom!!.id, guestId = guestId,
-                            checkInDate = checkIn.trim(), checkOutDate = checkOut.trim(), status = status,
+                            checkInDate = checkIn.trim(), checkOutDate = checkOut.trim(),
+                            status = if (requiresDownPayment) "pending" else "confirmed",
                             adults = adults.trim().toDoubleOrNull() ?: 1.0,
                             totalAmount = computedTotal,
                             requiresDownPayment = requiresDownPayment,
@@ -1375,6 +1510,7 @@ private fun ReservationEditDialog(
     rooms: List<RoomDto>,
     guests: List<GuestDto>,
     reservations: List<ReservationDto>,
+    blocks: List<RoomBlockDto>,
     priceRules: List<PriceRuleDto>,
     onDismiss: () -> Unit,
     onConfirm: (UpdateReservationRequest) -> Unit,
@@ -1398,31 +1534,22 @@ private fun ReservationEditDialog(
     var downPaymentAmountInput by remember(existing.id) { mutableStateOf(existing.downPaymentAmount?.let { "%.2f".format(it) } ?: "") }
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
-    // Initialise ppn: from back-computed existing total, rule will override via LaunchedEffect
-    var ppnInput by remember(existing.id) {
-        val cin  = runCatching { LocalDate.parse(existing.checkInDate) }.getOrNull()
-        val cout = runCatching { LocalDate.parse(existing.checkOutDate) }.getOrNull()
-        val n    = if (cin != null && cout != null && cout.isAfter(cin)) ChronoUnit.DAYS.between(cin, cout).toInt() else 0
-        val g    = existing.adults
-        val back = existing.totalAmount?.let { if (n > 0 && g > 0.0) "%.2f".format(it / (n * g)) else null } ?: ""
-        mutableStateOf(back)
+    val segments = remember(selectedRoom?.id, checkIn, checkOut, priceRules) {
+        buildPriceSegments(priceRules, selectedRoom?.id ?: -1, checkIn, checkOut)
     }
-
-    val nights = remember(checkIn, checkOut) {
-        runCatching { ChronoUnit.DAYS.between(LocalDate.parse(checkIn.trim()), LocalDate.parse(checkOut.trim())).toInt() }.getOrDefault(0)
+    var segmentPpns by remember { mutableStateOf<List<String>>(emptyList()) }
+    LaunchedEffect(segments) {
+        segmentPpns = segments.map { it.rule?.pricePerPersonPerNight?.let { p -> "%.2f".format(p) } ?: "" }
     }
-    val matchingRule = remember(selectedRoom?.id, checkIn, checkOut, priceRules) {
-        selectedRoom?.let { matchPriceRule(priceRules, it.id, checkIn, checkOut) }
-    }
-    LaunchedEffect(matchingRule, selectedRoom?.id) {
-        matchingRule?.let { ppnInput = "%.2f".format(it.pricePerPersonPerNight) }
-    }
-    val ppn = ppnInput.toDoubleOrNull()
     val totalGuests = adults.toDoubleOrNull() ?: 1.0
-    val computedTotal = if (ppn != null && nights > 0) ppn * nights * totalGuests else null
-    val conflict = remember(selectedRoom?.id, checkIn, checkOut, reservations) {
+    val computedTotal = segments.indices
+        .mapNotNull { i -> segmentPpns.getOrNull(i)?.toDoubleOrNull()?.let { it * segments[i].nights * totalGuests } }
+        .takeIf { it.size == segments.size && segments.isNotEmpty() }
+        ?.sum()
+    val conflict = remember(selectedRoom?.id, checkIn, checkOut, reservations, blocks) {
         selectedRoom != null && checkIn.isNotBlank() && checkOut.isNotBlank() &&
-        hasReservationConflict(reservations, selectedRoom!!.id, checkIn, checkOut, excludeId = existing.id)
+        (hasReservationConflict(reservations, selectedRoom!!.id, checkIn, checkOut, excludeId = existing.id) ||
+         hasBlockConflict(blocks, selectedRoom!!.id, checkIn, checkOut))
     }
     val guestReady = selectedGuest != null || (guestFirstName.isNotBlank() && guestLastName.isNotBlank())
     val valid = selectedRoom != null && guestReady &&
@@ -1482,10 +1609,11 @@ private fun ReservationEditDialog(
                     }
                 }
                 HorizontalDivider()
-                PricePpnSection(
-                    ppnInput = ppnInput, onPpnChange = { ppnInput = it },
-                    matchingRule = matchingRule, nights = nights,
-                    totalGuests = totalGuests, computedTotal = computedTotal
+                PriceBreakdownSection(
+                    segments    = segments,
+                    segmentPpns = segmentPpns,
+                    onPpnChange = { i, v -> segmentPpns = segmentPpns.toMutableList().also { it[i] = v } },
+                    totalGuests = totalGuests
                 )
                 HorizontalDivider()
                 Row(
@@ -1595,51 +1723,85 @@ private fun ReservationFormFields(
 }
 
 @Composable
-private fun PricePpnSection(
-    ppnInput: String,
-    onPpnChange: (String) -> Unit,
-    matchingRule: PriceRuleDto?,
-    nights: Int,
-    totalGuests: Double,
-    computedTotal: Double?
+private fun PriceBreakdownSection(
+    segments: List<PriceSegment>,
+    segmentPpns: List<String>,
+    onPpnChange: (index: Int, value: String) -> Unit,
+    totalGuests: Double
 ) {
     val s = LocalStrings.current
-    Row(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        OutlinedTextField(
-            value         = ppnInput,
-            onValueChange = onPpnChange,
-            label         = { Text(s.plnPerPersonPerNight) },
-            singleLine    = true,
-            modifier      = Modifier.width(180.dp),
-            isError       = ppnInput.isNotBlank() && ppnInput.toDoubleOrNull() == null
-        )
-        Column {
-            if (computedTotal != null) {
-                Text(
-                    s.nightsPersonsLine(nights, totalGuests),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    s.priceTotalLine(computedTotal),
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
+    if (segments.isEmpty()) return
+    val fmt = java.time.format.DateTimeFormatter.ofPattern("d MMM", s.locale)
+
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        segments.forEachIndexed { i, seg ->
+            val ppn      = segmentPpns.getOrElse(i) { "" }
+            val ppnValue = ppn.toDoubleOrNull()
+            val subtotal = if (ppnValue != null) ppnValue * seg.nights * totalGuests else null
+
+            if (i > 0) HorizontalDivider(thickness = 0.5.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "${seg.fromDate.format(fmt)} – ${seg.toDate.minusDays(1).format(fmt)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        "${seg.nights} ${s.nightsAbbr}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (seg.rule != null) {
+                        Text(
+                            s.priceRuleLine(seg.rule.minNights, seg.rule.maxNights),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        Text(s.noMatchingRule,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error)
+                    }
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    OutlinedTextField(
+                        value         = ppn,
+                        onValueChange = { onPpnChange(i, it) },
+                        label         = { Text(s.plnPerPersonPerNight) },
+                        singleLine    = true,
+                        modifier      = Modifier.width(160.dp),
+                        isError       = ppn.isNotBlank() && ppnValue == null
+                    )
+                    if (subtotal != null) {
+                        Text(
+                            s.priceTotalLine(subtotal),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
+                }
             }
-            if (matchingRule != null) {
-                Text(
-                    s.priceRuleLine(matchingRule.minNights, matchingRule.maxNights),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else if (nights > 0) {
-                Text(s.noMatchingRule, style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+        }
+
+        val grandTotal = segments.indices
+            .mapNotNull { i -> segmentPpns.getOrNull(i)?.toDoubleOrNull()?.let { it * segments[i].nights * totalGuests } }
+            .takeIf { it.size == segments.size }
+            ?.sum()
+        if (grandTotal != null && segments.size > 1) {
+            HorizontalDivider()
+            Text(
+                s.priceTotalLine(grandTotal),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
         }
     }
 }
@@ -1660,6 +1822,9 @@ private fun ReservationsTimelineView(
     centerDays: Int,
     onEditRequest: (ReservationDto) -> Unit,
     onBlockClick: (RoomBlockDto) -> Unit,
+    blockMode: Boolean = false,
+    onBlockModeChange: (Boolean) -> Unit = {},
+    onBlockRequest: (room: RoomDto, checkIn: LocalDate, checkOut: LocalDate) -> Unit = { _, _, _ -> },
     onCreateRequest: (room: RoomDto, checkIn: LocalDate, checkOut: LocalDate) -> Unit
 ) {
     val s             = LocalStrings.current
@@ -1851,6 +2016,22 @@ private fun ReservationsTimelineView(
                     style = MaterialTheme.typography.labelMedium,
                     color = if (showCancelled) MaterialTheme.colorScheme.onErrorContainer
                             else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(Modifier.width(4.dp))
+            // Block mode toggle
+            val blockModeBg = if (blockMode) Color(0xFF607D8B) else MaterialTheme.colorScheme.surfaceVariant
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(blockModeBg)
+                    .clickable { onBlockModeChange(!blockMode) }
+                    .padding(horizontal = 10.dp, vertical = 5.dp)
+            ) {
+                Text(
+                    s.blockModeLabel,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (blockMode) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -2052,7 +2233,7 @@ private fun ReservationsTimelineView(
                                 Modifier
                                     .fillMaxWidth()
                                     .height(rowH)
-                                    .pointerInput(room.id, DAY_W, days.size, halfShift) {
+                                    .pointerInput(room.id, DAY_W, days.size, halfShift, blockMode) {
                                         fun toIdx(x: Float): Int {
                                             val raw = if (halfShift)
                                                 ((x / DAY_W.toPx()) - 0.5f).toInt()
@@ -2070,16 +2251,31 @@ private fun ReservationsTimelineView(
                                             },
                                             onDragEnd = {
                                                 dragState?.let { ds ->
-                                                    val s       = minOf(ds.startIdx, ds.endIdx)
-                                                    val e       = maxOf(ds.startIdx, ds.endIdx)
-                                                    // checkout = day after last selected square → nights = e-s+1
+                                                    val s        = minOf(ds.startIdx, ds.endIdx)
+                                                    val e        = maxOf(ds.startIdx, ds.endIdx)
                                                     val checkIn  = days[s]
                                                     val checkOut = days[e].plusDays(1)
-                                                    val noConflict = !hasReservationConflict(
-                                                        reservations, ds.room.id,
-                                                        checkIn.toString(), checkOut.toString()
-                                                    )
-                                                    if (noConflict) onCreateRequest(ds.room, checkIn, checkOut)
+                                                    if (blockMode) {
+                                                        val noResConflict = !hasReservationConflict(
+                                                            reservations, ds.room.id,
+                                                            checkIn.toString(), checkOut.toString()
+                                                        )
+                                                        val noBlockConflict = !hasBlockConflict(
+                                                            blocks, ds.room.id,
+                                                            checkIn.toString(), checkOut.toString()
+                                                        )
+                                                        if (noResConflict && noBlockConflict)
+                                                            onBlockRequest(ds.room, checkIn, checkOut)
+                                                    } else {
+                                                        val noConflict = !hasReservationConflict(
+                                                            reservations, ds.room.id,
+                                                            checkIn.toString(), checkOut.toString()
+                                                        ) && !hasBlockConflict(
+                                                            blocks, ds.room.id,
+                                                            checkIn.toString(), checkOut.toString()
+                                                        )
+                                                        if (noConflict) onCreateRequest(ds.room, checkIn, checkOut)
+                                                    }
                                                 }
                                                 dragState = null
                                             },
@@ -2164,6 +2360,7 @@ private fun ReservationsTimelineView(
                                     val (bg, fg)   = STATUS_PALETTE[res.status] ?: (Color(0xFFE0E0E0) to Color(0xFF424242))
                                     val dotColorC  = paymentDotColor(res.totalAmount, res.paidAmount)
                                     val showDpC    = dpPending(res) && leftRound
+                                    val hasNoteC   = res.description?.isNotBlank() == true
                                     Box(
                                         Modifier
                                             .offset(x = bLeft, y = bTop)
@@ -2184,17 +2381,31 @@ private fun ReservationsTimelineView(
                                                 Text("DP", style = MaterialTheme.typography.labelSmall.copy(fontSize = 7.sp), color = Color.White)
                                             }
                                         }
+                                        val endPaddingC = when {
+                                            dotColorC != null && hasNoteC && rightRound -> 21.dp
+                                            dotColorC != null && rightRound             -> 12.dp
+                                            hasNoteC && rightRound                      -> 12.dp
+                                            else                                        -> 4.dp
+                                        }
                                         Text(
                                             res.guestName,
                                             modifier = Modifier.padding(start = if (showDpC) 18.dp else 4.dp,
-                                                end = if (dotColorC != null) 12.dp else 4.dp)
+                                                end = endPaddingC)
                                                 .align(Alignment.CenterStart),
                                             style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                                             color = fg, maxLines = 1, overflow = TextOverflow.Ellipsis
                                         )
-                                        if (dotColorC != null && rightRound) {
-                                            Box(Modifier.align(Alignment.CenterEnd).padding(end = 3.dp)
-                                                .size(6.dp).clip(CircleShape).background(dotColorC))
+                                        if (rightRound) {
+                                            if (hasNoteC) {
+                                                Box(Modifier.align(Alignment.CenterEnd)
+                                                    .padding(end = if (dotColorC != null) 12.dp else 3.dp)
+                                                    .size(7.dp).clip(RoundedCornerShape(1.dp))
+                                                    .background(fg.copy(alpha = 0.5f)))
+                                            }
+                                            if (dotColorC != null) {
+                                                Box(Modifier.align(Alignment.CenterEnd).padding(end = 3.dp)
+                                                    .size(6.dp).clip(CircleShape).background(dotColorC))
+                                            }
                                         }
                                     }
                                 }
@@ -2216,6 +2427,7 @@ private fun ReservationsTimelineView(
                                     val (bg, fg) = STATUS_PALETTE[res.status] ?: (Color(0xFFE0E0E0) to Color(0xFF424242))
                                     val dotColorA = paymentDotColor(res.totalAmount, res.paidAmount)
                                     val showDpA   = dpPending(res) && leftRound
+                                    val hasNoteA  = res.description?.isNotBlank() == true
                                     val nights = remember(res.checkInDate, res.checkOutDate) {
                                         runCatching {
                                             ChronoUnit.DAYS.between(
@@ -2245,17 +2457,31 @@ private fun ReservationsTimelineView(
                                                     Text("DP", style = MaterialTheme.typography.labelSmall.copy(fontSize = 7.sp), color = Color.White)
                                                 }
                                             }
+                                            val endPaddingA = when {
+                                                dotColorA != null && hasNoteA && rightRound -> 21.dp
+                                                dotColorA != null && rightRound             -> 12.dp
+                                                hasNoteA && rightRound                      -> 12.dp
+                                                else                                        -> 4.dp
+                                            }
                                             Text(
                                                 res.guestName,
                                                 modifier = Modifier.padding(start = if (showDpA) 18.dp else 4.dp,
                                                     top = 4.dp,
-                                                    end = if (dotColorA != null && rightRound) 12.dp else 4.dp),
+                                                    end = endPaddingA),
                                                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                                                 color = fg, maxLines = 1, overflow = TextOverflow.Ellipsis
                                             )
-                                            if (dotColorA != null && rightRound) {
-                                                Box(Modifier.align(Alignment.TopEnd).padding(top = 4.dp, end = 3.dp)
-                                                    .size(6.dp).clip(CircleShape).background(dotColorA))
+                                            if (rightRound) {
+                                                if (hasNoteA) {
+                                                    Box(Modifier.align(Alignment.TopEnd)
+                                                        .padding(top = 4.dp, end = if (dotColorA != null) 12.dp else 3.dp)
+                                                        .size(7.dp).clip(RoundedCornerShape(1.dp))
+                                                        .background(fg.copy(alpha = 0.5f)))
+                                                }
+                                                if (dotColorA != null) {
+                                                    Box(Modifier.align(Alignment.TopEnd).padding(top = 4.dp, end = 3.dp)
+                                                        .size(6.dp).clip(CircleShape).background(dotColorA))
+                                                }
                                             }
                                         } else {
                                             Column(
@@ -2286,6 +2512,10 @@ private fun ReservationsTimelineView(
                                                         overflow = TextOverflow.Ellipsis,
                                                         modifier = Modifier.weight(1f)
                                                     )
+                                                    if (hasNoteA) {
+                                                        Box(Modifier.size(7.dp).clip(RoundedCornerShape(1.dp))
+                                                            .background(fg.copy(alpha = 0.5f)))
+                                                    }
                                                     if (dotColorA != null) {
                                                         Box(Modifier.size(7.dp).clip(CircleShape).background(dotColorA))
                                                     }
@@ -2330,22 +2560,23 @@ private fun ReservationsTimelineView(
                                     val ds    = dragState!!
                                     val s     = minOf(ds.startIdx, ds.endIdx)
                                     val e     = maxOf(ds.startIdx, ds.endIdx)
-                                    // Both modes: checkout = days[e]+1, so (e-s+1) nights visible
-                                    // Half-shift shifts the left edge by +0.5 columns; width is the same
                                     val previewLeft  = if (halfShift) DAY_W * (s + 0.5f) + 1.dp else DAY_W * s + 1.dp
                                     val previewWidth = DAY_W * (e - s + 1) - 2.dp
                                     val bTop  = when {
                                         showCancelled && !isExpanded -> LANE_H + (LANE_H - BAND_H) / 2
                                         else -> (rowH - BAND_H) / 2
                                     }
-                                    val dragConflict = hasReservationConflict(
-                                        reservations, room.id,
-                                        days[s].toString(), days[e].plusDays(1).toString()
-                                    )
-                                    val previewColor = if (dragConflict)
-                                        MaterialTheme.colorScheme.error
-                                    else
-                                        MaterialTheme.colorScheme.primary
+                                    val cin  = days[s].toString()
+                                    val cout = days[e].plusDays(1).toString()
+                                    val hasResConflict   = hasReservationConflict(reservations, room.id, cin, cout)
+                                    val hasBlkConflict   = hasBlockConflict(blocks, room.id, cin, cout)
+                                    val isConflict       = if (blockMode) hasResConflict || hasBlkConflict
+                                                           else           hasResConflict || hasBlkConflict
+                                    val previewColor = when {
+                                        isConflict  -> MaterialTheme.colorScheme.error
+                                        blockMode   -> Color(0xFF607D8B)
+                                        else        -> MaterialTheme.colorScheme.primary
+                                    }
                                     Box(
                                         Modifier
                                             .offset(x = previewLeft, y = bTop)
@@ -2404,37 +2635,76 @@ private fun GuestInputSection(
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (selectedGuest != null) {
             // Selected guest card
-            Row(
+            val selectedInteraction = remember(selectedGuest.id) { MutableInteractionSource() }
+            val selectedHovered by selectedInteraction.collectIsHoveredAsState()
+            Column(
                 Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(8.dp))
                     .background(MaterialTheme.colorScheme.primaryContainer)
+                    .hoverable(selectedInteraction)
                     .padding(horizontal = 12.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Column(Modifier.weight(1f)) {
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                "${selectedGuest.firstName} ${selectedGuest.lastName}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            if (!selectedGuest.blacklisted && !selectedGuest.notes.isNullOrBlank()) {
+                                Text(
+                                    "note",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.tertiary,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(MaterialTheme.colorScheme.tertiaryContainer)
+                                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                                )
+                            }
+                        }
+                        val phone = listOfNotNull(selectedGuest.countryCode?.let { "+$it" }, selectedGuest.phoneNumber).joinToString(" ").ifBlank { null }
+                        val detail = listOfNotNull(phone, selectedGuest.nationality).joinToString(" · ")
+                        if (detail.isNotBlank()) Text(
+                            detail,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                            maxLines = 1, overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    TextButton(
+                        onClick = { onSelectedGuestChange(null) },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                    ) {
+                        Text(s.change, style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    }
+                }
+                if (selectedGuest.blacklisted) {
                     Text(
-                        "${selectedGuest.firstName} ${selectedGuest.lastName}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                    val phone = listOfNotNull(selectedGuest.countryCode?.let { "+$it" }, selectedGuest.phoneNumber).joinToString(" ").ifBlank { null }
-                    val detail = listOfNotNull(phone, selectedGuest.nationality).joinToString(" · ")
-                    if (detail.isNotBlank()) Text(
-                        detail,
+                        s.blacklistedWarning,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
-                        maxLines = 1, overflow = TextOverflow.Ellipsis
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
-                TextButton(
-                    onClick = { onSelectedGuestChange(null) },
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                ) {
-                    Text(s.change, style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer)
+                if (selectedHovered && !selectedGuest.blacklisted && !selectedGuest.notes.isNullOrBlank()) {
+                    Text(
+                        selectedGuest.notes!!,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                    )
                 }
             }
         } else {
@@ -2462,33 +2732,73 @@ private fun GuestInputSection(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 suggestions.forEach { guest ->
-                    Row(
+                    val interactionSource = remember { MutableInteractionSource() }
+                    val isHovered by interactionSource.collectIsHoveredAsState()
+                    val cardBg = if (guest.blacklisted) MaterialTheme.colorScheme.errorContainer
+                                 else MaterialTheme.colorScheme.surface
+                    val cardBorder = if (guest.blacklisted) MaterialTheme.colorScheme.error
+                                     else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                    Column(
                         Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(6.dp))
-                            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
+                            .background(cardBg)
+                            .border(1.dp, cardBorder, RoundedCornerShape(6.dp))
+                            .hoverable(interactionSource)
                             .clickable { onSelectedGuestChange(guest) }
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
                     ) {
-                        Column(Modifier.weight(1f)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        "${guest.firstName} ${guest.lastName}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (guest.blacklisted) MaterialTheme.colorScheme.onErrorContainer
+                                                else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    if (!guest.blacklisted && !guest.notes.isNullOrBlank()) {
+                                        Text(
+                                            "note",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.tertiary,
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .background(MaterialTheme.colorScheme.tertiaryContainer)
+                                                .padding(horizontal = 4.dp, vertical = 1.dp)
+                                        )
+                                    }
+                                }
+                                val gPhone = listOfNotNull(guest.countryCode?.let { "+$it" }, guest.phoneNumber).joinToString(" ").ifBlank { null }
+                                val detail = listOfNotNull(gPhone, guest.nationality).joinToString(" · ")
+                                if (detail.isNotBlank()) Text(
+                                    detail,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (guest.blacklisted) MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f)
+                                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            Text(s.select, style = MaterialTheme.typography.labelSmall,
+                                color = if (guest.blacklisted) MaterialTheme.colorScheme.error
+                                        else MaterialTheme.colorScheme.primary)
+                        }
+                        if (isHovered && !guest.blacklisted && !guest.notes.isNullOrBlank()) {
                             Text(
-                                "${guest.firstName} ${guest.lastName}",
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            val gPhone = listOfNotNull(guest.countryCode?.let { "+$it" }, guest.phoneNumber).joinToString(" ").ifBlank { null }
-                            val detail = listOfNotNull(gPhone, guest.nationality).joinToString(" · ")
-                            if (detail.isNotBlank()) Text(
-                                detail,
+                                guest.notes!!,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis
+                                modifier = Modifier.padding(top = 4.dp)
                             )
                         }
-                        Text(s.select, style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
@@ -2567,6 +2877,83 @@ private fun BlockRoomDialog(
 }
 
 // ─── Block delete dialog ──────────────────────────────────────────────────────
+
+@Composable
+private fun EditGuestDialog(
+    guest: GuestDto,
+    onDismiss: () -> Unit,
+    onConfirm: (UpdateGuestRequest) -> Unit
+) {
+    val s = LocalStrings.current
+    var firstName   by remember(guest.id) { mutableStateOf(guest.firstName) }
+    var lastName    by remember(guest.id) { mutableStateOf(guest.lastName) }
+    var countryCode by remember(guest.id) { mutableStateOf(guest.countryCode ?: "") }
+    var phoneNumber by remember(guest.id) { mutableStateOf(guest.phoneNumber ?: "") }
+    var nationality by remember(guest.id) { mutableStateOf(guest.nationality ?: "") }
+    var blacklisted by remember(guest.id) { mutableStateOf(guest.blacklisted) }
+    var notes       by remember(guest.id) { mutableStateOf(guest.notes ?: "") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("${guest.firstName} ${guest.lastName}") },
+        text = {
+            Column(
+                Modifier.width(420.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(firstName, { firstName = it }, label = { Text(s.firstNameLabel) }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(lastName,  { lastName  = it }, label = { Text(s.lastNameLabel) },  singleLine = true, modifier = Modifier.weight(1f))
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = countryCode, onValueChange = { countryCode = it },
+                        label = { Text(s.codeLabel) }, prefix = { Text("+") },
+                        singleLine = true, modifier = Modifier.width(90.dp)
+                    )
+                    OutlinedTextField(phoneNumber, { phoneNumber = it }, label = { Text(s.phoneNumberLabel) }, singleLine = true, modifier = Modifier.weight(1f))
+                }
+                OutlinedTextField(nationality, { nationality = it }, label = { Text(s.nationalityLabel) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Checkbox(checked = blacklisted, onCheckedChange = { blacklisted = it })
+                    Text(s.blacklistedLabel, style = MaterialTheme.typography.bodyMedium)
+                }
+                OutlinedTextField(
+                    value = notes,
+                    onValueChange = { notes = it },
+                    label = { Text(s.guestNotesLabel) },
+                    placeholder = { Text(s.guestNotesPlaceholder) },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp),
+                    maxLines = 5
+                )
+            }
+        },
+        confirmButton = {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Button(
+                    onClick = {
+                        onConfirm(UpdateGuestRequest(
+                            firstName   = firstName.trim(),
+                            lastName    = lastName.trim(),
+                            countryCode = countryCode.trim().ifBlank { null },
+                            phoneNumber = phoneNumber.trim().ifBlank { null },
+                            nationality = nationality.trim().ifBlank { null },
+                            blacklisted = blacklisted,
+                            notes       = notes.trim().ifBlank { null }
+                        ))
+                    },
+                    enabled = firstName.isNotBlank() && lastName.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(s.saveGuestBtn) }
+                TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text(s.cancel) }
+            }
+        }
+    )
+}
 
 @Composable
 private fun RoomBlockDeleteDialog(

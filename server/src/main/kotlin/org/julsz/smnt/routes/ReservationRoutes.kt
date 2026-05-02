@@ -14,6 +14,7 @@ import org.julsz.smnt.db.Guests
 import org.julsz.smnt.db.Hotels
 import org.julsz.smnt.db.Payments
 import org.julsz.smnt.db.Reservations
+import org.julsz.smnt.db.RoomBlocks
 import org.julsz.smnt.db.Rooms
 import java.time.LocalDate
 
@@ -28,6 +29,9 @@ fun Route.reservationRoutes() {
         if (hasOverlap(req.roomId, req.checkInDate, req.checkOutDate)) {
             return@post call.respond(HttpStatusCode.Conflict, "Room already booked for the selected dates")
         }
+        if (hasBlockOverlap(req.roomId, req.checkInDate, req.checkOutDate)) {
+            return@post call.respond(HttpStatusCode.Conflict, "Room is blocked for the selected dates")
+        }
         call.respond(HttpStatusCode.Created, createReservation(req))
     }
 
@@ -37,6 +41,9 @@ fun Route.reservationRoutes() {
         val req = call.receive<UpdateReservationRequest>()
         if (hasOverlap(req.roomId, req.checkInDate, req.checkOutDate, excludeId = id)) {
             return@put call.respond(HttpStatusCode.Conflict, "Room already booked for the selected dates")
+        }
+        if (hasBlockOverlap(req.roomId, req.checkInDate, req.checkOutDate)) {
+            return@put call.respond(HttpStatusCode.Conflict, "Room is blocked for the selected dates")
         }
         call.respond(updateReservation(id, req))
     }
@@ -52,7 +59,18 @@ fun Route.reservationRoutes() {
     }
 }
 
-// ─── Overlap guard ────────────────────────────────────────────────────────────
+// ─── Overlap guards ───────────────────────────────────────────────────────────
+
+private fun hasBlockOverlap(roomId: Int, checkIn: String, checkOut: String): Boolean =
+    transaction {
+        val cin  = LocalDate.parse(checkIn)
+        val cout = LocalDate.parse(checkOut)
+        RoomBlocks.selectAll().where {
+            (RoomBlocks.roomId eq roomId) and
+            (RoomBlocks.fromDate less cout) and
+            (RoomBlocks.toDate greater cin)
+        }.count() > 0
+    }
 
 private fun hasOverlap(roomId: Int, checkIn: String, checkOut: String, excludeId: Int? = null): Boolean =
     transaction {

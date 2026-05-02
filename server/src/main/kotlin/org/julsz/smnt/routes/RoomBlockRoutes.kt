@@ -7,8 +7,10 @@ import io.ktor.server.routing.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.neq
 import org.julsz.smnt.CreateRoomBlockRequest
 import org.julsz.smnt.RoomBlockDto
+import org.julsz.smnt.db.Reservations
 import org.julsz.smnt.db.RoomBlocks
 import org.julsz.smnt.db.Rooms
 import java.time.LocalDate
@@ -21,6 +23,12 @@ fun Route.roomBlockRoutes() {
 
     post("/room-blocks") {
         val req = call.receive<CreateRoomBlockRequest>()
+        if (hasReservationOverlap(req.roomId, req.fromDate, req.toDate)) {
+            return@post call.respond(HttpStatusCode.Conflict, "Room has active reservations in the selected dates")
+        }
+        if (hasBlockOnBlockOverlap(req.roomId, req.fromDate, req.toDate)) {
+            return@post call.respond(HttpStatusCode.Conflict, "Room is already blocked for the selected dates")
+        }
         call.respond(HttpStatusCode.Created, createRoomBlock(req))
     }
 
@@ -31,6 +39,31 @@ fun Route.roomBlockRoutes() {
         call.respond(HttpStatusCode.NoContent)
     }
 }
+
+// ─── Overlap guards ───────────────────────────────────────────────────────────
+
+private fun hasBlockOnBlockOverlap(roomId: Int, fromDate: String, toDate: String): Boolean =
+    transaction {
+        val from = LocalDate.parse(fromDate)
+        val to   = LocalDate.parse(toDate)
+        RoomBlocks.selectAll().where {
+            (RoomBlocks.roomId eq roomId) and
+            (RoomBlocks.fromDate less to) and
+            (RoomBlocks.toDate greater from)
+        }.count() > 0
+    }
+
+private fun hasReservationOverlap(roomId: Int, fromDate: String, toDate: String): Boolean =
+    transaction {
+        val from = LocalDate.parse(fromDate)
+        val to   = LocalDate.parse(toDate)
+        val nonBlocking = setOf("cancelled", "no_show")
+        Reservations.selectAll().where {
+            (Reservations.roomId eq roomId) and
+            (Reservations.checkInDate less to) and
+            (Reservations.checkOutDate greater from)
+        }.any { it[Reservations.status] !in nonBlocking }
+    }
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
