@@ -369,7 +369,7 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
                 showNewDialog = false
                 prefillRoom = null; prefillCheckIn = ""; prefillCheckOut = ""
             },
-            onConfirm = { req ->
+            onConfirm = { req, pendingAdjustments ->
                 scope.launch {
                     try {
                         val response = client.post("$BASE_URL/api/reservations") {
@@ -382,6 +382,17 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
                                 else s.serverError(response.status)
                             )
                             return@launch
+                        }
+                        if (pendingAdjustments.isNotEmpty()) {
+                            val created: ReservationDto = response.body()
+                            pendingAdjustments.forEach { adj ->
+                                try {
+                                    client.post("$BASE_URL/api/reservations/${created.id}/price-adjustments") {
+                                        contentType(ContentType.Application.Json)
+                                        setBody(adj)
+                                    }
+                                } catch (_: Exception) {}
+                            }
                         }
                         showNewDialog = false
                         prefillRoom = null; prefillCheckIn = ""; prefillCheckOut = ""
@@ -414,6 +425,7 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
             reservations = reservations,
             blocks     = roomBlocks,
             priceRules = priceRules,
+            client     = client,
             onDismiss  = { editReservation = null },
             onConfirm  = { req ->
                 scope.launch {
@@ -456,7 +468,8 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
                     scope.launch { snackbar.showSnackbar(s.errorMsg(e.message ?: "?")) }
                     null
                 }
-            }
+            },
+            onAdjustmentsChanged = { scope.launch { loadData(showLoading = false) } }
         )
     }
 
@@ -1343,7 +1356,7 @@ private fun NewReservationDialog(
     prefillCheckIn: String = "",
     prefillCheckOut: String = "",
     onDismiss: () -> Unit,
-    onConfirm: (CreateReservationRequest) -> Unit,
+    onConfirm: (CreateReservationRequest, List<CreatePriceAdjustmentRequest>) -> Unit,
     onCreateGuest: suspend (CreateGuestRequest) -> GuestDto?
 ) {
     var selectedRoom    by remember { mutableStateOf(prefillRoom ?: rooms.firstOrNull()) }
@@ -1353,13 +1366,16 @@ private fun NewReservationDialog(
     var adults    by remember { mutableStateOf(selectedRoom?.maxGuests?.toString() ?: "1") }
     var requiresDownPayment    by remember { mutableStateOf(false) }
     var downPaymentAmountInput by remember { mutableStateOf("") }
-    // Guest form
     var guestFirstName   by remember { mutableStateOf("") }
     var guestLastName    by remember { mutableStateOf("") }
     var guestCountryCode by remember { mutableStateOf("") }
     var guestPhoneNumber by remember { mutableStateOf("") }
     var selectedGuest    by remember { mutableStateOf<GuestDto?>(null) }
+    var pendingAdjustments by remember { mutableStateOf<List<CreatePriceAdjustmentRequest>>(emptyList()) }
+    var adjAmountInput   by remember { mutableStateOf("") }
+    var adjDescInput     by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
+    val s = LocalStrings.current
 
     LaunchedEffect(selectedRoom?.id) {
         selectedRoom?.let { adults = it.maxGuests.toString() }
@@ -1376,6 +1392,7 @@ private fun NewReservationDialog(
         .mapNotNull { i -> segmentPpns.getOrNull(i)?.toDoubleOrNull()?.let { it * segments[i].nights * totalGuests } }
         .takeIf { it.size == segments.size && segments.isNotEmpty() }
         ?.sum()
+    val adjustmentsSum = pendingAdjustments.sumOf { it.amount }
     val guestReady = selectedGuest != null || (guestFirstName.isNotBlank() && guestLastName.isNotBlank())
     val conflict = remember(selectedRoom?.id, checkIn, checkOut, reservations, blocks) {
         selectedRoom != null && checkIn.isNotBlank() && checkOut.isNotBlank() &&
@@ -1385,13 +1402,11 @@ private fun NewReservationDialog(
     val valid = selectedRoom != null && guestReady &&
         checkIn.isNotBlank() && checkOut.isNotBlank() && adults.toDoubleOrNull() != null && !conflict
 
-    val s = LocalStrings.current
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(s.newReservationTitle) },
         text = {
             Column(Modifier.width(420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                // Room
                 ExposedDropdownMenuBox(expanded = roomExpanded, onExpandedChange = { roomExpanded = it }) {
                     OutlinedTextField(
                         value = selectedRoom?.let { "${s.roomLabel(it.number)} · ${it.typeName}" } ?: s.selectRoomHint,
@@ -1408,7 +1423,6 @@ private fun NewReservationDialog(
                         }
                     }
                 }
-                // Guest search / create
                 GuestInputSection(
                     guests = guests,
                     selectedGuest = selectedGuest,
@@ -1423,7 +1437,6 @@ private fun NewReservationDialog(
                     onPhoneNumberChange = { guestPhoneNumber = it }
                 )
                 HorizontalDivider()
-                // Dates
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ResDatePickerField(s.checkInLabel,  checkIn,  { checkIn  = it }, Modifier.weight(1f))
                     ResDatePickerField(s.checkOutLabel, checkOut, { checkOut = it }, Modifier.weight(1f))
@@ -1452,6 +1465,89 @@ private fun NewReservationDialog(
                     onPpnChange  = { i, v -> segmentPpns = segmentPpns.toMutableList().also { it[i] = v } },
                     totalGuests  = totalGuests
                 )
+                // ── Price Adjustments ─────────────────────────────────────────
+                HorizontalDivider()
+                Text(s.priceAdjustmentsTitle, style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (pendingAdjustments.isEmpty()) {
+                            Text(s.noAdjustments, style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        } else {
+                            pendingAdjustments.forEachIndexed { idx, adj ->
+                                Row(
+                                    Modifier.fillMaxWidth()
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text("%.2f PLN".format(adj.amount),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (adj.amount < 0) MaterialTheme.colorScheme.error
+                                                    else MaterialTheme.colorScheme.primary)
+                                        if (!adj.description.isNullOrBlank()) {
+                                            Text(
+                                                adj.description!!, style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    }
+                                    IconButton(
+                                        onClick = { pendingAdjustments = pendingAdjustments.toMutableList().also { it.removeAt(idx) } },
+                                        modifier = Modifier.size(28.dp)
+                                    ) { Text("×", style = MaterialTheme.typography.labelLarge,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                }
+                            }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            OutlinedTextField(
+                                value = adjAmountInput, onValueChange = { adjAmountInput = it },
+                                label = { Text(s.adjustmentAmountLabel, style = MaterialTheme.typography.labelSmall) },
+                                singleLine = true, modifier = Modifier.width(130.dp)
+                            )
+                            OutlinedTextField(
+                                value = adjDescInput, onValueChange = { adjDescInput = it },
+                                label = { Text(s.adjustmentDescriptionLabel, style = MaterialTheme.typography.labelSmall) },
+                                singleLine = true, modifier = Modifier.weight(1f)
+                            )
+                            Button(
+                                onClick = {
+                                    val amount = adjAmountInput.toDoubleOrNull() ?: return@Button
+                                    pendingAdjustments = pendingAdjustments + CreatePriceAdjustmentRequest(
+                                        amount = amount,
+                                        description = adjDescInput.trim().ifBlank { null }
+                                    )
+                                    adjAmountInput = ""; adjDescInput = ""
+                                },
+                                enabled = adjAmountInput.toDoubleOrNull() != null
+                            ) { Text(s.add) }
+                        }
+                        if (pendingAdjustments.isNotEmpty() && computedTotal != null) {
+                            HorizontalDivider(thickness = 0.5.dp)
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(s.segmentsBaseTotal, style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("${"%.2f".format(computedTotal)} PLN", style = MaterialTheme.typography.labelSmall)
+                            }
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(s.adjustmentsTotal, style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("%+.2f PLN".format(adjustmentsSum), style = MaterialTheme.typography.labelSmall,
+                                    color = if (adjustmentsSum < 0) MaterialTheme.colorScheme.error
+                                            else MaterialTheme.colorScheme.primary)
+                            }
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(s.effectiveTotalLabel, style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold)
+                                Text("${"%.2f".format(computedTotal + adjustmentsSum)} PLN",
+                                    style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
                 HorizontalDivider()
                 Row(
                     Modifier.fillMaxWidth().clickable { requiresDownPayment = !requiresDownPayment },
@@ -1484,15 +1580,32 @@ private fun NewReservationDialog(
                                 phoneNumber = guestPhoneNumber.trim().ifBlank { null }
                             ))?.id
                         } ?: return@launch
-                        onConfirm(CreateReservationRequest(
-                            hotelId = hotel.hotelId, roomId = selectedRoom!!.id, guestId = guestId,
-                            checkInDate = checkIn.trim(), checkOutDate = checkOut.trim(),
-                            status = if (requiresDownPayment) "pending" else "confirmed",
-                            adults = adults.trim().toDoubleOrNull() ?: 1.0,
-                            totalAmount = computedTotal,
-                            requiresDownPayment = requiresDownPayment,
-                            downPaymentAmount   = if (requiresDownPayment) downPaymentAmountInput.toDoubleOrNull() else null
-                        ))
+                        val builtSegments = if (segments.size == segmentPpns.size && segments.isNotEmpty()) {
+                            segments.indices.mapNotNull { i ->
+                                val ppn = segmentPpns.getOrNull(i)?.toDoubleOrNull() ?: return@mapNotNull null
+                                CreatePriceSegmentRequest(
+                                    fromDate               = segments[i].fromDate.toString(),
+                                    toDate                 = segments[i].toDate.toString(),
+                                    pricePerPersonPerNight = ppn,
+                                    adults                 = totalGuests,
+                                    currency               = "PLN",
+                                    priceRuleId            = segments[i].rule?.id
+                                )
+                            }.takeIf { it.size == segments.size }
+                        } else null
+                        onConfirm(
+                            CreateReservationRequest(
+                                hotelId = hotel.hotelId, roomId = selectedRoom!!.id, guestId = guestId,
+                                checkInDate = checkIn.trim(), checkOutDate = checkOut.trim(),
+                                status = if (requiresDownPayment) "pending" else "confirmed",
+                                adults = adults.trim().toDoubleOrNull() ?: 1.0,
+                                totalAmount = computedTotal?.let { it + adjustmentsSum } ?: computedTotal,
+                                requiresDownPayment = requiresDownPayment,
+                                downPaymentAmount   = if (requiresDownPayment) downPaymentAmountInput.toDoubleOrNull() else null,
+                                priceSegments       = builtSegments ?: emptyList()
+                            ),
+                            pendingAdjustments
+                        )
                     }
                 }, enabled = valid
             ) { Text(s.create) }
@@ -1512,12 +1625,16 @@ private fun ReservationEditDialog(
     reservations: List<ReservationDto>,
     blocks: List<RoomBlockDto>,
     priceRules: List<PriceRuleDto>,
+    client: HttpClient,
     onDismiss: () -> Unit,
     onConfirm: (UpdateReservationRequest) -> Unit,
     onDelete: () -> Unit,
-    onCreateGuest: suspend (CreateGuestRequest) -> GuestDto?
+    onCreateGuest: suspend (CreateGuestRequest) -> GuestDto?,
+    onAdjustmentsChanged: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
+    val snackbar = LocalSnackbar.current
+    val s = LocalStrings.current
     var selectedRoom     by remember { mutableStateOf(rooms.find { it.id == existing.roomId } ?: rooms.firstOrNull()) }
     var selectedGuest    by remember { mutableStateOf(guests.find { it.id == existing.guestId }) }
     var guestFirstName   by remember { mutableStateOf("") }
@@ -1533,19 +1650,51 @@ private fun ReservationEditDialog(
     var requiresDownPayment    by remember(existing.id) { mutableStateOf(existing.requiresDownPayment) }
     var downPaymentAmountInput by remember(existing.id) { mutableStateOf(existing.downPaymentAmount?.let { "%.2f".format(it) } ?: "") }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var adjustments by remember(existing.id) { mutableStateOf(existing.priceAdjustments) }
+    var adjAmountInput by remember { mutableStateOf("") }
+    var adjDescInput   by remember { mutableStateOf("") }
 
-    val segments = remember(selectedRoom?.id, checkIn, checkOut, priceRules) {
-        buildPriceSegments(priceRules, selectedRoom?.id ?: -1, checkIn, checkOut)
+    val totalGuests = adults.toDoubleOrNull() ?: 1.0
+    // Use baked segments when room+dates haven't changed and segments exist
+    val useBaked = existing.priceSegments.isNotEmpty() &&
+        selectedRoom?.id == existing.roomId &&
+        checkIn == existing.checkInDate &&
+        checkOut == existing.checkOutDate
+    val segments: List<PriceSegment> = remember(selectedRoom?.id, checkIn, checkOut, priceRules, useBaked) {
+        if (useBaked) {
+            existing.priceSegments.map { seg ->
+                PriceSegment(
+                    fromDate = LocalDate.parse(seg.fromDate),
+                    toDate   = LocalDate.parse(seg.toDate),
+                    rule     = seg.priceRuleId?.let { rId -> priceRules.find { it.id == rId } }
+                )
+            }
+        } else {
+            buildPriceSegments(priceRules, selectedRoom?.id ?: -1, checkIn, checkOut)
+        }
     }
     var segmentPpns by remember { mutableStateOf<List<String>>(emptyList()) }
-    LaunchedEffect(segments) {
-        segmentPpns = segments.map { it.rule?.pricePerPersonPerNight?.let { p -> "%.2f".format(p) } ?: "" }
+    LaunchedEffect(segments, useBaked) {
+        segmentPpns = if (useBaked) {
+            existing.priceSegments.map { "%.2f".format(it.pricePerPersonPerNight) }
+        } else {
+            segments.map { it.rule?.pricePerPersonPerNight?.let { p -> "%.2f".format(p) } ?: "" }
+        }
     }
-    val totalGuests = adults.toDoubleOrNull() ?: 1.0
+    // bakedPpns: the ppn saved at booking time, for change detection
+    val bakedPpns: List<Double?> = if (useBaked)
+        existing.priceSegments.map { it.pricePerPersonPerNight }
+    else
+        emptyList()
     val computedTotal = segments.indices
         .mapNotNull { i -> segmentPpns.getOrNull(i)?.toDoubleOrNull()?.let { it * segments[i].nights * totalGuests } }
         .takeIf { it.size == segments.size && segments.isNotEmpty() }
         ?.sum()
+    val adjustmentsSum = adjustments.sumOf { it.amount }
+    val origAdjSum = existing.priceAdjustments.sumOf { it.amount }
+    val effectiveTotal = computedTotal?.let { it + adjustmentsSum }
+        ?: existing.totalAmount?.let { base -> (base - origAdjSum) + adjustmentsSum }
+
     val conflict = remember(selectedRoom?.id, checkIn, checkOut, reservations, blocks) {
         selectedRoom != null && checkIn.isNotBlank() && checkOut.isNotBlank() &&
         (hasReservationConflict(reservations, selectedRoom!!.id, checkIn, checkOut, excludeId = existing.id) ||
@@ -1555,7 +1704,6 @@ private fun ReservationEditDialog(
     val valid = selectedRoom != null && guestReady &&
         checkIn.isNotBlank() && checkOut.isNotBlank() && adults.toDoubleOrNull() != null && !conflict
 
-    val s = LocalStrings.current
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
@@ -1613,8 +1761,132 @@ private fun ReservationEditDialog(
                     segments    = segments,
                     segmentPpns = segmentPpns,
                     onPpnChange = { i, v -> segmentPpns = segmentPpns.toMutableList().also { it[i] = v } },
-                    totalGuests = totalGuests
+                    totalGuests = totalGuests,
+                    bakedPpns   = bakedPpns
                 )
+                // ── Price Adjustments section ─────────────────────────────────
+                HorizontalDivider()
+                Text(s.priceAdjustmentsTitle, style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (adjustments.isEmpty()) {
+                            Text(s.noAdjustments,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        } else {
+                            adjustments.forEach { adj ->
+                                Row(
+                                    Modifier.fillMaxWidth()
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(
+                                            "%.2f PLN".format(adj.amount),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (adj.amount < 0) MaterialTheme.colorScheme.error
+                                                    else MaterialTheme.colorScheme.primary
+                                        )
+                                        if (!adj.description.isNullOrBlank()) {
+                                            Text(
+                                                adj.description!!,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    }
+                                    IconButton(onClick = {
+                                        scope.launch {
+                                            try {
+                                                client.delete("$BASE_URL/api/reservations/${existing.id}/price-adjustments/${adj.id}")
+                                                adjustments = adjustments.filter { it.id != adj.id }
+                                                onAdjustmentsChanged()
+                                            } catch (e: Exception) { snackbar.showSnackbar(s.errorMsg(e.message ?: "?")) }
+                                        }
+                                    }, modifier = Modifier.size(28.dp)) {
+                                        Text("×", style = MaterialTheme.typography.labelLarge,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            }
+                        }
+                        // Add adjustment form
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedTextField(
+                                value = adjAmountInput,
+                                onValueChange = { adjAmountInput = it },
+                                label = { Text(s.adjustmentAmountLabel, style = MaterialTheme.typography.labelSmall) },
+                                singleLine = true,
+                                modifier = Modifier.width(130.dp)
+                            )
+                            OutlinedTextField(
+                                value = adjDescInput,
+                                onValueChange = { adjDescInput = it },
+                                label = { Text(s.adjustmentDescriptionLabel, style = MaterialTheme.typography.labelSmall) },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Button(
+                                onClick = {
+                                    val amount = adjAmountInput.toDoubleOrNull() ?: return@Button
+                                    scope.launch {
+                                        try {
+                                            val created: ReservationPriceAdjustmentDto = client.post("$BASE_URL/api/reservations/${existing.id}/price-adjustments") {
+                                                contentType(ContentType.Application.Json)
+                                                setBody(CreatePriceAdjustmentRequest(amount = amount, description = adjDescInput.trim().ifBlank { null }))
+                                            }.body()
+                                            adjustments = adjustments + created
+                                            adjAmountInput = ""; adjDescInput = ""
+                                            onAdjustmentsChanged()
+                                        } catch (e: Exception) { snackbar.showSnackbar(s.errorMsg(e.message ?: "?")) }
+                                    }
+                                },
+                                enabled = adjAmountInput.toDoubleOrNull() != null
+                            ) { Text(s.add) }
+                        }
+                        // Totals summary
+                        if (computedTotal != null || existing.totalAmount != null) {
+                            HorizontalDivider(thickness = 0.5.dp)
+                            if (computedTotal != null) {
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text(s.segmentsBaseTotal, style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("${"%.2f".format(computedTotal)} PLN",
+                                        style = MaterialTheme.typography.labelSmall)
+                                }
+                            }
+                            if (adjustments.isNotEmpty()) {
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text(s.adjustmentsTotal, style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("%+.2f PLN".format(adjustmentsSum),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (adjustmentsSum < 0) MaterialTheme.colorScheme.error
+                                                else MaterialTheme.colorScheme.primary)
+                                }
+                                val displayTotal = computedTotal?.let { it + adjustmentsSum }
+                                    ?: existing.totalAmount?.let { base ->
+                                        val origAdj = existing.priceAdjustments.sumOf { it.amount }
+                                        base - origAdj + adjustmentsSum
+                                    }
+                                if (displayTotal != null) {
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Text(s.effectiveTotalLabel, style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.SemiBold)
+                                        Text("${"%.2f".format(displayTotal)} PLN",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
+                            }
+                        }
+                    }
                 HorizontalDivider()
                 Row(
                     Modifier.fillMaxWidth().clickable { requiresDownPayment = !requiresDownPayment },
@@ -1647,14 +1919,30 @@ private fun ReservationEditDialog(
                                 phoneNumber = guestPhoneNumber.trim().ifBlank { null }
                             ))?.id
                         } ?: return@launch
+                        val builtSegments = if (segments.size == segmentPpns.size && segments.isNotEmpty()) {
+                            segments.indices.mapNotNull { i ->
+                                val ppn = segmentPpns.getOrNull(i)?.toDoubleOrNull() ?: return@mapNotNull null
+                                val ruleId = if (useBaked) existing.priceSegments.getOrNull(i)?.priceRuleId
+                                             else segments[i].rule?.id
+                                CreatePriceSegmentRequest(
+                                    fromDate               = segments[i].fromDate.toString(),
+                                    toDate                 = segments[i].toDate.toString(),
+                                    pricePerPersonPerNight = ppn,
+                                    adults                 = totalGuests,
+                                    currency               = "PLN",
+                                    priceRuleId            = ruleId
+                                )
+                            }.takeIf { it.size == segments.size }
+                        } else null
                         onConfirm(UpdateReservationRequest(
                             roomId = selectedRoom!!.id, guestId = guestId,
                             checkInDate = checkIn.trim(), checkOutDate = checkOut.trim(), status = status,
                             adults = adults.trim().toDoubleOrNull() ?: 1.0,
-                            totalAmount = computedTotal,
+                            totalAmount = effectiveTotal,
                             description = existing.description,
                             requiresDownPayment = requiresDownPayment,
-                            downPaymentAmount   = if (requiresDownPayment) downPaymentAmountInput.toDoubleOrNull() else null
+                            downPaymentAmount   = if (requiresDownPayment) downPaymentAmountInput.toDoubleOrNull() else null,
+                            priceSegments       = builtSegments ?: emptyList()
                         ))
                     }
                 }, enabled = valid
@@ -1727,7 +2015,8 @@ private fun PriceBreakdownSection(
     segments: List<PriceSegment>,
     segmentPpns: List<String>,
     onPpnChange: (index: Int, value: String) -> Unit,
-    totalGuests: Double
+    totalGuests: Double,
+    bakedPpns: List<Double?> = emptyList()   // original saved ppns — non-null means "show change indicator"
 ) {
     val s = LocalStrings.current
     if (segments.isEmpty()) return
@@ -1738,6 +2027,11 @@ private fun PriceBreakdownSection(
             val ppn      = segmentPpns.getOrElse(i) { "" }
             val ppnValue = ppn.toDoubleOrNull()
             val subtotal = if (ppnValue != null) ppnValue * seg.nights * totalGuests else null
+            val bakedPpn = bakedPpns.getOrNull(i)
+            val rulePpn  = seg.rule?.pricePerPersonPerNight
+            // Baked differs from rule → rule was updated since booking
+            val ruleChanged = bakedPpn != null && rulePpn != null &&
+                Math.abs(rulePpn - bakedPpn) > 0.001
 
             if (i > 0) HorizontalDivider(thickness = 0.5.dp,
                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
@@ -1764,10 +2058,22 @@ private fun PriceBreakdownSection(
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    } else if (bakedPpn != null) {
+                        // baked segment whose rule was deleted
+                        Text(s.noMatchingRule,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else {
                         Text(s.noMatchingRule,
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.error)
+                    }
+                    if (ruleChanged) {
+                        Text(
+                            "rule: ${"%.2f".format(rulePpn)} PLN",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
                     }
                 }
                 Column(horizontalAlignment = Alignment.End) {

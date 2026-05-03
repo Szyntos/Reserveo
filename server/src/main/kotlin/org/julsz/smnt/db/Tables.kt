@@ -123,3 +123,23 @@ object Reservations : Table("reservations") {
     val downPaymentAmount   = decimal("down_payment_amount", 10, 2).nullable()
     override val primaryKey = PrimaryKey(id)
 }
+
+object ReservationPriceSegments : Table("reservation_price_segments") {
+    val id                     = integer("id").autoIncrement()
+    val reservationId          = integer("reservation_id")
+    val ruleId                 = integer("rule_id").nullable()
+    val fromDate               = date("from_date")
+    val toDate                 = date("to_date")
+    val pricePerPersonPerNight = decimal("price_per_person_per_night", 10, 2)
+    val adults                 = decimal("adults", 4, 1)
+    val currency               = varchar("currency", 10)
+    override val primaryKey    = PrimaryKey(id)
+}
+
+object ReservationPriceAdjustments : Table("reservation_price_adjustments") {
+    val id            = integer("id").autoIncrement()
+    val reservationId = integer("reservation_id")
+    val amount        = decimal("amount", 10, 2)
+    val description   = varchar("description", 255).nullable()
+    override val primaryKey = PrimaryKey(id)
+}

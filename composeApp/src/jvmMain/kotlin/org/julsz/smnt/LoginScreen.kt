@@ -1,5 +1,6 @@
 package org.julsz.smnt
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -35,27 +36,47 @@ fun LoginScreen(client: HttpClient, onLogin: (UserDto) -> Unit) {
     }
 
     val s = LocalStrings.current
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Card(Modifier.width(360.dp)) {
-            Column(
-                modifier = Modifier.padding(32.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp)
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center
+    ) {
+        Card(
+            modifier = Modifier.width(400.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+            shape = MaterialTheme.shapes.large
+        ) {
+            // Colored header band
+            Surface(
+                color = MaterialTheme.colorScheme.primary,
+                shape = MaterialTheme.shapes.large
             ) {
-                // Header
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 32.dp, vertical = 28.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
                     Text(
                         s.appName,
                         style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimary
                     )
                     Text(
                         s.loginSubtitle,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f)
                     )
                 }
+            }
 
-                // User picker
+            // Form section
+            Column(
+                modifier = Modifier.padding(32.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
                 if (loadingUsers) {
                     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(Modifier.size(24.dp))
@@ -106,16 +127,20 @@ fun LoginScreen(client: HttpClient, onLogin: (UserDto) -> Unit) {
                 }
 
                 error?.let {
-                    Text(it, color = MaterialTheme.colorScheme.error,
-                         style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        it,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
 
                 Button(
                     onClick = { selected?.let(onLogin) },
                     enabled = selected != null && !loadingUsers,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium
                 ) {
-                    Text(s.loginEnter)
+                    Text(s.loginEnter, modifier = Modifier.padding(vertical = 4.dp))
                 }
             }
         }

@@ -231,6 +231,17 @@ interface AppStrings {
     fun priceTotalLine(total: Double): String
     fun priceRuleLine(minNights: Int, maxNights: Int?): String
 
+    // Price adjustments
+    val adjustPriceBtn: String
+    val priceAdjustmentsTitle: String
+    val noAdjustments: String
+    val adjustmentAmountLabel: String
+    val adjustmentDescriptionLabel: String
+    val addAdjustmentBtn: String
+    val segmentsBaseTotal: String
+    val adjustmentsTotal: String
+    val effectiveTotalLabel: String
+
     // Dashboard statistics
     val statCheckedIn: String
     val statOccupancy: String
@@ -440,6 +451,15 @@ object EnglishStrings : AppStrings {
         "Remove block for Room $roomNumber from $fromDate to $toDate${reason?.let { " ($it)" } ?: ""}?"
     override fun statusName(status: String) =
         status.replace('_', ' ').replaceFirstChar { it.uppercaseChar() }
+    override val adjustPriceBtn              = "Adjust Price"
+    override val priceAdjustmentsTitle       = "Price Adjustments"
+    override val noAdjustments               = "No adjustments."
+    override val adjustmentAmountLabel       = "Amount (PLN, negative = discount)"
+    override val adjustmentDescriptionLabel  = "Description"
+    override val addAdjustmentBtn            = "Add Adjustment"
+    override val segmentsBaseTotal           = "Base (from segments)"
+    override val adjustmentsTotal            = "Adjustments"
+    override val effectiveTotalLabel         = "Effective Total"
     override val statCheckedIn    = "Checked In"
     override val statOccupancy    = "occupancy"
     override val statMonthRevenue = "Month Collected"
@@ -664,6 +684,15 @@ object PolishStrings : AppStrings {
         "no_show"     -> "Nieobecność"
         else          -> status.replace('_', ' ').replaceFirstChar { it.uppercaseChar() }
     }
+    override val adjustPriceBtn              = "Koryguj cenę"
+    override val priceAdjustmentsTitle       = "Korekty ceny"
+    override val noAdjustments               = "Brak korekt."
+    override val adjustmentAmountLabel       = "Kwota (PLN, ujemna = rabat)"
+    override val adjustmentDescriptionLabel  = "Opis"
+    override val addAdjustmentBtn            = "Dodaj korektę"
+    override val segmentsBaseTotal           = "Podstawa (segmenty)"
+    override val adjustmentsTotal            = "Korekty"
+    override val effectiveTotalLabel         = "Łączna kwota"
     override val statCheckedIn    = "Zameldowani"
     override val statOccupancy    = "obłożenie"
     override val statMonthRevenue = "Zebrany przychód"

@@ -38,6 +38,26 @@ data class GuestDto(
 )
 
 @Serializable
+data class ReservationPriceSegmentDto(
+    val id: Int,
+    val reservationId: Int,
+    val priceRuleId: Int?,
+    val fromDate: String,
+    val toDate: String,
+    val pricePerPersonPerNight: Double,
+    val adults: Double,
+    val currency: String
+)
+
+@Serializable
+data class ReservationPriceAdjustmentDto(
+    val id: Int,
+    val reservationId: Int,
+    val amount: Double,
+    val description: String?
+)
+
+@Serializable
 data class ReservationDto(
     val id: Int,
     val hotelId: Int,
@@ -54,7 +74,9 @@ data class ReservationDto(
     val description: String? = null,
     val paidAmount: Double = 0.0,
     val requiresDownPayment: Boolean = false,
-    val downPaymentAmount: Double? = null
+    val downPaymentAmount: Double? = null,
+    val priceSegments: List<ReservationPriceSegmentDto> = emptyList(),
+    val priceAdjustments: List<ReservationPriceAdjustmentDto> = emptyList()
 )
 
 @Serializable
@@ -103,6 +125,22 @@ data class UpdateRoomRequest(
 )
 
 @Serializable
+data class CreatePriceSegmentRequest(
+    val fromDate: String,
+    val toDate: String,
+    val pricePerPersonPerNight: Double,
+    val adults: Double,
+    val currency: String = "PLN",
+    val priceRuleId: Int? = null
+)
+
+@Serializable
+data class CreatePriceAdjustmentRequest(
+    val amount: Double,
+    val description: String? = null
+)
+
+@Serializable
 data class CreateReservationRequest(
     val hotelId: Int,
     val roomId: Int,
@@ -113,7 +151,8 @@ data class CreateReservationRequest(
     val adults: Double = 1.0,
     val totalAmount: Double? = null,
     val requiresDownPayment: Boolean = false,
-    val downPaymentAmount: Double? = null
+    val downPaymentAmount: Double? = null,
+    val priceSegments: List<CreatePriceSegmentRequest> = emptyList()
 )
 
 @Serializable
@@ -127,7 +166,8 @@ data class UpdateReservationRequest(
     val totalAmount: Double? = null,
     val description: String? = null,
     val requiresDownPayment: Boolean = false,
-    val downPaymentAmount: Double? = null
+    val downPaymentAmount: Double? = null,
+    val priceSegments: List<CreatePriceSegmentRequest> = emptyList()
 )
 
 @Serializable
