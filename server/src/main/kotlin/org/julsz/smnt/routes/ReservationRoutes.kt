@@ -192,6 +192,9 @@ private fun createReservation(req: CreateReservationRequest): ReservationDto = t
         it[Reservations.totalAmount]         = effectiveTotal?.let { v -> BigDecimal.valueOf(v) }
         it[Reservations.requiresDownPayment] = req.requiresDownPayment
         it[Reservations.downPaymentAmount]   = req.downPaymentAmount?.let { v -> BigDecimal.valueOf(v) }
+        it[Reservations.sourceType]          = req.source
+        it[Reservations.sourceName]          = req.sourceName
+        it[Reservations.externalRef]         = req.externalRef
     } get Reservations.id
 
     val savedSegments = req.priceSegments.map { seg ->
@@ -232,7 +235,10 @@ private fun createReservation(req: CreateReservationRequest): ReservationDto = t
         requiresDownPayment = req.requiresDownPayment,
         downPaymentAmount   = req.downPaymentAmount,
         priceSegments       = savedSegments,
-        priceAdjustments    = emptyList()
+        priceAdjustments    = emptyList(),
+        source      = req.source,
+        sourceName  = req.sourceName,
+        externalRef = req.externalRef
     )
 }
 
@@ -260,6 +266,7 @@ private fun updateReservation(id: Int, req: UpdateReservationRequest): Reservati
         it[Reservations.description]         = req.description
         it[Reservations.requiresDownPayment] = req.requiresDownPayment
         it[Reservations.downPaymentAmount]   = req.downPaymentAmount?.let { v -> BigDecimal.valueOf(v) }
+        it[Reservations.externalRef]         = req.externalRef
     }
 
     if (req.priceSegments.isNotEmpty()) {
@@ -381,5 +388,8 @@ private fun ResultRow.toDto(
     requiresDownPayment = this[Reservations.requiresDownPayment],
     downPaymentAmount   = this[Reservations.downPaymentAmount]?.toDouble(),
     priceSegments       = segments,
-    priceAdjustments    = adjustments
+    priceAdjustments    = adjustments,
+    source      = this[Reservations.sourceType],
+    sourceName  = this[Reservations.sourceName],
+    externalRef = this[Reservations.externalRef]
 )

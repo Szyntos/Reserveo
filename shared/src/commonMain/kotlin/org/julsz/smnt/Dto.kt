@@ -76,7 +76,10 @@ data class ReservationDto(
     val requiresDownPayment: Boolean = false,
     val downPaymentAmount: Double? = null,
     val priceSegments: List<ReservationPriceSegmentDto> = emptyList(),
-    val priceAdjustments: List<ReservationPriceAdjustmentDto> = emptyList()
+    val priceAdjustments: List<ReservationPriceAdjustmentDto> = emptyList(),
+    val source: String = "private",
+    val sourceName: String? = null,
+    val externalRef: String? = null
 )
 
 @Serializable
@@ -152,7 +155,10 @@ data class CreateReservationRequest(
     val totalAmount: Double? = null,
     val requiresDownPayment: Boolean = false,
     val downPaymentAmount: Double? = null,
-    val priceSegments: List<CreatePriceSegmentRequest> = emptyList()
+    val priceSegments: List<CreatePriceSegmentRequest> = emptyList(),
+    val source: String = "private",
+    val sourceName: String? = null,
+    val externalRef: String? = null
 )
 
 @Serializable
@@ -167,7 +173,8 @@ data class UpdateReservationRequest(
     val description: String? = null,
     val requiresDownPayment: Boolean = false,
     val downPaymentAmount: Double? = null,
-    val priceSegments: List<CreatePriceSegmentRequest> = emptyList()
+    val priceSegments: List<CreatePriceSegmentRequest> = emptyList(),
+    val externalRef: String? = null
 )
 
 @Serializable

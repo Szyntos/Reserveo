@@ -2,6 +2,7 @@ package org.julsz.smnt
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -27,6 +28,23 @@ import java.time.format.TextStyle
 import kotlin.math.roundToInt
 
 private enum class AppScreen { Dashboard, Reservations, Config, Settings }
+
+private data class StatYM(val year: Int, val month: Int) : Comparable<StatYM> {
+    override fun compareTo(other: StatYM) = compareValuesBy(this, other, StatYM::year, StatYM::month)
+    fun prev() = java.time.YearMonth.of(year, month).minusMonths(1).let { StatYM(it.year, it.monthValue) }
+    fun next() = java.time.YearMonth.of(year, month).plusMonths(1).let { StatYM(it.year, it.monthValue) }
+    fun label(locale: java.util.Locale) = Month.of(month).getDisplayName(TextStyle.SHORT, locale) + " $year"
+}
+
+private enum class HistGroup { All, ByType, OneRoom }
+
+private data class BarData(val total: Int, val segments: List<Pair<String, Int>>)
+
+private val HIST_COLORS = listOf(
+    Color(0xFF5C6BC0), Color(0xFF26A69A), Color(0xFFEF5350),
+    Color(0xFFAB47BC), Color(0xFFFF7043), Color(0xFF66BB6A),
+    Color(0xFF29B6F6), Color(0xFFFFCA28)
+)
 
 val LocalSnackbar = compositionLocalOf { SnackbarHostState() }
 
@@ -365,7 +383,10 @@ private fun DashboardPage(client: HttpClient, hotel: UserHotelRoleDto, noShowAft
         }
     }
 
-    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+    Column(
+        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(20.dp)
+    ) {
         Text(hotel.hotelName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
 
         if (loading) {
@@ -405,7 +426,7 @@ private fun DashboardPage(client: HttpClient, hotel: UserHotelRoleDto, noShowAft
 
             // ── Arrivals / Departures / Overdue ───────────────────────────────
             Row(
-                Modifier.fillMaxWidth().weight(1f),
+                Modifier.fillMaxWidth().height(280.dp),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 DashboardTile(
@@ -441,6 +462,8 @@ private fun DashboardPage(client: HttpClient, hotel: UserHotelRoleDto, noShowAft
                     modifier     = Modifier.weight(1f)
                 )
             }
+
+            StatisticsSection(reservations = reservations, rooms = rooms)
         }
     }
 }
@@ -735,6 +758,362 @@ private fun OverdueCheckOutsTile(
         }
     }
 }
+
+// ─── Statistics section ───────────────────────────────────────────────────────
+
+@Composable
+private fun StatisticsSection(reservations: List<ReservationDto>, rooms: List<RoomDto>) {
+    val s      = LocalStrings.current
+    val today  = remember { LocalDate.now() }
+    val currYM = remember { StatYM(today.year, today.monthValue) }
+
+    var monthsBack   by remember { mutableStateOf(6) }
+    var endYM        by remember { mutableStateOf(currYM) }
+    var histGroup    by remember { mutableStateOf(HistGroup.All) }
+    var selectedRoom by remember { mutableStateOf<RoomDto?>(null) }
+
+    val months = remember(endYM, monthsBack) {
+        buildList {
+            var ym = endYM
+            repeat(monthsBack) { add(0, ym); ym = ym.prev() }
+        }
+    }
+
+    val active = remember(reservations) {
+        reservations.filter { it.status !in setOf("cancelled", "no_show") }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        HorizontalDivider()
+        Text(s.statsTitle, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+
+        // time-span controls
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(s.statsTimeSpan, style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(Modifier.clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
+                listOf(3, 6, 9, 12).forEach { n ->
+                    val sel = monthsBack == n
+                    Box(
+                        Modifier.clip(RoundedCornerShape(6.dp))
+                            .background(if (sel) MaterialTheme.colorScheme.primary else Color.Transparent)
+                            .clickable { monthsBack = n }
+                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(s.statsMonthsLabel(n), style = MaterialTheme.typography.labelSmall,
+                            color = if (sel) MaterialTheme.colorScheme.onPrimary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            Spacer(Modifier.weight(1f))
+            IconButton(onClick = { endYM = endYM.prev() }, modifier = Modifier.size(32.dp)) {
+                Text("‹", style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface)
+            }
+            Box(Modifier.widthIn(min = 85.dp), contentAlignment = Alignment.Center) {
+                Text(endYM.label(s.locale), style = MaterialTheme.typography.labelMedium)
+            }
+            IconButton(
+                onClick  = { endYM = endYM.next() },
+                enabled  = endYM < currYM,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Text("›", style = MaterialTheme.typography.titleMedium,
+                    color = if (endYM < currYM) MaterialTheme.colorScheme.onSurface
+                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f))
+            }
+        }
+
+        Text(s.statsNightsTable, style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        NightsTable(rooms = rooms, months = months, reservations = active)
+
+        Spacer(Modifier.height(4.dp))
+
+        // histogram controls
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(s.statsHistogram, style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.weight(1f))
+            Row(Modifier.clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
+                listOf(HistGroup.All to s.statsGroupAll, HistGroup.ByType to s.statsGroupByType,
+                       HistGroup.OneRoom to s.statsGroupOneRoom).forEach { (grp, label) ->
+                    val sel = histGroup == grp
+                    Box(
+                        Modifier.clip(RoundedCornerShape(6.dp))
+                            .background(if (sel) MaterialTheme.colorScheme.primary else Color.Transparent)
+                            .clickable { histGroup = grp }
+                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(label, style = MaterialTheme.typography.labelSmall,
+                            color = if (sel) MaterialTheme.colorScheme.onPrimary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            if (histGroup == HistGroup.OneRoom) {
+                var expanded by remember { mutableStateOf(false) }
+                Box {
+                    OutlinedButton(
+                        onClick        = { expanded = true },
+                        modifier       = Modifier.height(32.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp)
+                    ) {
+                        Text(selectedRoom?.let { s.roomShort(it.number) } ?: s.selectRoomHint,
+                            style = MaterialTheme.typography.labelSmall)
+                    }
+                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                        rooms.forEach { room ->
+                            DropdownMenuItem(
+                                text    = { Text("${s.roomShort(room.number)} (${room.typeName})") },
+                                onClick = { selectedRoom = room; expanded = false }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        NightsHistogram(
+            reservations = active,
+            rooms        = rooms,
+            months       = months,
+            group        = histGroup,
+            selectedRoom = if (histGroup == HistGroup.OneRoom) selectedRoom else null
+        )
+        Spacer(Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun NightsTable(
+    rooms: List<RoomDto>,
+    months: List<StatYM>,
+    reservations: List<ReservationDto>
+) {
+    if (rooms.isEmpty() || months.isEmpty()) return
+    val s         = LocalStrings.current
+    val primary   = MaterialTheme.colorScheme.primary
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    val surfVar   = MaterialTheme.colorScheme.surfaceVariant
+
+    val nightsMap = remember(rooms, months, reservations) {
+        val map = rooms.associate { it.id to MutableList(months.size) { 0L } }
+        reservations.forEach { res ->
+            val perMonth = map[res.roomId] ?: return@forEach
+            val ci = LocalDate.parse(res.checkInDate)
+            val co = LocalDate.parse(res.checkOutDate)
+            months.forEachIndexed { idx, ym ->
+                val start = LocalDate.of(ym.year, ym.month, 1)
+                val end   = start.plusMonths(1)
+                val n     = (minOf(co, end).toEpochDay() - maxOf(ci, start).toEpochDay()).coerceAtLeast(0)
+                perMonth[idx] += n
+            }
+        }
+        map
+    }
+
+    val labelW  = 72.dp
+    val colW    = 60.dp
+    val headerH = 28.dp
+    val cellH   = 32.dp
+
+    val sortedRooms = remember(rooms) {
+        rooms.sortedWith(compareBy({ it.number.toIntOrNull() ?: Int.MAX_VALUE }, { it.number }))
+    }
+
+    Row(
+        Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(surfVar)
+    ) {
+        // fixed room-label column
+        Column(Modifier.width(labelW)) {
+            Box(Modifier.height(headerH).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Text(s.roomAbbr, style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            HorizontalDivider()
+            sortedRooms.forEachIndexed { i, room ->
+                Box(Modifier.height(cellH).fillMaxWidth().padding(start = 8.dp),
+                    contentAlignment = Alignment.CenterStart) {
+                    Text(room.number, style = MaterialTheme.typography.labelSmall)
+                }
+                if (i < sortedRooms.lastIndex) HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+            }
+        }
+        VerticalDivider()
+        // horizontally scrollable months content
+        Column(Modifier.weight(1f).horizontalScroll(rememberScrollState())) {
+            Row {
+                months.forEach { ym ->
+                    Box(Modifier.width(colW).height(headerH), contentAlignment = Alignment.Center) {
+                        Text(ym.label(s.locale), style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1)
+                    }
+                }
+            }
+            HorizontalDivider()
+            sortedRooms.forEachIndexed { i, room ->
+                Row {
+                    months.forEachIndexed { idx, ym ->
+                        val nights    = nightsMap[room.id]?.getOrNull(idx) ?: 0L
+                        val daysInM   = java.time.YearMonth.of(ym.year, ym.month).lengthOfMonth().toLong()
+                        val intensity = (nights.toFloat() / daysInM).coerceIn(0f, 1f)
+                        Box(
+                            Modifier.width(colW).height(cellH)
+                                .background(
+                                    if (nights > 0) primary.copy(alpha = 0.15f + intensity * 0.70f)
+                                    else Color.Transparent
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (nights > 0) {
+                                Text("$nights", style = MaterialTheme.typography.labelSmall,
+                                    color = if (intensity > 0.55f) MaterialTheme.colorScheme.onPrimary
+                                            else onSurface)
+                            }
+                        }
+                    }
+                }
+                if (i < sortedRooms.lastIndex) HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun NightsHistogram(
+    reservations: List<ReservationDto>,
+    rooms: List<RoomDto>,
+    months: List<StatYM>,
+    group: HistGroup,
+    selectedRoom: RoomDto?
+) {
+    val s       = LocalStrings.current
+    val primary = MaterialTheme.colorScheme.primary
+    val surfVar = MaterialTheme.colorScheme.surfaceVariant
+
+    if (group == HistGroup.OneRoom && selectedRoom == null) {
+        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(surfVar).padding(20.dp),
+            contentAlignment = Alignment.Center) {
+            Text(s.selectRoomHint, style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        return
+    }
+
+    val barMap = remember(reservations, rooms, months, group, selectedRoom) {
+        if (months.isEmpty()) return@remember emptyMap()
+        val spanStart = LocalDate.of(months.first().year, months.first().month, 1)
+        val spanEnd   = LocalDate.of(months.last().year, months.last().month, 1).plusMonths(1)
+        val roomType  = rooms.associate { it.id to it.typeName }
+
+        val counts = mutableMapOf<Int, MutableMap<String, Int>>()
+        reservations.forEach { res ->
+            if (selectedRoom != null && res.roomId != selectedRoom.id) return@forEach
+            val ci = LocalDate.parse(res.checkInDate)
+            if (ci.isBefore(spanStart) || !ci.isBefore(spanEnd)) return@forEach
+            val co     = LocalDate.parse(res.checkOutDate)
+            val nights = (co.toEpochDay() - ci.toEpochDay()).toInt().coerceAtLeast(1)
+            val key    = if (group == HistGroup.ByType) roomType[res.roomId] ?: "?" else ""
+            counts.getOrPut(nights) { mutableMapOf() }.merge(key, 1, Int::plus)
+        }
+        counts.mapValues { (_, v) ->
+            val segs = v.entries.map { it.key to it.value }
+            BarData(segs.sumOf { it.second }, segs)
+        }
+    }
+
+    if (barMap.isEmpty()) {
+        Text(s.statsNoData, style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        return
+    }
+
+    val maxNights  = minOf(barMap.keys.max(), 30)
+    val maxCount   = barMap.values.maxOf { it.total }
+    val groupKeys  = if (group == HistGroup.ByType)
+                         barMap.values.flatMap { it.segments.map { s -> s.first } }.distinct().sorted()
+                     else listOf("")
+    val colorMap   = groupKeys.mapIndexed { i, k -> k to HIST_COLORS[i % HIST_COLORS.size] }.toMap()
+    val chartH     = 160.dp
+    val barW       = 30.dp
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Box(
+            Modifier.fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .background(surfVar)
+                .padding(horizontal = 12.dp, vertical = 10.dp)
+        ) {
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                (1..maxNights).forEach { n ->
+                    val bar   = barMap[n]
+                    val total = bar?.total ?: 0
+                    val barH  = if (maxCount > 0 && total > 0) chartH * (total.toFloat() / maxCount) else 0.dp
+
+                    Column(Modifier.width(barW), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(Modifier.height(16.dp), contentAlignment = Alignment.BottomCenter) {
+                            if (total > 0) Text("$total", style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Box(Modifier.width(barW).height(chartH), contentAlignment = Alignment.BottomCenter) {
+                            if (total > 0) {
+                                Column(
+                                    Modifier.width(barW).height(barH)
+                                        .clip(RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp))
+                                ) {
+                                    (bar?.segments ?: emptyList())
+                                        .sortedBy { groupKeys.indexOf(it.first) }
+                                        .forEach { (key, cnt) ->
+                                            Box(Modifier.width(barW).weight(cnt.toFloat())
+                                                .background(colorMap[key] ?: primary))
+                                        }
+                                }
+                            }
+                        }
+                        Text("$n", style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            if (group == HistGroup.ByType && groupKeys.size > 1) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    groupKeys.forEach { key ->
+                        Row(verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Box(Modifier.size(10.dp).clip(RoundedCornerShape(2.dp))
+                                .background(colorMap[key] ?: primary))
+                            Text(key, style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            } else {
+                Spacer(Modifier.width(1.dp))
+            }
+            Text(s.statsNightsAxisLabel, style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+// ─── Settings ─────────────────────────────────────────────────────────────────
 
 @Composable
 private fun SettingsPage(

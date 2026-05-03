@@ -121,6 +121,13 @@ object Reservations : Table("reservations") {
     val description         = text("description").nullable()
     val requiresDownPayment = bool("requires_down_payment")
     val downPaymentAmount   = decimal("down_payment_amount", 10, 2).nullable()
+    val sourceType          = registerColumn<String>("source_type", object : VarCharColumnType(50) {
+        override fun sqlType() = "reservation_source_type"
+        override fun notNullValueToDB(value: String): Any =
+            PGobject().apply { type = "reservation_source_type"; this.value = value }
+    })
+    val sourceName          = varchar("source_name", 255).nullable()
+    val externalRef         = varchar("external_ref", 255).nullable()
     override val primaryKey = PrimaryKey(id)
 }
 

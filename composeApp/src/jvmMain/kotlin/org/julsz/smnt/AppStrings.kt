@@ -122,8 +122,16 @@ interface AppStrings {
     val viewTimeline: String
     val blockRoomBtn: String
     val blockModeLabel: String
+    val dragModeReservation: String
+    val dragModeExternal: String
+    val dragModeBlock: String
     val blockConflictError: String
     val newReservationBtn: String
+    val newExternalBtn: String
+    val newExternalReservationTitle: String
+    val externalSourceLabel: String
+    val bookingRefLabel: String
+    val bookingTotalLabel: String
     val dowLabels: List<String>
     val conflictError: String
     fun serverError(status: Any): String
@@ -249,6 +257,18 @@ interface AppStrings {
     val statUpcoming7d: String
     val statPendingDp: String
 
+    // Statistics section
+    val statsTitle: String
+    val statsNightsTable: String
+    val statsHistogram: String
+    val statsGroupAll: String
+    val statsGroupByType: String
+    val statsGroupOneRoom: String
+    val statsTimeSpan: String
+    val statsNoData: String
+    val statsNightsAxisLabel: String
+    fun statsMonthsLabel(n: Int): String
+
     // Dashboard — overdue panes
     val overdueCheckIns: String
     val noOverdueCheckIns: String
@@ -353,8 +373,16 @@ object EnglishStrings : AppStrings {
     override val viewTimeline = "Timeline"
     override val blockRoomBtn = "Block Room"
     override val blockModeLabel = "Block Mode"
+    override val dragModeReservation = "Reservation"
+    override val dragModeExternal    = "Booking"
+    override val dragModeBlock       = "Block"
     override val blockConflictError = "Blocked: room is blocked for these dates"
     override val newReservationBtn = "New Reservation"
+    override val newExternalBtn = "New Booking"
+    override val newExternalReservationTitle = "New Booking.com Reservation"
+    override val externalSourceLabel = "External"
+    override val bookingRefLabel = "Booking reference"
+    override val bookingTotalLabel = "Total (Booking)"
     override val dowLabels = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
     override val conflictError = "Double booking: room already reserved for these dates"
     override fun serverError(status: Any) = "Server error: $status"
@@ -465,6 +493,16 @@ object EnglishStrings : AppStrings {
     override val statMonthRevenue = "Month Collected"
     override val statUpcoming7d   = "Arrivals · Next 7d"
     override val statPendingDp    = "Pending Down Pmts"
+    override val statsTitle             = "Statistics"
+    override val statsNightsTable       = "Nights · Room · Month"
+    override val statsHistogram         = "Stay length distribution"
+    override val statsGroupAll          = "All rooms"
+    override val statsGroupByType       = "By type"
+    override val statsGroupOneRoom      = "One room"
+    override val statsTimeSpan          = "Period:"
+    override val statsNoData            = "No data"
+    override val statsNightsAxisLabel   = "nights"
+    override fun statsMonthsLabel(n: Int) = "${n}M"
     override val overdueCheckIns   = "Overdue Check-ins"
     override val noOverdueCheckIns = "No overdue check-ins"
     override val overdueCheckOuts   = "Overdue Check-outs"
@@ -579,8 +617,16 @@ object PolishStrings : AppStrings {
     override val viewTimeline = "Oś czasu"
     override val blockRoomBtn = "Zablokuj pokój"
     override val blockModeLabel = "Tryb blokady"
+    override val dragModeReservation = "Rezerwacja"
+    override val dragModeExternal    = "Booking"
+    override val dragModeBlock       = "Blokada"
     override val blockConflictError = "Zablokowane: pokój jest zablokowany w tych datach"
     override val newReservationBtn = "Nowa rezerwacja"
+    override val newExternalBtn = "Nowa rezerwacja zewnętrzna"
+    override val newExternalReservationTitle = "Nowa rezerwacja Booking.com"
+    override val externalSourceLabel = "Zewnętrzna"
+    override val bookingRefLabel = "Nr rezerwacji Booking"
+    override val bookingTotalLabel = "Kwota (Booking)"
     override val dowLabels = listOf("Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd")
     override val conflictError = "Podwójna rezerwacja: pokój jest już zajęty w tych datach"
     override fun serverError(status: Any) = "Błąd serwera: $status"
@@ -698,6 +744,16 @@ object PolishStrings : AppStrings {
     override val statMonthRevenue = "Zebrany przychód"
     override val statUpcoming7d   = "Przyjazdy · Następne 7 dni"
     override val statPendingDp    = "Zaległe zadatki"
+    override val statsTitle             = "Statystyki"
+    override val statsNightsTable       = "Noce · Pokój · Miesiąc"
+    override val statsHistogram         = "Rozkład długości pobytów"
+    override val statsGroupAll          = "Wszystkie"
+    override val statsGroupByType       = "Wg. typu"
+    override val statsGroupOneRoom      = "Jeden pokój"
+    override val statsTimeSpan          = "Okres:"
+    override val statsNoData            = "Brak danych"
+    override val statsNightsAxisLabel   = "nocy"
+    override fun statsMonthsLabel(n: Int) = "${n}M"
     override val overdueCheckIns   = "Zaległe zameldowania"
     override val noOverdueCheckIns = "Brak zaległych zameldowań"
     override val overdueCheckOuts   = "Zaległe wymeldowania"
