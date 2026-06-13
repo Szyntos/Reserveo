@@ -1,6 +1,9 @@
 package org.julsz.smnt
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.HorizontalScrollbar
+import androidx.compose.foundation.TooltipArea
+import androidx.compose.foundation.TooltipPlacement
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -39,6 +42,7 @@ import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.http.*
+import androidx.compose.ui.unit.DpOffset
 import kotlinx.coroutines.launch
 import java.time.DayOfWeek
 import java.time.Instant
@@ -100,6 +104,7 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
     var guests       by remember { mutableStateOf<List<GuestDto>>(emptyList()) }
     var priceRules   by remember { mutableStateOf<List<PriceRuleDto>>(emptyList()) }
     var roomBlocks   by remember { mutableStateOf<List<RoomBlockDto>>(emptyList()) }
+    var holidays     by remember { mutableStateOf<List<HolidayDto>>(emptyList()) }
     var loading      by remember { mutableStateOf(true) }
     val s        = LocalStrings.current
     val snackbar = LocalSnackbar.current
@@ -129,6 +134,7 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
             guests       = client.get("$BASE_URL/api/guests").body()
             priceRules   = client.get("$BASE_URL/api/hotels/${hotel.hotelId}/price-rules").body()
             roomBlocks   = client.get("$BASE_URL/api/room-blocks?hotelId=${hotel.hotelId}").body()
+            holidays     = client.get("$BASE_URL/api/holidays?hotelId=${hotel.hotelId}").body()
 
             val cutoff = LocalDate.now().minusDays(noShowAfterDays.toLong())
             val autoNoShow = reservations.filter { r ->
@@ -312,6 +318,7 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
                             year         = displayYear,
                             month        = m,
                             reservations = visibleReservations,
+                            holidays     = holidays,
                             onResClick   = { optionRes = it }
                         )
                         if (m < 12) HorizontalDivider(Modifier.padding(vertical = 16.dp))
@@ -323,6 +330,7 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
                 rooms            = rooms.sortedWith(compareBy({ it.number.toIntOrNull() ?: Int.MAX_VALUE }, { it.number })),
                 reservations     = visibleReservations,
                 blocks           = roomBlocks,
+                holidays         = holidays,
                 year             = displayYear,
                 month            = displayMonth,
                 scale            = timelineScale,
@@ -627,6 +635,7 @@ private fun ResMonthCalendar(
     year: Int,
     month: Int,
     reservations: List<ReservationDto>,
+    holidays: List<HolidayDto> = emptyList(),
     onResClick: (ReservationDto) -> Unit
 ) {
     val s = LocalStrings.current
@@ -648,7 +657,7 @@ private fun ResMonthCalendar(
         Spacer(Modifier.height(2.dp))
 
         weeks.forEach { week ->
-            ResWeekRow(week, reservations, onResClick)
+            ResWeekRow(week, reservations, holidays, onResClick)
         }
     }
 }
@@ -659,11 +668,27 @@ private fun ResMonthCalendar(
 private fun ResWeekRow(
     week: List<RCalDay>,
     reservations: List<ReservationDto>,
+    holidays: List<HolidayDto> = emptyList(),
     onResClick: (ReservationDto) -> Unit
 ) {
     val weekStart = week.first().date
     val weekEnd   = week.last().date
     val today     = LocalDate.now()
+    val holidayMap: Map<LocalDate, HolidayDto> = remember(holidays, weekStart, weekEnd) {
+        buildMap {
+            holidays.forEach { h ->
+                val from = maxOf(java.time.LocalDate.parse(h.fromDate), weekStart)
+                val to   = minOf(java.time.LocalDate.parse(h.toDate), weekEnd)
+                if (!from.isAfter(to)) {
+                    var d = from
+                    while (!d.isAfter(to)) {
+                        putIfAbsent(d, h)
+                        d = d.plusDays(1)
+                    }
+                }
+            }
+        }
+    }
 
     // Reservations overlapping this week, sorted for consistent stacking
     val overlapping = reservations
@@ -685,7 +710,12 @@ private fun ResWeekRow(
         Row(Modifier.fillMaxWidth().height(CELL_H)) {
             week.forEach { cal ->
                 val isToday = cal.date == today
-                Box(Modifier.width(dayW).height(CELL_H), contentAlignment = Alignment.Center) {
+                val isHoliday = cal.inMonth && cal.date in holidayMap
+                Box(
+                    Modifier.width(dayW).height(CELL_H)
+                        .background(if (isHoliday) Color(0xFFFFF176).copy(alpha = 0.50f) else Color.Transparent),
+                    contentAlignment = Alignment.Center
+                ) {
                     if (isToday) {
                         Box(Modifier.size(20.dp).clip(CircleShape)
                             .background(MaterialTheme.colorScheme.primary))
@@ -2399,6 +2429,7 @@ private fun ReservationsTimelineView(
     rooms: List<RoomDto>,
     reservations: List<ReservationDto>,
     blocks: List<RoomBlockDto>,
+    holidays: List<HolidayDto> = emptyList(),
     year: Int,
     month: Int,
     scale: TimelineScale,
@@ -2491,6 +2522,21 @@ private fun ReservationsTimelineView(
 
     val resByRoom    = remember(reservations) { reservations.groupBy { it.roomId } }
     val blocksByRoom = remember(blocks) { blocks.groupBy { it.roomId } }
+    val holidayMap: Map<LocalDate, HolidayDto> = remember(holidays, dateStart, dateEnd) {
+        buildMap {
+            holidays.forEach { h ->
+                val from = maxOf(LocalDate.parse(h.fromDate), dateStart)
+                val to   = minOf(LocalDate.parse(h.toDate), dateEnd)
+                if (!from.isAfter(to)) {
+                    var d = from
+                    while (!d.isAfter(to)) {
+                        putIfAbsent(d, h)
+                        d = d.plusDays(1)
+                    }
+                }
+            }
+        }
+    }
     var expandedRoomId  by remember { mutableStateOf<Int?>(null) }
     val EXPANDED_ROW_H  = 100.dp * fs
     val EXPANDED_BAND_H = 88.dp * fs
@@ -2673,44 +2719,71 @@ private fun ReservationsTimelineView(
                     // Day number row
                     Row(Modifier.fillMaxWidth().height(DAY_ROW_H)) {
                         days.forEach { day ->
-                            val isToday   = day == today
-                            val isWeekend = day.dayOfWeek == DayOfWeek.SATURDAY || day.dayOfWeek == DayOfWeek.SUNDAY
-                            Column(
-                                Modifier
-                                    .width(DAY_W).fillMaxHeight()
-                                    .background(when {
-                                        isToday   -> MaterialTheme.colorScheme.primaryContainer
-                                        isWeekend -> MaterialTheme.colorScheme.surfaceVariant
-                                        else      -> Color.Transparent
-                                    })
-                                    .drawBehind {
-                                        drawLine(divColor, Offset(size.width - 0.5f, 0f), Offset(size.width - 0.5f, size.height), strokeWidth = 1f)
+                            val isToday      = day == today
+                            val isWeekend    = day.dayOfWeek == DayOfWeek.SATURDAY || day.dayOfWeek == DayOfWeek.SUNDAY
+                            val holidayForDay = holidayMap[day]
+                            val isHoliday = holidayForDay != null
+
+                            @OptIn(ExperimentalFoundationApi::class)
+                            TooltipArea(
+                                tooltip = {
+                                    if (holidayForDay != null) {
+                                        Surface(
+                                            shape           = RoundedCornerShape(4.dp),
+                                            shadowElevation = 8.dp,
+                                            color           = MaterialTheme.colorScheme.inverseSurface
+                                        ) {
+                                            Text(
+                                                holidayForDay.name,
+                                                style    = MaterialTheme.typography.labelSmall,
+                                                color    = MaterialTheme.colorScheme.inverseOnSurface,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                                maxLines = 2
+                                            )
+                                        }
                                     }
-                                    .padding(top = 5.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
+                                },
+                                tooltipPlacement = TooltipPlacement.CursorPoint(
+                                    offset = DpOffset(0.dp, 16.dp)
+                                )
                             ) {
-                                Text(
-                                    day.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, s.locale).take(
-                                        if (scale == TimelineScale.Year) 1 else 2
-                                    ),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = when {
-                                        isToday   -> MaterialTheme.colorScheme.onPrimaryContainer
-                                        isWeekend -> MaterialTheme.colorScheme.error.copy(alpha = 0.65f)
-                                        else      -> MaterialTheme.colorScheme.onSurfaceVariant
-                                    }
-                                )
-                                Spacer(Modifier.height(2.dp))
-                                Text(
-                                    day.dayOfMonth.toString(),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
-                                    color = when {
-                                        isToday   -> MaterialTheme.colorScheme.onPrimaryContainer
-                                        isWeekend -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
-                                        else      -> MaterialTheme.colorScheme.onSurface
-                                    }
-                                )
+                                Column(
+                                    Modifier.width(DAY_W).fillMaxHeight()
+                                        .background(when {
+                                            isToday   -> MaterialTheme.colorScheme.primaryContainer
+                                            isHoliday -> Color(0xFFFFF176).copy(alpha = 0.50f)
+                                            isWeekend -> MaterialTheme.colorScheme.surfaceVariant
+                                            else      -> Color.Transparent
+                                        })
+                                        .drawBehind {
+                                            drawLine(divColor, Offset(size.width - 0.5f, 0f), Offset(size.width - 0.5f, size.height), strokeWidth = 1f)
+                                        }
+                                        .padding(top = 5.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(
+                                        day.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, s.locale).take(
+                                            if (scale == TimelineScale.Year) 1 else 2
+                                        ),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = when {
+                                            isToday   -> MaterialTheme.colorScheme.onPrimaryContainer
+                                            isWeekend -> MaterialTheme.colorScheme.error.copy(alpha = 0.65f)
+                                            else      -> MaterialTheme.colorScheme.onSurfaceVariant
+                                        }
+                                    )
+                                    Spacer(Modifier.height(2.dp))
+                                    Text(
+                                        day.dayOfMonth.toString(),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
+                                        color = when {
+                                            isToday   -> MaterialTheme.colorScheme.onPrimaryContainer
+                                            isWeekend -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                                            else      -> MaterialTheme.colorScheme.onSurface
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
@@ -2772,6 +2845,8 @@ private fun ReservationsTimelineView(
                         .verticalScroll(vScroll)
                         .horizontalScroll(hScroll)
                 ) {
+                    val latestReservations = rememberUpdatedState(reservations)
+                    val latestBlocks = rememberUpdatedState(blocks)
                     Column(Modifier.width(totalWidth)) {
                         rooms.forEach { room ->
                             val isExpanded = expandedRoomId == room.id
@@ -2856,14 +2931,16 @@ private fun ReservationsTimelineView(
                                                     val e        = maxOf(ds.startIdx, ds.endIdx)
                                                     val checkIn  = days[s]
                                                     val checkOut = days[e].plusDays(1)
+                                                    val curRes   = latestReservations.value
+                                                    val curBlks  = latestBlocks.value
                                                     when (dragMode) {
                                                         DragMode.Block -> {
                                                             val noResConflict = !hasReservationConflict(
-                                                                reservations, ds.room.id,
+                                                                curRes, ds.room.id,
                                                                 checkIn.toString(), checkOut.toString()
                                                             )
                                                             val noBlockConflict = !hasBlockConflict(
-                                                                blocks, ds.room.id,
+                                                                curBlks, ds.room.id,
                                                                 checkIn.toString(), checkOut.toString()
                                                             )
                                                             if (noResConflict && noBlockConflict)
@@ -2871,20 +2948,20 @@ private fun ReservationsTimelineView(
                                                         }
                                                         DragMode.External -> {
                                                             val noConflict = !hasReservationConflict(
-                                                                reservations, ds.room.id,
+                                                                curRes, ds.room.id,
                                                                 checkIn.toString(), checkOut.toString()
                                                             ) && !hasBlockConflict(
-                                                                blocks, ds.room.id,
+                                                                curBlks, ds.room.id,
                                                                 checkIn.toString(), checkOut.toString()
                                                             )
                                                             if (noConflict) onCreateExternalRequest(ds.room, checkIn, checkOut)
                                                         }
                                                         DragMode.Reservation -> {
                                                             val noConflict = !hasReservationConflict(
-                                                                reservations, ds.room.id,
+                                                                curRes, ds.room.id,
                                                                 checkIn.toString(), checkOut.toString()
                                                             ) && !hasBlockConflict(
-                                                                blocks, ds.room.id,
+                                                                curBlks, ds.room.id,
                                                                 checkIn.toString(), checkOut.toString()
                                                             )
                                                             if (noConflict) onCreateRequest(ds.room, checkIn, checkOut)
@@ -2902,9 +2979,11 @@ private fun ReservationsTimelineView(
                                     days.forEach { day ->
                                         val isWeekend = day.dayOfWeek == DayOfWeek.SATURDAY || day.dayOfWeek == DayOfWeek.SUNDAY
                                         val isToday   = day == today
+                                        val isHoliday = day in holidayMap
                                         Box(Modifier.width(DAY_W).fillMaxHeight()
                                             .background(when {
                                                 isToday   -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
+                                                isHoliday -> Color(0xFFFFF176).copy(alpha = 0.35f)
                                                 isWeekend -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                                                 else      -> Color.Transparent
                                             })

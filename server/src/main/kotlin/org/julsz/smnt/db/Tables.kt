@@ -150,3 +150,12 @@ object ReservationPriceAdjustments : Table("reservation_price_adjustments") {
     val description   = varchar("description", 255).nullable()
     override val primaryKey = PrimaryKey(id)
 }
+
+object Holidays : Table("holidays") {
+    val id       = integer("id").autoIncrement()
+    val hotelId  = integer("hotel_id")
+    val name     = varchar("name", 255)
+    val fromDate = date("from_date")
+    val toDate   = date("to_date")
+    override val primaryKey = PrimaryKey(id)
+}

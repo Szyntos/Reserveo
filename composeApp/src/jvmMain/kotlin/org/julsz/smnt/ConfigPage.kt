@@ -1,7 +1,11 @@
 package org.julsz.smnt
 
+import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollbarAdapter
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -9,8 +13,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.ktor.client.*
+import io.ktor.client.call.*
+import io.ktor.client.request.*
+import io.ktor.http.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 
-private enum class ConfigSection { Rooms, BasePrice }
+private enum class ConfigSection { Rooms, BasePrice, Holidays }
 
 @Composable
 fun ConfigPage(client: HttpClient, hotel: UserHotelRoleDto) {
@@ -23,6 +34,8 @@ fun ConfigPage(client: HttpClient, hotel: UserHotelRoleDto) {
             RoomsConfigPage(client, hotel, onBack = { section = null })
         ConfigSection.BasePrice ->
             BasePriceConfigPage(client, hotel, onBack = { section = null })
+        ConfigSection.Holidays ->
+            HolidaysConfigPage(client, hotel, onBack = { section = null })
     }
 }
 
@@ -50,10 +63,12 @@ private fun ConfigHub(hotel: UserHotelRoleDto, onNavigate: (ConfigSection) -> Un
                 val title = when (entity) {
                     ConfigSection.Rooms     -> s.configRoomsTitle
                     ConfigSection.BasePrice -> s.configBasePriceTitle
+                    ConfigSection.Holidays  -> s.configHolidaysTitle
                 }
                 val description = when (entity) {
                     ConfigSection.Rooms     -> s.configRoomsDesc
                     ConfigSection.BasePrice -> s.configBasePriceDesc
+                    ConfigSection.Holidays  -> s.configHolidaysDesc
                 }
                 ConfigCard(
                     title       = title,
@@ -100,5 +115,207 @@ private fun ConfigCard(
                 )
             }
         }
+    }
+}
+
+// ─── Holidays config page ─────────────────────────────────────────────────────
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun HolidaysConfigPage(client: HttpClient, hotel: UserHotelRoleDto, onBack: () -> Unit) {
+    val s        = LocalStrings.current
+    val snackbar = LocalSnackbar.current
+    val scope    = rememberCoroutineScope()
+
+    var holidays by remember { mutableStateOf<List<HolidayDto>>(emptyList()) }
+    var loading  by remember { mutableStateOf(true) }
+
+    var newName     by remember { mutableStateOf("") }
+    var newFromDate by remember { mutableStateOf("") }
+    var newToDate   by remember { mutableStateOf("") }
+
+    LaunchedEffect(hotel.hotelId) {
+        loading = true
+        try {
+            holidays = client.get("$BASE_URL/api/holidays?hotelId=${hotel.hotelId}").body()
+        } catch (e: Exception) {
+            snackbar.showSnackbar(s.errorMsg(e.message ?: "?"))
+        }
+        loading = false
+    }
+
+    val scrollState = rememberScrollState()
+    Box(Modifier.fillMaxSize()) {
+        Column(
+            Modifier.fillMaxSize().verticalScroll(scrollState).padding(end = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            TextButton(onClick = onBack) { Text(s.breadcrumbConfig) }
+
+            Text(s.configHolidaysTitle, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+
+            if (loading) {
+                CircularProgressIndicator()
+            } else {
+                // ── Add form ──
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(s.addHolidayTitle, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        OutlinedTextField(
+                            value          = newName,
+                            onValueChange  = { newName = it },
+                            label          = { Text(s.holidayNameLabel) },
+                            placeholder    = { Text(s.holidayNamePlaceholder) },
+                            modifier       = Modifier.fillMaxWidth(),
+                            singleLine     = true
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value         = newFromDate,
+                                onValueChange = { newFromDate = it },
+                                label         = { Text(s.fromLabel) },
+                                placeholder   = { Text("YYYY-MM-DD") },
+                                modifier      = Modifier.weight(1f),
+                                singleLine    = true
+                            )
+                            OutlinedTextField(
+                                value         = newToDate,
+                                onValueChange = { newToDate = it },
+                                label         = { Text(s.toLabel) },
+                                placeholder   = { Text("YYYY-MM-DD") },
+                                modifier      = Modifier.weight(1f),
+                                singleLine    = true
+                            )
+                        }
+                        val canAdd = newName.isNotBlank() &&
+                            runCatching { java.time.LocalDate.parse(newFromDate.trim()) }.isSuccess &&
+                            runCatching { java.time.LocalDate.parse(newToDate.trim()) }.isSuccess
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = {
+                                    scope.launch {
+                                        try {
+                                            val created: HolidayDto = client.post("$BASE_URL/api/holidays") {
+                                                contentType(ContentType.Application.Json)
+                                                setBody(CreateHolidayRequest(
+                                                    hotelId  = hotel.hotelId,
+                                                    name     = newName.trim(),
+                                                    fromDate = newFromDate.trim(),
+                                                    toDate   = newToDate.trim()
+                                                ))
+                                            }.body()
+                                            holidays = (holidays + created).sortedBy { it.fromDate }
+                                            newName = ""; newFromDate = ""; newToDate = ""
+                                        } catch (e: Exception) {
+                                            snackbar.showSnackbar(s.errorMsg(e.message ?: "?"))
+                                        }
+                                    }
+                                },
+                                enabled = canAdd
+                            ) { Text(s.addHolidayBtn) }
+                            OutlinedButton(onClick = {
+                                scope.launch {
+                                    try {
+                                        val file = withContext(Dispatchers.IO) {
+                                            val ps = """
+                                                Add-Type -AssemblyName System.Windows.Forms
+                                                ${'$'}d = New-Object System.Windows.Forms.OpenFileDialog
+                                                ${'$'}d.Filter = 'CSV files (*.csv)|*.csv|All files (*.*)|*.*'
+                                                ${'$'}d.Title = '${s.importCsvBtn}'
+                                                if (${'$'}d.ShowDialog() -eq 'OK') { Write-Output ${'$'}d.FileName }
+                                            """.trimIndent()
+                                            val proc = ProcessBuilder("powershell", "-NoProfile", "-NonInteractive", "-Command", ps)
+                                                .redirectErrorStream(true)
+                                                .start()
+                                            val path = proc.inputStream.bufferedReader().readText().trim()
+                                            proc.waitFor()
+                                            path.takeIf { it.isNotBlank() }?.let { File(it) }
+                                        }
+                                        if (file == null) return@launch
+                                        val csv = withContext(Dispatchers.IO) { file.readText() }
+                                        val response: ImportHolidaysResponse = client.post("$BASE_URL/api/holidays/import") {
+                                            contentType(ContentType.Application.Json)
+                                            setBody(ImportHolidaysRequest(hotelId = hotel.hotelId, csv = csv))
+                                        }.body()
+                                        holidays = (holidays + response.holidays).sortedBy { it.fromDate }
+                                        snackbar.showSnackbar(s.importCsvResult(response.imported))
+                                    } catch (e: Exception) {
+                                        snackbar.showSnackbar(s.errorMsg(e.message ?: "?"))
+                                    }
+                                }
+                            }) { Text(s.importCsvBtn) }
+                        }
+                    }
+                }
+
+                // ── List ──
+                if (holidays.isEmpty()) {
+                    Text(
+                        s.noHolidays,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    val byYear = remember(holidays) {
+                        holidays.groupBy { it.fromDate.take(4) }.entries.sortedBy { it.key }
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                        byYear.forEach { (year, yearHolidays) ->
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    year,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement   = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    yearHolidays.forEach { h ->
+                                        Card(modifier = Modifier.width(260.dp)) {
+                                            Row(
+                                                Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Column(Modifier.weight(1f)) {
+                                                    Text(h.name, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, maxLines = 2)
+                                                    val dateStr = if (h.fromDate == h.toDate) h.fromDate
+                                                                  else "${h.fromDate} – ${h.toDate}"
+                                                    Text(dateStr, style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                }
+                                                IconButton(
+                                                    onClick = {
+                                                        scope.launch {
+                                                            try {
+                                                                client.delete("$BASE_URL/api/holidays/${h.id}")
+                                                                holidays = holidays.filter { it.id != h.id }
+                                                            } catch (e: Exception) {
+                                                                snackbar.showSnackbar(s.errorMsg(e.message ?: "?"))
+                                                            }
+                                                        }
+                                                    },
+                                                    modifier = Modifier.size(32.dp)
+                                                ) {
+                                                    Text("×", style = MaterialTheme.typography.titleMedium,
+                                                        color = MaterialTheme.colorScheme.error)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        VerticalScrollbar(
+            adapter  = rememberScrollbarAdapter(scrollState),
+            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+        )
     }
 }

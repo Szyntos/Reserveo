@@ -50,6 +50,7 @@ fun Application.module() {
             priceRoutes()
             roomBlockRoutes()
             paymentRoutes()
+            holidayRoutes()
         }
     }
 }

@@ -63,7 +63,18 @@ interface AppStrings {
     val configRoomsDesc: String
     val configBasePriceTitle: String
     val configBasePriceDesc: String
+    val configHolidaysTitle: String
+    val configHolidaysDesc: String
     val configManage: String
+
+    // Holidays
+    val noHolidays: String
+    val addHolidayBtn: String
+    val addHolidayTitle: String
+    val holidayNameLabel: String
+    val holidayNamePlaceholder: String
+    val importCsvBtn: String
+    fun importCsvResult(count: Int): String
 
     // Rooms config
     val breadcrumbConfig: String
@@ -322,7 +333,16 @@ object EnglishStrings : AppStrings {
     override val configRoomsDesc = "Manage rooms, statuses and availability"
     override val configBasePriceTitle = "Base Price"
     override val configBasePriceDesc = "Set pricing rules by room, period and stay length"
+    override val configHolidaysTitle = "Holidays"
+    override val configHolidaysDesc = "Mark public holidays and school breaks for calendar highlighting"
     override val configManage = "Manage →"
+    override val noHolidays           = "No holidays defined"
+    override val addHolidayBtn        = "Add Holiday"
+    override val addHolidayTitle      = "Add Holiday"
+    override val holidayNameLabel     = "Name *"
+    override val holidayNamePlaceholder = "Christmas, Spring Break…"
+    override val importCsvBtn         = "Import from CSV"
+    override fun importCsvResult(count: Int) = "Imported $count holiday${if (count != 1) "s" else ""}"
     override val breadcrumbConfig = "← Config"
     override val roomsTitle = "Rooms"
     override fun roomsStats(active: Int, archived: Int) = "$active active · $archived archived"
@@ -562,7 +582,20 @@ object PolishStrings : AppStrings {
     override val configRoomsDesc = "Zarządzaj pokojami, statusami i dostępnością"
     override val configBasePriceTitle = "Ceny bazowe"
     override val configBasePriceDesc = "Ustaw reguły cenowe według pokoju, okresu i długości pobytu"
+    override val configHolidaysTitle = "Święta"
+    override val configHolidaysDesc = "Oznacz święta i przerwy szkolne na kalendarzu"
     override val configManage = "Zarządzaj →"
+    override val noHolidays           = "Brak zdefiniowanych świąt"
+    override val addHolidayBtn        = "Dodaj święto"
+    override val addHolidayTitle      = "Dodaj święto"
+    override val holidayNameLabel     = "Nazwa *"
+    override val holidayNamePlaceholder = "Boże Narodzenie, Ferie zimowe…"
+    override val importCsvBtn         = "Importuj z CSV"
+    override fun importCsvResult(count: Int) = when {
+        count == 1             -> "Zaimportowano 1 święto"
+        count in 2..4          -> "Zaimportowano $count święta"
+        else                   -> "Zaimportowano $count świąt"
+    }
     override val breadcrumbConfig = "← Konfiguracja"
     override val roomsTitle = "Pokoje"
     override fun roomsStats(active: Int, archived: Int) = "$active aktywne · $archived zarchiwizowane"

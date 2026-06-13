@@ -280,3 +280,32 @@ data class UpdatePriceRuleRequest(
     val pricePerPersonPerNight: Double,
     val currency: String = "PLN"
 )
+
+@Serializable
+data class HolidayDto(
+    val id: Int,
+    val hotelId: Int,
+    val name: String,
+    val fromDate: String,
+    val toDate: String
+)
+
+@Serializable
+data class CreateHolidayRequest(
+    val hotelId: Int,
+    val name: String,
+    val fromDate: String,
+    val toDate: String
+)
+
+@Serializable
+data class ImportHolidaysRequest(
+    val hotelId: Int,
+    val csv: String
+)
+
+@Serializable
+data class ImportHolidaysResponse(
+    val imported: Int,
+    val holidays: List<HolidayDto>
+)

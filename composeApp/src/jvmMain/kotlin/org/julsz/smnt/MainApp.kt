@@ -27,7 +27,7 @@ import java.time.Month
 import java.time.format.TextStyle
 import kotlin.math.roundToInt
 
-private enum class AppScreen { Dashboard, Reservations, Config, Settings }
+private enum class AppScreen { Dashboard, Reservations, Statistics, Config, Settings }
 
 private data class StatYM(val year: Int, val month: Int) : Comparable<StatYM> {
     override fun compareTo(other: StatYM) = compareValuesBy(this, other, StatYM::year, StatYM::month)
@@ -89,6 +89,7 @@ fun MainApp(
                     when (currentScreen) {
                         AppScreen.Dashboard    -> DashboardPage(client = client, hotel = selectedHotel, noShowAfterDays = noShowAfterDays, autoCheckOutAfterDays = autoCheckOutAfterDays)
                         AppScreen.Reservations -> ReservationsCalendarPage(client, selectedHotel, centerDays, noShowAfterDays, autoCheckOutAfterDays)
+                        AppScreen.Statistics   -> StatisticsPage(client = client, hotel = selectedHotel)
                         AppScreen.Config       -> ConfigPage(client, selectedHotel)
                         AppScreen.Settings     -> SettingsPage(fontScale = fontScale, onFontScaleChange = onFontScaleChange, centerDays = centerDays, onCenterDaysChange = onCenterDaysChange, noShowAfterDays = noShowAfterDays, onNoShowAfterDaysChange = onNoShowAfterDaysChange, autoCheckOutAfterDays = autoCheckOutAfterDays, onAutoCheckOutAfterDaysChange = onAutoCheckOutAfterDaysChange, language = language, onLanguageChange = onLanguageChange)
                     }
@@ -151,6 +152,7 @@ private fun AppSidebar(
                 val label = when (screen) {
                     AppScreen.Dashboard    -> s.navDashboard
                     AppScreen.Reservations -> s.navReservations
+                    AppScreen.Statistics   -> s.statsTitle
                     AppScreen.Config       -> s.navConfig
                     AppScreen.Settings     -> s.navSettings
                 }
@@ -383,10 +385,7 @@ private fun DashboardPage(client: HttpClient, hotel: UserHotelRoleDto, noShowAft
         }
     }
 
-    Column(
-        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
-    ) {
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(20.dp)) {
         Text(hotel.hotelName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
 
         if (loading) {
@@ -426,7 +425,7 @@ private fun DashboardPage(client: HttpClient, hotel: UserHotelRoleDto, noShowAft
 
             // ── Arrivals / Departures / Overdue ───────────────────────────────
             Row(
-                Modifier.fillMaxWidth().height(280.dp),
+                Modifier.fillMaxWidth().weight(1f),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 DashboardTile(
@@ -462,8 +461,6 @@ private fun DashboardPage(client: HttpClient, hotel: UserHotelRoleDto, noShowAft
                     modifier     = Modifier.weight(1f)
                 )
             }
-
-            StatisticsSection(reservations = reservations, rooms = rooms)
         }
     }
 }
@@ -759,7 +756,37 @@ private fun OverdueCheckOutsTile(
     }
 }
 
-// ─── Statistics section ───────────────────────────────────────────────────────
+// ─── Statistics page + section ────────────────────────────────────────────────
+
+@Composable
+private fun StatisticsPage(client: HttpClient, hotel: UserHotelRoleDto) {
+    val s        = LocalStrings.current
+    val snackbar = LocalSnackbar.current
+    var reservations by remember { mutableStateOf<List<ReservationDto>>(emptyList()) }
+    var rooms        by remember { mutableStateOf<List<RoomDto>>(emptyList()) }
+    var loading      by remember { mutableStateOf(true) }
+
+    LaunchedEffect(hotel.hotelId) {
+        loading = true
+        try {
+            reservations = client.get("$BASE_URL/api/reservations?hotelId=${hotel.hotelId}").body()
+            rooms = client.get("$BASE_URL/api/rooms?hotelId=${hotel.hotelId}").body<List<RoomDto>>()
+                .filter { it.archivedAt == null }
+        } catch (e: Exception) {
+            snackbar.showSnackbar(s.errorMsg(e.message ?: "?"))
+        }
+        loading = false
+    }
+
+    if (loading) {
+        CircularProgressIndicator()
+    } else {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+            StatisticsSection(reservations = reservations, rooms = rooms)
+            Spacer(Modifier.height(16.dp))
+        }
+    }
+}
 
 @Composable
 private fun StatisticsSection(reservations: List<ReservationDto>, rooms: List<RoomDto>) {
@@ -771,6 +798,10 @@ private fun StatisticsSection(reservations: List<ReservationDto>, rooms: List<Ro
     var endYM        by remember { mutableStateOf(currYM) }
     var histGroup    by remember { mutableStateOf(HistGroup.All) }
     var selectedRoom by remember { mutableStateOf<RoomDto?>(null) }
+
+    val sortedRooms = remember(rooms) {
+        rooms.sortedWith(compareBy({ it.number.toIntOrNull() ?: Int.MAX_VALUE }, { it.number }))
+    }
 
     val months = remember(endYM, monthsBack) {
         buildList {
@@ -784,8 +815,7 @@ private fun StatisticsSection(reservations: List<ReservationDto>, rooms: List<Ro
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        HorizontalDivider()
-        Text(s.statsTitle, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text(s.statsTitle, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
 
         // time-span controls
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -828,7 +858,7 @@ private fun StatisticsSection(reservations: List<ReservationDto>, rooms: List<Ro
 
         Text(s.statsNightsTable, style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        NightsTable(rooms = rooms, months = months, reservations = active)
+        NightsTable(rooms = sortedRooms, months = months, reservations = active)
 
         Spacer(Modifier.height(4.dp))
 
@@ -866,7 +896,7 @@ private fun StatisticsSection(reservations: List<ReservationDto>, rooms: List<Ro
                             style = MaterialTheme.typography.labelSmall)
                     }
                     DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                        rooms.forEach { room ->
+                        sortedRooms.forEach { room ->
                             DropdownMenuItem(
                                 text    = { Text("${s.roomShort(room.number)} (${room.typeName})") },
                                 onClick = { selectedRoom = room; expanded = false }
@@ -879,7 +909,7 @@ private fun StatisticsSection(reservations: List<ReservationDto>, rooms: List<Ro
 
         NightsHistogram(
             reservations = active,
-            rooms        = rooms,
+            rooms        = sortedRooms,
             months       = months,
             group        = histGroup,
             selectedRoom = if (histGroup == HistGroup.OneRoom) selectedRoom else null
@@ -1039,52 +1069,61 @@ private fun NightsHistogram(
         return
     }
 
-    val maxNights  = minOf(barMap.keys.max(), 30)
-    val maxCount   = barMap.values.maxOf { it.total }
-    val groupKeys  = if (group == HistGroup.ByType)
-                         barMap.values.flatMap { it.segments.map { s -> s.first } }.distinct().sorted()
-                     else listOf("")
-    val colorMap   = groupKeys.mapIndexed { i, k -> k to HIST_COLORS[i % HIST_COLORS.size] }.toMap()
-    val chartH     = 160.dp
-    val barW       = 30.dp
+    val maxNights = minOf(barMap.keys.max(), 30)
+    val maxCount  = barMap.values.maxOf { it.total }
+    val groupKeys = if (group == HistGroup.ByType)
+                        barMap.values.flatMap { it.segments.map { seg -> seg.first } }.distinct().sorted()
+                    else listOf("")
+    val colorMap  = groupKeys.mapIndexed { i, k -> k to HIST_COLORS[i % HIST_COLORS.size] }.toMap()
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Box(
+        Column(
             Modifier.fillMaxWidth()
                 .clip(RoundedCornerShape(8.dp))
                 .background(surfVar)
-                .padding(horizontal = 12.dp, vertical = 10.dp)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Row(
-                Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(3.dp)
-            ) {
-                (1..maxNights).forEach { n ->
-                    val bar   = barMap[n]
-                    val total = bar?.total ?: 0
-                    val barH  = if (maxCount > 0 && total > 0) chartH * (total.toFloat() / maxCount) else 0.dp
+            (1..maxNights).forEach { n ->
+                val bar   = barMap[n]
+                val total = bar?.total ?: 0
+                val frac  = if (maxCount > 0 && total > 0) total.toFloat() / maxCount else 0f
 
-                    Column(Modifier.width(barW), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Box(Modifier.height(16.dp), contentAlignment = Alignment.BottomCenter) {
-                            if (total > 0) Text("$total", style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        Box(Modifier.width(barW).height(chartH), contentAlignment = Alignment.BottomCenter) {
-                            if (total > 0) {
-                                Column(
-                                    Modifier.width(barW).height(barH)
-                                        .clip(RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp))
-                                ) {
-                                    (bar?.segments ?: emptyList())
-                                        .sortedBy { groupKeys.indexOf(it.first) }
-                                        .forEach { (key, cnt) ->
-                                            Box(Modifier.width(barW).weight(cnt.toFloat())
-                                                .background(colorMap[key] ?: primary))
-                                        }
-                                }
+                Row(
+                    Modifier.fillMaxWidth().height(20.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    // nights label, right-aligned
+                    Box(Modifier.width(24.dp), contentAlignment = Alignment.CenterEnd) {
+                        Text("$n", style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    // bar track
+                    Box(
+                        Modifier.weight(1f).fillMaxHeight()
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
+                    ) {
+                        if (total > 0) {
+                            Row(
+                                Modifier.fillMaxHeight().fillMaxWidth(frac)
+                                    .clip(RoundedCornerShape(topEnd = 3.dp, bottomEnd = 3.dp))
+                            ) {
+                                (bar?.segments ?: emptyList())
+                                    .sortedBy { groupKeys.indexOf(it.first) }
+                                    .forEach { (key, cnt) ->
+                                        Box(
+                                            Modifier.fillMaxHeight().weight(cnt.toFloat())
+                                                .background(colorMap[key] ?: primary)
+                                        )
+                                    }
                             }
                         }
-                        Text("$n", style = MaterialTheme.typography.labelSmall,
+                    }
+                    // count label
+                    Box(Modifier.width(30.dp)) {
+                        if (total > 0) Text("$total", style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
