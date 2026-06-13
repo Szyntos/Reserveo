@@ -315,3 +315,135 @@ data class ImportHolidaysResponse(
     val imported: Int,
     val holidays: List<HolidayDto>
 )
+
+// ─── Invoice DTOs ─────────────────────────────────────────────────────────────
+
+@Serializable
+data class InvoiceItemDto(
+    val id: Int,
+    val invoiceId: Int,
+    val ordinal: Int,
+    val name: String,
+    val quantity: Double,
+    val unit: String,
+    val unitNetPrice: Double,
+    val vatRate: String,
+    val netAmount: Double,
+    val vatAmount: Double,
+    val grossAmount: Double
+)
+
+@Serializable
+data class InvoiceDto(
+    val id: Int,
+    val hotelId: Int,
+    val reservationId: Int?,
+    val invoiceNumber: String,
+    val issueDate: String,
+    val saleDate: String,
+    val dueDate: String,
+    val paymentMethod: String,
+    val sellerName: String,
+    val sellerAddress: String?,
+    val sellerNip: String?,
+    val sellerRegon: String?,
+    val sellerBankAccount: String?,
+    val sellerPhone: String?,
+    val sellerEmail: String?,
+    val buyerName: String,
+    val buyerAddress: String?,
+    val buyerNip: String?,
+    val buyerRegon: String?,
+    val totalNet: Double,
+    val totalVat: Double,
+    val totalGross: Double,
+    val notes: String?,
+    val createdAt: String,
+    val items: List<InvoiceItemDto> = emptyList()
+)
+
+@Serializable
+data class CreateInvoiceItemRequest(
+    val ordinal: Int,
+    val name: String,
+    val quantity: Double,
+    val unit: String,
+    val unitNetPrice: Double,
+    val vatRate: String
+)
+
+@Serializable
+data class CreateInvoiceRequest(
+    val hotelId: Int,
+    val reservationId: Int?,
+    val invoiceNumber: String? = null,
+    val issueDate: String,
+    val saleDate: String,
+    val dueDate: String,
+    val paymentMethod: String,
+    val sellerName: String,
+    val sellerAddress: String?,
+    val sellerNip: String?,
+    val sellerRegon: String?,
+    val sellerBankAccount: String?,
+    val sellerPhone: String?,
+    val sellerEmail: String?,
+    val buyerName: String,
+    val buyerAddress: String?,
+    val buyerNip: String?,
+    val buyerRegon: String?,
+    val notes: String?,
+    val items: List<CreateInvoiceItemRequest>
+)
+
+@Serializable
+data class NextInvoiceNumberResponse(val number: String)
+
+@Serializable
+data class InvoiceSettingsDto(
+    val hotelId: Int,
+    val sellerName: String?,
+    val sellerAddress: String?,
+    val sellerNip: String?,
+    val sellerRegon: String?,
+    val sellerBankAccount: String?,
+    val sellerPhone: String?,
+    val sellerEmail: String?,
+    val defaultPaymentMethod: String,
+    val defaultDueDays: Int
+)
+
+@Serializable
+data class UpdateInvoiceRequest(
+    val invoiceNumber: String,
+    val issueDate: String,
+    val saleDate: String,
+    val dueDate: String,
+    val paymentMethod: String,
+    val sellerName: String,
+    val sellerAddress: String?,
+    val sellerNip: String?,
+    val sellerRegon: String?,
+    val sellerBankAccount: String?,
+    val sellerPhone: String?,
+    val sellerEmail: String?,
+    val buyerName: String,
+    val buyerAddress: String?,
+    val buyerNip: String?,
+    val buyerRegon: String?,
+    val notes: String?,
+    val items: List<CreateInvoiceItemRequest>
+)
+
+@Serializable
+data class SaveInvoiceSettingsRequest(
+    val sellerName: String?,
+    val sellerAddress: String?,
+    val sellerNip: String?,
+    val sellerRegon: String?,
+    val sellerBankAccount: String?,
+    val sellerPhone: String?,
+    val sellerEmail: String?,
+    val defaultPaymentMethod: String,
+    val defaultDueDays: Int
+)

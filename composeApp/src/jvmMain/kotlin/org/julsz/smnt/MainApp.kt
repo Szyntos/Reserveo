@@ -27,7 +27,7 @@ import java.time.Month
 import java.time.format.TextStyle
 import kotlin.math.roundToInt
 
-private enum class AppScreen { Dashboard, Reservations, Statistics, Config, Settings }
+private enum class AppScreen { Dashboard, Reservations, Statistics, Config, Invoices, Settings }
 
 private data class StatYM(val year: Int, val month: Int) : Comparable<StatYM> {
     override fun compareTo(other: StatYM) = compareValuesBy(this, other, StatYM::year, StatYM::month)
@@ -68,7 +68,8 @@ fun MainApp(
     language: AppLanguage = AppLanguage.English,
     onLanguageChange: (AppLanguage) -> Unit = {}
 ) {
-    var currentScreen by remember { mutableStateOf(AppScreen.Dashboard) }
+    var currentScreen          by remember { mutableStateOf(AppScreen.Dashboard) }
+    var invoiceForReservation  by remember { mutableStateOf<ReservationDto?>(null) }
     val snackbarState = remember { SnackbarHostState() }
 
     CompositionLocalProvider(LocalSnackbar provides snackbarState) {
@@ -88,9 +89,18 @@ fun MainApp(
                 Box(Modifier.fillMaxSize().padding(28.dp)) {
                     when (currentScreen) {
                         AppScreen.Dashboard    -> DashboardPage(client = client, hotel = selectedHotel, noShowAfterDays = noShowAfterDays, autoCheckOutAfterDays = autoCheckOutAfterDays)
-                        AppScreen.Reservations -> ReservationsCalendarPage(client, selectedHotel, centerDays, noShowAfterDays, autoCheckOutAfterDays)
+                        AppScreen.Reservations -> ReservationsCalendarPage(client, selectedHotel, centerDays, noShowAfterDays, autoCheckOutAfterDays,
+                            onCreateInvoice = { res -> invoiceForReservation = res; currentScreen = AppScreen.Invoices },
+                            onViewInvoice   = { currentScreen = AppScreen.Invoices })
                         AppScreen.Statistics   -> StatisticsPage(client = client, hotel = selectedHotel)
                         AppScreen.Config       -> ConfigPage(client, selectedHotel)
+                        AppScreen.Invoices     -> InvoicePage(
+                            client             = client,
+                            hotel              = selectedHotel,
+                            initialReservation = invoiceForReservation,
+                            onInitialConsumed  = { invoiceForReservation = null },
+                            fontScale          = fontScale
+                        )
                         AppScreen.Settings     -> SettingsPage(fontScale = fontScale, onFontScaleChange = onFontScaleChange, centerDays = centerDays, onCenterDaysChange = onCenterDaysChange, noShowAfterDays = noShowAfterDays, onNoShowAfterDaysChange = onNoShowAfterDaysChange, autoCheckOutAfterDays = autoCheckOutAfterDays, onAutoCheckOutAfterDaysChange = onAutoCheckOutAfterDaysChange, language = language, onLanguageChange = onLanguageChange)
                     }
                 }
@@ -154,6 +164,7 @@ private fun AppSidebar(
                     AppScreen.Reservations -> s.navReservations
                     AppScreen.Statistics   -> s.statsTitle
                     AppScreen.Config       -> s.navConfig
+                    AppScreen.Invoices     -> s.navInvoices
                     AppScreen.Settings     -> s.navSettings
                 }
                 SidebarItem(

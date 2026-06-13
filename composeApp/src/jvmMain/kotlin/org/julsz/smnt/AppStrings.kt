@@ -195,6 +195,9 @@ interface AppStrings {
     val receiptNumberLabel: String
     val invoiceNumberLabel: String
     fun docLabel(receiptType: String?, receiptNumber: String?): String
+    val customInvoiceNumberLabel: String
+    val noInvoiceForReservation: String
+    val viewInvoiceBtn: String
     val addPaymentBtn: String
     val typeRow: String
     val amountRow: String
@@ -289,6 +292,62 @@ interface AppStrings {
     val noOverdueCheckIns: String
     val overdueCheckOuts: String
     val noOverdueCheckOuts: String
+
+    // Invoice page
+    // Invoice config (settings in Config page)
+    val configInvoiceTitle: String
+    val configInvoiceDesc: String
+    val invoiceConfigTitle: String
+    val invoiceConfigSubtitle: String
+    val defaultDueDaysLabel: String
+    val savedLabel: String
+
+    val navInvoices: String
+    val invoicesTitle: String
+    val newInvoiceBtn: String
+    val createInvoiceBtn: String
+    val noInvoices: String
+    val createInvoiceTitle: String
+    val sellerSection: String
+    val buyerSection: String
+    val sellerNameLabel: String
+    val sellerAddressLabel: String
+    val nipLabel: String
+    val regonLabel: String
+    val bankAccountLabel: String
+    val buyerNameLabel: String
+    val buyerAddressLabel: String
+    val buyerNipLabel: String
+    val invoiceIssueDateLabel: String
+    val invoiceSaleDateLabel: String
+    val invoiceDueDateLabel: String
+    val paymentMethodLabel: String
+    val paymentMethodTransfer: String
+    val paymentMethodCash: String
+    val paymentMethodCard: String
+    val itemsSection: String
+    val addItemBtn: String
+    val vatRateLabel: String
+    val vatSummarySection: String
+    val totalNetLabel: String
+    val totalVatLabel: String
+    val totalGrossLabel: String
+    val createAndDownloadBtn: String
+    val linkedReservationLabel: String
+    val selectReservationOptional: String
+    val noLinkedReservation: String
+    val addReservationHint: String
+    val differentGuestTitle: String
+    fun differentGuestWarning(incoming: String, existing: String): String
+    val addAnywayBtn: String
+    val deleteInvoiceTitle: String
+    val downloadPdfBtn: String
+    val pdfSavedSuccess: String
+    val pdfSaveError: String
+    val invoiceNumberPreviewLabel: String
+    val editInvoiceTitle: String
+    val openInvoiceBtn: String
+    fun invoiceAlreadyExistsFor(number: String): String
 }
 
 // ─── English ──────────────────────────────────────────────────────────────────
@@ -459,6 +518,9 @@ object EnglishStrings : AppStrings {
         "invoice" -> "I: ${receiptNumber ?: "—"}"
         else      -> "—"
     }
+    override val customInvoiceNumberLabel = "Use custom invoice number"
+    override val noInvoiceForReservation  = "No invoice created for this reservation yet"
+    override val viewInvoiceBtn           = "View invoice"
     override val addPaymentBtn = "Add Payment"
     override val typeRow = "Type"
     override val amountRow = "Amount"
@@ -535,6 +597,59 @@ object EnglishStrings : AppStrings {
     override val noOverdueCheckIns = "No overdue check-ins"
     override val overdueCheckOuts   = "Overdue Check-outs"
     override val noOverdueCheckOuts = "No overdue check-outs"
+    override val configInvoiceTitle        = "Invoice Settings"
+    override val configInvoiceDesc        = "Configure default seller info for VAT invoices"
+    override val invoiceConfigTitle       = "Invoice Settings"
+    override val invoiceConfigSubtitle    = "Default seller data used when creating invoices"
+    override val defaultDueDaysLabel      = "Default due days"
+    override val savedLabel               = "Saved"
+    override val navInvoices              = "Invoices"
+    override val invoicesTitle            = "VAT Invoices"
+    override val newInvoiceBtn            = "New Invoice"
+    override val createInvoiceBtn         = "Create Invoice"
+    override val noInvoices               = "No invoices yet."
+    override val createInvoiceTitle       = "New Invoice"
+    override val sellerSection            = "Seller"
+    override val buyerSection             = "Buyer"
+    override val sellerNameLabel          = "Seller name *"
+    override val sellerAddressLabel       = "Address"
+    override val nipLabel                 = "NIP (tax ID)"
+    override val regonLabel               = "REGON"
+    override val bankAccountLabel         = "Bank account number"
+    override val buyerNameLabel           = "Buyer name *"
+    override val buyerAddressLabel        = "Buyer address"
+    override val buyerNipLabel            = "Buyer NIP"
+    override val invoiceIssueDateLabel    = "Issue date *"
+    override val invoiceSaleDateLabel     = "Sale date *"
+    override val invoiceDueDateLabel      = "Due date *"
+    override val paymentMethodLabel       = "Payment method"
+    override val paymentMethodTransfer    = "Bank transfer"
+    override val paymentMethodCash        = "Cash"
+    override val paymentMethodCard        = "Card"
+    override val itemsSection             = "Line items"
+    override val addItemBtn               = "Add item"
+    override val vatRateLabel             = "VAT rate"
+    override val vatSummarySection        = "VAT summary"
+    override val totalNetLabel            = "Total net"
+    override val totalVatLabel            = "Total VAT"
+    override val totalGrossLabel          = "Total gross"
+    override val createAndDownloadBtn     = "Create & Download PDF"
+    override val linkedReservationLabel    = "Link to reservation(s)"
+    override val selectReservationOptional = "Select reservation (optional)"
+    override val noLinkedReservation       = "No linked reservations"
+    override val addReservationHint        = "+ Add reservation"
+    override val differentGuestTitle       = "Different guest"
+    override fun differentGuestWarning(incoming: String, existing: String) =
+        "Reservation for \"$incoming\" differs from the current buyer \"$existing\". Add anyway?"
+    override val addAnywayBtn              = "Add anyway"
+    override val deleteInvoiceTitle       = "Delete invoice?"
+    override val downloadPdfBtn           = "Download PDF"
+    override val pdfSavedSuccess          = "PDF saved successfully"
+    override val pdfSaveError             = "Failed to save PDF"
+    override val invoiceNumberPreviewLabel = "Invoice number"
+    override val editInvoiceTitle = "Edit Invoice"
+    override val openInvoiceBtn = "Open"
+    override fun invoiceAlreadyExistsFor(number: String) = "Reservation already has invoice $number"
     override fun nightsPersonsLine(nights: Int, guests: Double): String {
         val g = if (guests % 1.0 == 0.0) guests.toLong().toString() else "%.1f".format(guests)
         return "$nights night${if (nights != 1) "s" else ""} × $g person${if (guests != 1.0) "s" else ""}"
@@ -720,6 +835,9 @@ object PolishStrings : AppStrings {
         "invoice" -> "F: ${receiptNumber ?: "—"}"
         else      -> "—"
     }
+    override val customInvoiceNumberLabel = "Użyj własnego numeru faktury"
+    override val noInvoiceForReservation  = "Nie utworzono jeszcze faktury dla tej rezerwacji"
+    override val viewInvoiceBtn           = "Otwórz fakturę"
     override val addPaymentBtn = "Dodaj płatność"
     override val typeRow = "Typ"
     override val amountRow = "Kwota"
@@ -803,6 +921,59 @@ object PolishStrings : AppStrings {
     override val noOverdueCheckIns = "Brak zaległych zameldowań"
     override val overdueCheckOuts   = "Zaległe wymeldowania"
     override val noOverdueCheckOuts = "Brak zaległych wymeldowań"
+    override val configInvoiceTitle        = "Ustawienia faktur"
+    override val configInvoiceDesc        = "Skonfiguruj domyślne dane sprzedawcy do faktur VAT"
+    override val invoiceConfigTitle       = "Ustawienia faktur"
+    override val invoiceConfigSubtitle    = "Domyślne dane sprzedawcy używane przy wystawianiu faktur"
+    override val defaultDueDaysLabel      = "Domyślny termin płatności (dni)"
+    override val savedLabel               = "Zapisano"
+    override val navInvoices              = "Faktury"
+    override val invoicesTitle            = "Faktury VAT"
+    override val newInvoiceBtn            = "Nowa faktura"
+    override val createInvoiceBtn         = "Wystaw fakturę"
+    override val noInvoices               = "Brak faktur."
+    override val createInvoiceTitle       = "Nowa faktura VAT"
+    override val sellerSection            = "Sprzedawca"
+    override val buyerSection             = "Nabywca"
+    override val sellerNameLabel          = "Nazwa sprzedawcy *"
+    override val sellerAddressLabel       = "Adres"
+    override val nipLabel                 = "NIP"
+    override val regonLabel               = "REGON"
+    override val bankAccountLabel         = "Nr rachunku bankowego"
+    override val buyerNameLabel           = "Nazwa nabywcy *"
+    override val buyerAddressLabel        = "Adres nabywcy"
+    override val buyerNipLabel            = "NIP nabywcy"
+    override val invoiceIssueDateLabel    = "Data wystawienia *"
+    override val invoiceSaleDateLabel     = "Data sprzedaży *"
+    override val invoiceDueDateLabel      = "Termin płatności *"
+    override val paymentMethodLabel       = "Sposób płatności"
+    override val paymentMethodTransfer    = "Przelew"
+    override val paymentMethodCash        = "Gotówka"
+    override val paymentMethodCard        = "Karta"
+    override val itemsSection             = "Pozycje faktury"
+    override val addItemBtn               = "Dodaj pozycję"
+    override val vatRateLabel             = "Stawka VAT"
+    override val vatSummarySection        = "Podsumowanie VAT"
+    override val totalNetLabel            = "Razem netto"
+    override val totalVatLabel            = "Razem VAT"
+    override val totalGrossLabel          = "Razem brutto"
+    override val createAndDownloadBtn     = "Utwórz i pobierz PDF"
+    override val linkedReservationLabel    = "Powiąż z rezerwacjami"
+    override val selectReservationOptional = "Wybierz rezerwację (opcjonalnie)"
+    override val noLinkedReservation       = "Brak powiązanych rezerwacji"
+    override val addReservationHint        = "+ Dodaj rezerwację"
+    override val differentGuestTitle       = "Inny gość"
+    override fun differentGuestWarning(incoming: String, existing: String) =
+        "Rezerwacja dla \"$incoming\" dotyczy innego gościa niż obecny nabywca \"$existing\". Dodać mimo to?"
+    override val addAnywayBtn              = "Dodaj mimo to"
+    override val deleteInvoiceTitle       = "Usunąć fakturę?"
+    override val downloadPdfBtn           = "Pobierz PDF"
+    override val pdfSavedSuccess          = "PDF zapisany pomyślnie"
+    override val pdfSaveError             = "Błąd zapisu PDF"
+    override val invoiceNumberPreviewLabel = "Numer faktury"
+    override val editInvoiceTitle = "Edytuj fakturę"
+    override val openInvoiceBtn = "Otwórz"
+    override fun invoiceAlreadyExistsFor(number: String) = "Rezerwacja ma już fakturę $number"
     override fun nightsPersonsLine(nights: Int, guests: Double): String {
         val g = if (guests % 1.0 == 0.0) guests.toLong().toString() else "%.1f".format(guests)
         val nightsStr = when {

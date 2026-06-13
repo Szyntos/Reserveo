@@ -52,6 +52,8 @@ fun Application.module() {
             paymentRoutes()
             holidayRoutes()
             tagRoutes()
+            invoiceRoutes()
+            invoiceSettingsRoutes()
         }
     }
 }

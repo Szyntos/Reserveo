@@ -99,7 +99,7 @@ private fun buildResWeeks(year: Int, month: Int): List<List<RCalDay>> {
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
 @Composable
-fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, centerDays: Int = 30, noShowAfterDays: Int = 14, autoCheckOutAfterDays: Int = 3) {
+fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, centerDays: Int = 30, noShowAfterDays: Int = 14, autoCheckOutAfterDays: Int = 3, onCreateInvoice: ((ReservationDto) -> Unit)? = null, onViewInvoice: ((InvoiceDto) -> Unit)? = null) {
     val scope = rememberCoroutineScope()
 
     var reservations by remember { mutableStateOf<List<ReservationDto>>(emptyList()) }
@@ -553,10 +553,13 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
             res       = res,
             rooms     = rooms,
             guests    = guests,
+            client    = client,
             onDismiss = { optionRes = null },
             onEdit    = { editReservation = res; optionRes = null },
             onPayments = { paymentsRes = res; optionRes = null },
             onEditGuest = { editGuestRes = res; optionRes = null },
+            onInvoice  = onCreateInvoice?.let { cb -> { cb(res); optionRes = null } },
+            onOpenInvoice = { inv -> onViewInvoice?.invoke(inv); optionRes = null },
             onSaveDescription = { desc ->
                 scope.launch {
                     try {
@@ -584,7 +587,8 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
             res               = res,
             client            = client,
             onDismiss         = { paymentsRes = null },
-            onPaymentsChanged = { scope.launch { loadData(showLoading = false) } }
+            onPaymentsChanged = { scope.launch { loadData(showLoading = false) } },
+            onViewInvoice     = onViewInvoice?.let { cb -> { inv -> paymentsRes = null; cb(inv) } }
         )
     }
 
@@ -923,10 +927,13 @@ private fun ReservationDetailDialog(
     res: ReservationDto,
     rooms: List<RoomDto>,
     guests: List<GuestDto>,
+    client: HttpClient,
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
     onPayments: () -> Unit,
     onEditGuest: () -> Unit,
+    onInvoice: (() -> Unit)? = null,
+    onOpenInvoice: ((InvoiceDto) -> Unit)? = null,
     onSaveDescription: (String?) -> Unit
 ) {
     val nights = remember(res.checkInDate, res.checkOutDate) {
@@ -934,9 +941,17 @@ private fun ReservationDetailDialog(
     }
     val room  = rooms.find { it.id == res.roomId }
     val guest = guests.find { it.id == res.guestId }
-    var description  by remember(res.id) { mutableStateOf(res.description ?: "") }
-    var editingNote  by remember(res.id) { mutableStateOf(false) }
+    var description       by remember(res.id) { mutableStateOf(res.description ?: "") }
+    var editingNote       by remember(res.id) { mutableStateOf(false) }
+    var reservationInvoice by remember(res.id) { mutableStateOf<InvoiceDto?>(null) }
     val s = LocalStrings.current
+
+    LaunchedEffect(res.id) {
+        try {
+            val invoices = client.get("$BASE_URL/api/invoices?hotelId=${res.hotelId}").body<List<InvoiceDto>>()
+            reservationInvoice = invoices.firstOrNull { it.reservationId == res.id }
+        } catch (_: Exception) {}
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1021,6 +1036,26 @@ private fun ReservationDetailDialog(
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.SemiBold,
                             color = if (remaining <= 0) Color(0xFF4CAF50) else Color(0xFFF44336)
+                        )
+                    }
+                }
+
+                reservationInvoice?.let { inv ->
+                    HorizontalDivider(Modifier.padding(vertical = 2.dp))
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(s.invoiceLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.width(72.dp))
+                        Text(
+                            inv.invoiceNumber,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.clickable { onOpenInvoice?.invoke(inv) }
                         )
                     }
                 }
@@ -1135,6 +1170,20 @@ private fun ReservationDetailDialog(
                 OutlinedButton(onClick = onEdit, modifier = Modifier.fillMaxWidth()) { Text(s.editReservationBtn) }
                 OutlinedButton(onClick = onPayments, modifier = Modifier.fillMaxWidth()) { Text(s.managePaymentsBtn) }
                 OutlinedButton(onClick = onEditGuest, modifier = Modifier.fillMaxWidth()) { Text(s.editGuestBtn) }
+                onInvoice?.let { createAction ->
+                    val inv = reservationInvoice
+                    OutlinedButton(
+                        onClick  = { if (inv == null) createAction() },
+                        enabled  = inv == null,
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text(s.createInvoiceBtn) }
+                    if (inv != null) {
+                        OutlinedButton(
+                            onClick  = { onOpenInvoice?.invoke(inv) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text(s.viewInvoiceBtn) }
+                    }
+                }
                 TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text(s.close) }
             }
         }
@@ -1149,31 +1198,44 @@ private fun ManagePaymentsDialog(
     res: ReservationDto,
     client: HttpClient,
     onDismiss: () -> Unit,
-    onPaymentsChanged: () -> Unit = {}
+    onPaymentsChanged: () -> Unit = {},
+    onViewInvoice: ((InvoiceDto) -> Unit)? = null
 ) {
     val scope    = rememberCoroutineScope()
     val s        = LocalStrings.current
     val snackbar = LocalSnackbar.current
-    var payments by remember { mutableStateOf<List<PaymentDto>>(emptyList()) }
+    var payments          by remember { mutableStateOf<List<PaymentDto>>(emptyList()) }
+    var reservationInvoice by remember { mutableStateOf<InvoiceDto?>(null) }
     var loading  by remember { mutableStateOf(true) }
 
     // Add-payment form state
-    var isDeposit          by remember { mutableStateOf(false) }
-    var amountInput        by remember { mutableStateOf("") }
-    var paidAtInput        by remember { mutableStateOf(LocalDate.now().toString()) }
-    var notesInput         by remember { mutableStateOf("") }
-    var receiptType        by remember { mutableStateOf("") }
-    var receiptNumberInput by remember { mutableStateOf("") }
-    var showDatePicker     by remember { mutableStateOf(false) }
+    var isDeposit             by remember { mutableStateOf(false) }
+    var amountInput           by remember { mutableStateOf("") }
+    var paidAtInput           by remember { mutableStateOf(LocalDate.now().toString()) }
+    var notesInput            by remember { mutableStateOf("") }
+    var receiptType           by remember { mutableStateOf("") }
+    var receiptNumberInput    by remember { mutableStateOf("") }
+    var useCustomInvoiceNumber by remember { mutableStateOf(false) }
+    var showDatePicker        by remember { mutableStateOf(false) }
 
     suspend fun reload() {
         loading = true
-        try { payments = client.get("$BASE_URL/api/reservations/${res.id}/payments").body() }
+        try {
+            payments = client.get("$BASE_URL/api/reservations/${res.id}/payments").body()
+            val invoices = client.get("$BASE_URL/api/invoices?hotelId=${res.hotelId}").body<List<InvoiceDto>>()
+            reservationInvoice = invoices.firstOrNull { it.reservationId == res.id }
+        }
         catch (e: Exception) { snackbar.showSnackbar(s.errorMsg(e.message ?: "?")) }
         loading = false
     }
 
     LaunchedEffect(res.id) { reload() }
+
+    LaunchedEffect(reservationInvoice) {
+        if (reservationInvoice != null && receiptType.isBlank()) {
+            receiptType = "invoice"
+        }
+    }
 
     val totalPaid = remember(payments) { payments.sumOf { it.amount } }
     val remaining = res.totalAmount?.let { it - totalPaid }
@@ -1285,9 +1347,13 @@ private fun ManagePaymentsDialog(
                                     style = MaterialTheme.typography.bodySmall,
                                     modifier = Modifier.weight(1.1f),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                val inv = reservationInvoice
+                                val isAppInvoiceLink = p.receiptType == "invoice" && inv != null && onViewInvoice != null
                                 Text(docLabel,
                                     style = MaterialTheme.typography.bodySmall,
-                                    modifier = Modifier.weight(1.5f),
+                                    modifier = Modifier.weight(1.5f).then(
+                                        if (isAppInvoiceLink) Modifier.clickable { onViewInvoice!!(inv!!) } else Modifier
+                                    ),
                                     color = if (p.receiptType != null) MaterialTheme.colorScheme.primary
                                             else MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -1341,7 +1407,20 @@ private fun ManagePaymentsDialog(
                                     val rType = p.receiptType
                                     if (rType != null) {
                                         SummaryRow(s.docTypeRow, rType.replaceFirstChar { it.uppercaseChar() })
-                                        SummaryRow(s.docNumberRow, p.receiptNumber ?: "—")
+                                        val appInv = reservationInvoice
+                                        if (rType == "invoice" && appInv != null && onViewInvoice != null) {
+                                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                Text(s.docNumberRow, style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    modifier = Modifier.width(72.dp))
+                                                Text(appInv.invoiceNumber,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.clickable { onViewInvoice(appInv) })
+                                            }
+                                        } else {
+                                            SummaryRow(s.docNumberRow, p.receiptNumber ?: "—")
+                                        }
                                     }
                                 }
                             }
@@ -1440,7 +1519,7 @@ private fun ManagePaymentsDialog(
                             Modifier
                                 .clip(RoundedCornerShape(6.dp))
                                 .background(if (sel) MaterialTheme.colorScheme.secondary else Color.Transparent)
-                                .clickable { receiptType = value; if (value.isEmpty()) receiptNumberInput = "" }
+                                .clickable { receiptType = value; receiptNumberInput = ""; useCustomInvoiceNumber = false }
                                 .padding(horizontal = 12.dp, vertical = 7.dp),
                             contentAlignment = Alignment.Center
                         ) {
@@ -1450,14 +1529,76 @@ private fun ManagePaymentsDialog(
                         }
                     }
                 }
-                if (receiptType.isNotEmpty()) {
+                if (receiptType == "receipt") {
                     OutlinedTextField(
                         value = receiptNumberInput,
                         onValueChange = { receiptNumberInput = it },
-                        label = { Text(if (receiptType == "receipt") s.receiptNumberLabel else s.invoiceNumberLabel) },
+                        label = { Text(s.receiptNumberLabel) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
+                } else if (receiptType == "invoice") {
+                    Row(
+                        Modifier.fillMaxWidth().clickable { useCustomInvoiceNumber = !useCustomInvoiceNumber },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(checked = useCustomInvoiceNumber, onCheckedChange = { useCustomInvoiceNumber = it })
+                        Text(s.customInvoiceNumberLabel, style = MaterialTheme.typography.bodyMedium)
+                    }
+                    if (useCustomInvoiceNumber) {
+                        OutlinedTextField(
+                            value = receiptNumberInput,
+                            onValueChange = { receiptNumberInput = it },
+                            label = { Text(s.invoiceNumberLabel) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    } else {
+                        val appInv = reservationInvoice
+                        if (appInv != null) {
+                            LaunchedEffect(appInv.invoiceNumber) { receiptNumberInput = appInv.invoiceNumber }
+                            Surface(
+                                shape    = RoundedCornerShape(6.dp),
+                                color    = MaterialTheme.colorScheme.secondaryContainer,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment     = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text(s.invoiceNumberLabel,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer)
+                                        Text(appInv.invoiceNumber,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer)
+                                    }
+                                    if (onViewInvoice != null) {
+                                        TextButton(onClick = { onViewInvoice(appInv) }) {
+                                            Text(s.viewInvoiceBtn)
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            LaunchedEffect(Unit) { receiptNumberInput = "" }
+                            Surface(
+                                shape    = RoundedCornerShape(6.dp),
+                                color    = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    s.noInvoiceForReservation,
+                                    Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
                 }
 
                 val canAdd = amountInput.toDoubleOrNull() != null && amountInput.toDouble() > 0
