@@ -162,6 +162,7 @@ interface AppStrings {
     val notesLabel: String
     val notesPlaceholder: String
     val saveNotesBtn: String
+    val editNoteBtn: String
     val editReservationBtn: String
     val editGuestBtn: String
     val managePaymentsBtn: String
@@ -420,6 +421,7 @@ object EnglishStrings : AppStrings {
     override val notesLabel = "Notes"
     override val notesPlaceholder = "Add notes about this reservation…"
     override val saveNotesBtn = "Save Notes"
+    override val editNoteBtn = "Edit Note"
     override val editReservationBtn = "Edit Reservation"
     override val editGuestBtn = "Edit Guest"
     override val managePaymentsBtn = "Manage Payments"
@@ -677,6 +679,7 @@ object PolishStrings : AppStrings {
     override val notesLabel = "Notatki"
     override val notesPlaceholder = "Dodaj notatki do tej rezerwacji…"
     override val saveNotesBtn = "Zapisz notatki"
+    override val editNoteBtn = "Edytuj notatkę"
     override val editReservationBtn = "Edytuj rezerwację"
     override val editGuestBtn = "Edytuj gościa"
     override val managePaymentsBtn = "Zarządzaj płatnościami"

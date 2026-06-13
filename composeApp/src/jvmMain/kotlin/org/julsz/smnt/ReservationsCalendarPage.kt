@@ -20,6 +20,9 @@ import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.material3.*
@@ -568,7 +571,6 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
                                 downPaymentAmount   = res.downPaymentAmount
                             ))
                         }
-                        optionRes = null
                         loadData(showLoading = false)
                     } catch (e: Exception) { snackbar.showSnackbar(s.errorMsg(e.message ?: "?")) }
                 }
@@ -932,7 +934,8 @@ private fun ReservationDetailDialog(
     }
     val room  = rooms.find { it.id == res.roomId }
     val guest = guests.find { it.id == res.guestId }
-    var description by remember(res.id) { mutableStateOf(res.description ?: "") }
+    var description  by remember(res.id) { mutableStateOf(res.description ?: "") }
+    var editingNote  by remember(res.id) { mutableStateOf(false) }
     val s = LocalStrings.current
 
     AlertDialog(
@@ -1024,21 +1027,111 @@ private fun ReservationDetailDialog(
 
                 HorizontalDivider(Modifier.padding(vertical = 2.dp))
 
-                Text(s.notesLabel, style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp),
-                    placeholder = { Text(s.notesPlaceholder) },
-                    maxLines = 5
-                )
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(s.notesLabel, style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (!editingNote) {
+                        TextButton(
+                            onClick = { editingNote = true },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                        ) {
+                            Text(s.editNoteBtn, style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+                if (editingNote) {
+                    val editScrollState = rememberScrollState()
+                    val noteFieldState = rememberTextFieldState(description)
+                    LaunchedEffect(noteFieldState.text) { description = noteFieldState.text.toString() }
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 72.dp, max = 160.dp)
+                            .border(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outline,
+                                shape = MaterialTheme.shapes.extraSmall
+                            )
+                    ) {
+                        BasicTextField(
+                            state = noteFieldState,
+                            scrollState = editScrollState,
+                            lineLimits = TextFieldLineLimits.MultiLine(),
+                            textStyle = MaterialTheme.typography.bodySmall.copy(
+                                color = MaterialTheme.colorScheme.onSurface
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                                .padding(end = 8.dp),
+                            decorator = { innerTextField ->
+                                if (noteFieldState.text.isEmpty()) {
+                                    Text(
+                                        s.notesPlaceholder,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                    )
+                                }
+                                innerTextField()
+                            }
+                        )
+                        VerticalScrollbar(
+                            adapter = rememberScrollbarAdapter(editScrollState),
+                            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+                        )
+                    }
+                } else {
+                    val scrollState = rememberScrollState()
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 40.dp, max = 160.dp)
+                            .border(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant,
+                                shape = MaterialTheme.shapes.extraSmall
+                            )
+                    ) {
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                                .padding(end = 8.dp)
+                                .verticalScroll(scrollState)
+                        ) {
+                            if (description.isBlank()) {
+                                Text(
+                                    s.notesPlaceholder,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                )
+                            } else {
+                                Text(description, style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                        VerticalScrollbar(
+                            adapter = rememberScrollbarAdapter(scrollState),
+                            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Button(onClick = { onSaveDescription(description.trim().ifBlank { null }) },
-                    modifier = Modifier.fillMaxWidth()) { Text(s.saveNotesBtn) }
+                if (editingNote) {
+                    Button(
+                        onClick = {
+                            onSaveDescription(description.trim().ifBlank { null })
+                            editingNote = false
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text(s.saveNotesBtn) }
+                }
                 OutlinedButton(onClick = onEdit, modifier = Modifier.fillMaxWidth()) { Text(s.editReservationBtn) }
                 OutlinedButton(onClick = onPayments, modifier = Modifier.fillMaxWidth()) { Text(s.managePaymentsBtn) }
                 OutlinedButton(onClick = onEditGuest, modifier = Modifier.fillMaxWidth()) { Text(s.editGuestBtn) }
