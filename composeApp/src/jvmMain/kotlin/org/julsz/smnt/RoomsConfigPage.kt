@@ -8,8 +8,10 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -18,6 +20,7 @@ import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.client.request.setBody
 import io.ktor.http.*
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private val ROOM_STATUSES = listOf("free", "occupied", "out_of_order")
@@ -45,8 +48,6 @@ fun RoomsConfigPage(client: HttpClient, hotel: UserHotelRoleDto, onBack: () -> U
     }
 
     LaunchedEffect(hotel.hotelId) { loadRooms() }
-
-    fun reload() = scope.launch { loadRooms() }
 
     fun archiveRoom(room: RoomDto) = scope.launch {
         try {
@@ -133,6 +134,7 @@ fun RoomsConfigPage(client: HttpClient, hotel: UserHotelRoleDto, onBack: () -> U
     // ── Dialogs ───────────────────────────────────────────────────────────────
     if (showAddDialog) {
         AddRoomDialog(
+            client    = client,
             hotelId   = hotel.hotelId,
             onDismiss = { showAddDialog = false },
             onCreate  = { req ->
@@ -151,6 +153,7 @@ fun RoomsConfigPage(client: HttpClient, hotel: UserHotelRoleDto, onBack: () -> U
 
     editingRoom?.let { room ->
         EditRoomDialog(
+            client    = client,
             room      = room,
             onDismiss = { editingRoom = null },
             onSave    = { req ->
@@ -170,6 +173,7 @@ fun RoomsConfigPage(client: HttpClient, hotel: UserHotelRoleDto, onBack: () -> U
 
 // ─── Room Card ────────────────────────────────────────────────────────────────
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun RoomCard(room: RoomDto, onEdit: () -> Unit, onArchive: () -> Unit) {
     val s        = LocalStrings.current
@@ -187,7 +191,6 @@ private fun RoomCard(room: RoomDto, onEdit: () -> Unit, onArchive: () -> Unit) {
         )
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            // Room number + status
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -206,7 +209,6 @@ private fun RoomCard(room: RoomDto, onEdit: () -> Unit, onArchive: () -> Unit) {
                 }
             }
 
-            // Meta row
             Text(
                 buildString {
                     append(room.typeName)
@@ -217,7 +219,6 @@ private fun RoomCard(room: RoomDto, onEdit: () -> Unit, onArchive: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha)
             )
 
-            // Description
             room.description?.let {
                 Text(
                     it,
@@ -228,7 +229,12 @@ private fun RoomCard(room: RoomDto, onEdit: () -> Unit, onArchive: () -> Unit) {
                 )
             }
 
-            // Actions
+            if (room.tags.isNotEmpty()) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    room.tags.forEach { tag -> TagChip(tag, alpha = alpha) }
+                }
+            }
+
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
@@ -242,6 +248,24 @@ private fun RoomCard(room: RoomDto, onEdit: () -> Unit, onArchive: () -> Unit) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun TagChip(tag: String, alpha: Float = 1f) {
+    Box(
+        modifier = Modifier
+            .background(
+                MaterialTheme.colorScheme.secondaryContainer.copy(alpha = alpha * 0.7f),
+                shape = MaterialTheme.shapes.small
+            )
+            .padding(horizontal = 8.dp, vertical = 3.dp)
+    ) {
+        Text(
+            tag,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = alpha)
+        )
     }
 }
 
@@ -271,6 +295,7 @@ private fun statusColors(status: String): Pair<Color, Color> =
 
 @Composable
 private fun AddRoomDialog(
+    client: HttpClient,
     hotelId: Int,
     onDismiss: () -> Unit,
     onCreate: (CreateRoomRequest) -> Unit
@@ -280,6 +305,7 @@ private fun AddRoomDialog(
     var floor       by remember { mutableStateOf("") }
     var maxGuests   by remember { mutableStateOf("2") }
     var description by remember { mutableStateOf("") }
+    var tags        by remember { mutableStateOf<List<String>>(emptyList()) }
 
     val s = LocalStrings.current
     AlertDialog(
@@ -288,12 +314,16 @@ private fun AddRoomDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 RoomFormFields(
+                    client = client, hotelId = hotelId,
                     typeName = typeName, onTypeName = { typeName = it },
                     number = number, onNumber = { number = it },
                     floor = floor, onFloor = { floor = it },
                     maxGuests = maxGuests, onMaxGuests = { maxGuests = it },
                     description = description, onDescription = { description = it },
-                    status = null, onStatus = {}
+                    status = null, onStatus = {},
+                    tags = tags,
+                    onAddTag = { tag -> if (tag !in tags) tags = tags + tag },
+                    onRemoveTag = { tag -> tags = tags - tag }
                 )
             }
         },
@@ -306,7 +336,8 @@ private fun AddRoomDialog(
                         number      = number.trim(),
                         floor       = floor.trim().toIntOrNull(),
                         maxGuests   = maxGuests.trim().toIntOrNull() ?: 2,
-                        description = description.trim().ifBlank { null }
+                        description = description.trim().ifBlank { null },
+                        tags        = tags
                     ))
                     onDismiss()
                 },
@@ -322,6 +353,7 @@ private fun AddRoomDialog(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EditRoomDialog(
+    client: HttpClient,
     room: RoomDto,
     onDismiss: () -> Unit,
     onSave: (UpdateRoomRequest) -> Unit
@@ -331,6 +363,7 @@ private fun EditRoomDialog(
     var floor       by remember { mutableStateOf(room.floor?.toString() ?: "") }
     var maxGuests   by remember { mutableStateOf(room.maxGuests.toString()) }
     var description by remember { mutableStateOf(room.description ?: "") }
+    var tags        by remember { mutableStateOf(room.tags) }
 
     val s = LocalStrings.current
     AlertDialog(
@@ -339,12 +372,16 @@ private fun EditRoomDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 RoomFormFields(
+                    client = client, hotelId = room.hotelId,
                     typeName = typeName, onTypeName = { typeName = it },
                     number = number, onNumber = { number = it },
                     floor = floor, onFloor = { floor = it },
                     maxGuests = maxGuests, onMaxGuests = { maxGuests = it },
                     description = description, onDescription = { description = it },
-                    status = null, onStatus = {}
+                    status = null, onStatus = {},
+                    tags = tags,
+                    onAddTag = { tag -> if (tag !in tags) tags = tags + tag },
+                    onRemoveTag = { tag -> tags = tags - tag }
                 )
             }
         },
@@ -356,7 +393,8 @@ private fun EditRoomDialog(
                         number      = number.trim(),
                         floor       = floor.trim().toIntOrNull(),
                         maxGuests   = maxGuests.trim().toIntOrNull() ?: room.maxGuests,
-                        description = description.trim().ifBlank { null }
+                        description = description.trim().ifBlank { null },
+                        tags        = tags
                     ))
                     onDismiss()
                 },
@@ -369,15 +407,18 @@ private fun EditRoomDialog(
 
 // ─── Shared form fields ───────────────────────────────────────────────────────
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, ExperimentalComposeUiApi::class)
 @Composable
 private fun RoomFormFields(
+    client: HttpClient,
+    hotelId: Int,
     typeName: String, onTypeName: (String) -> Unit,
     number: String, onNumber: (String) -> Unit,
     floor: String, onFloor: (String) -> Unit,
     maxGuests: String, onMaxGuests: (String) -> Unit,
     description: String, onDescription: (String) -> Unit,
-    status: String?, onStatus: (String) -> Unit
+    status: String?, onStatus: (String) -> Unit,
+    tags: List<String>, onAddTag: (String) -> Unit, onRemoveTag: (String) -> Unit
 ) {
     val s = LocalStrings.current
     OutlinedTextField(typeName, onTypeName, label = { Text(s.roomTypeLabel) },
@@ -417,4 +458,106 @@ private fun RoomFormFields(
 
     OutlinedTextField(description, onDescription, label = { Text(s.descriptionLabel) },
         singleLine = true, modifier = Modifier.fillMaxWidth())
+
+    // ── Tag input with prefix-search suggestions ──────────────────────────────
+    // searchKey tracks what the user actually typed; tagInput may be overwritten
+    // by Tab/arrows with a suggestion without triggering a new search.
+    var tagInput   by remember { mutableStateOf("") }
+    var searchKey  by remember { mutableStateOf("") }
+    var suggestions by remember { mutableStateOf<List<TagDto>>(emptyList()) }
+    var expanded   by remember { mutableStateOf(false) }
+    var selIndex   by remember { mutableStateOf(-1) }
+
+    LaunchedEffect(searchKey) {
+        selIndex = -1
+        if (searchKey.isBlank()) { suggestions = emptyList(); expanded = false; return@LaunchedEffect }
+        delay(150)
+        try {
+            val result: List<TagDto> = client.get("$BASE_URL/api/tags") {
+                parameter("hotelId", hotelId)
+                parameter("prefix", searchKey.trim())
+            }.body()
+            suggestions = result.filter { it.name !in tags }
+            expanded = suggestions.isNotEmpty()
+        } catch (_: Exception) {
+            suggestions = emptyList(); expanded = false
+        }
+    }
+
+    fun cycleTo(index: Int) {
+        selIndex = index
+        tagInput = suggestions[index].name
+    }
+
+    fun commitTag(name: String) {
+        val cleaned = name.trim().lowercase()
+        if (cleaned.isNotBlank()) onAddTag(cleaned)
+        tagInput = ""; searchKey = ""
+        suggestions = emptyList()
+        expanded = false; selIndex = -1
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            ExposedDropdownMenuBox(
+                expanded = expanded,
+                onExpandedChange = { expanded = it && suggestions.isNotEmpty() },
+                modifier = Modifier.weight(1f)
+            ) {
+                OutlinedTextField(
+                    value = tagInput,
+                    onValueChange = { v -> tagInput = v; searchKey = v; if (v.isBlank()) expanded = false },
+                    label = { Text(s.tagsLabel) },
+                    placeholder = { Text(s.tagInputHint) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                        .menuAnchor(MenuAnchorType.PrimaryEditable)
+                        .onPreviewKeyEvent { event ->
+                            when {
+                                event.type == KeyEventType.KeyDown && event.key == Key.Tab -> {
+                                    if (suggestions.isNotEmpty()) {
+                                        cycleTo((selIndex + 1) % suggestions.size)
+                                        expanded = true
+                                    }
+                                    true
+                                }
+event.type == KeyEventType.KeyDown && event.key == Key.Enter -> {
+                                    commitTag(tagInput); true
+                                }
+                                else -> false
+                            }
+                        }
+                )
+                ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    suggestions.forEachIndexed { index, tag ->
+                        DropdownMenuItem(
+                            text = { Text(tag.name) },
+                            onClick = { commitTag(tag.name) },
+                            modifier = if (index == selIndex)
+                                Modifier.background(MaterialTheme.colorScheme.secondaryContainer)
+                            else Modifier
+                        )
+                    }
+                }
+            }
+            FilledTonalButton(
+                onClick = { commitTag(tagInput) },
+                enabled = tagInput.isNotBlank(),
+                modifier = Modifier.padding(top = 4.dp)
+            ) { Text("+") }
+        }
+
+        if (tags.isNotEmpty()) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                tags.forEach { tag ->
+                    InputChip(
+                        selected = false,
+                        onClick = { onRemoveTag(tag) },
+                        label = { Text(tag, style = MaterialTheme.typography.labelSmall) },
+                        trailingIcon = { Text("×", style = MaterialTheme.typography.labelSmall) }
+                    )
+                }
+            }
+        }
+    }
 }

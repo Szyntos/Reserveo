@@ -82,6 +82,19 @@ object PriceRules : Table("price_rules") {
     override val primaryKey    = PrimaryKey(id)
 }
 
+object Tags : Table("tags") {
+    val id      = integer("id").autoIncrement()
+    val hotelId = integer("hotel_id")
+    val name    = varchar("name", 100)
+    override val primaryKey = PrimaryKey(id)
+}
+
+object RoomTags : Table("room_tags") {
+    val roomId = integer("room_id")
+    val tagId  = integer("tag_id")
+    override val primaryKey = PrimaryKey(roomId, tagId)
+}
+
 object RoomBlocks : Table("room_blocks") {
     val id       = integer("id").autoIncrement()
     val roomId   = integer("room_id")

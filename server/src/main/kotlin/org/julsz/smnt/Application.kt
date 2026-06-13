@@ -51,6 +51,7 @@ fun Application.module() {
             roomBlockRoutes()
             paymentRoutes()
             holidayRoutes()
+            tagRoutes()
         }
     }
 }

@@ -97,6 +97,9 @@ interface AppStrings {
     val maxGuestsLabel: String
     val statusLabel: String
     val descriptionLabel: String
+    val tagsLabel: String
+    val tagInputHint: String
+    val tagInputSupport: String
 
     // Base price config
     val basePriceTitle: String
@@ -364,6 +367,9 @@ object EnglishStrings : AppStrings {
     override val maxGuestsLabel = "Max Guests *"
     override val statusLabel = "Status"
     override val descriptionLabel = "Description"
+    override val tagsLabel = "Tags"
+    override val tagInputHint = "e.g. balcony, sea view, wifi…"
+    override val tagInputSupport = "Press Enter or + to add a tag"
     override val basePriceTitle = "Base Price"
     override val basePriceSubtitle = "Select a room to manage its price rules"
     override val addRoomsFirst = "Add rooms first before setting price rules."
@@ -618,6 +624,9 @@ object PolishStrings : AppStrings {
     override val maxGuestsLabel = "Maks. gości *"
     override val statusLabel = "Status"
     override val descriptionLabel = "Opis"
+    override val tagsLabel = "Etykiety"
+    override val tagInputHint = "np. balkon, widok na morze, wifi…"
+    override val tagInputSupport = "Naciśnij Enter lub + aby dodać etykietę"
     override val basePriceTitle = "Ceny bazowe"
     override val basePriceSubtitle = "Wybierz pokój, aby zarządzać regułami cenowymi"
     override val addRoomsFirst = "Najpierw dodaj pokoje, aby ustawić reguły cenowe."

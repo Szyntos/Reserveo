@@ -5,6 +5,7 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.julsz.smnt.CreateRoomRequest
 import org.julsz.smnt.RoomDto
@@ -12,8 +13,10 @@ import org.julsz.smnt.UpdateRoomRequest
 import org.julsz.smnt.db.Hotels
 import org.julsz.smnt.db.Reservations
 import org.julsz.smnt.db.RoomBlocks
+import org.julsz.smnt.db.RoomTags
 import org.julsz.smnt.db.RoomTypes
 import org.julsz.smnt.db.Rooms
+import org.julsz.smnt.db.Tags
 import java.time.LocalDate
 import java.time.LocalDateTime
 
@@ -50,7 +53,6 @@ fun Route.roomRoutes() {
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
-/** Must be called inside an existing transaction. */
 private fun loadStatusSets(): Pair<Set<Int>, Set<Int>> {
     val today = LocalDate.now()
     val occupiedRoomIds = Reservations.selectAll().where {
@@ -67,10 +69,25 @@ private fun loadStatusSets(): Pair<Set<Int>, Set<Int>> {
     return occupiedRoomIds to blockedRoomIds
 }
 
+private fun loadRoomTagMap(hotelId: Int? = null): Map<Int, List<String>> {
+    val join = RoomTags.innerJoin(Tags, { RoomTags.tagId }, { Tags.id })
+    val query = if (hotelId != null)
+        join.innerJoin(Rooms, { RoomTags.roomId }, { Rooms.id }).selectAll().where { Rooms.hotelId eq hotelId }
+    else
+        join.selectAll()
+    return query.groupBy({ it[RoomTags.roomId] }, { it[Tags.name] })
+}
+
+private fun loadTagsForRoom(roomId: Int): List<String> =
+    RoomTags.innerJoin(Tags, { RoomTags.tagId }, { Tags.id }).selectAll()
+        .where { RoomTags.roomId eq roomId }
+        .map { it[Tags.name] }
+
 private fun queryRooms(hotelId: Int? = null): List<RoomDto> = transaction {
     val hotelNames = Hotels.selectAll().associate { it[Hotels.id] to it[Hotels.name] }
     val typeNames  = RoomTypes.selectAll().associate { it[RoomTypes.id] to it[RoomTypes.name] }
     val (occupiedRoomIds, blockedRoomIds) = loadStatusSets()
+    val roomTagMap = loadRoomTagMap(hotelId)
 
     val query = if (hotelId != null) {
         Rooms.selectAll().where { Rooms.hotelId eq hotelId }
@@ -78,16 +95,14 @@ private fun queryRooms(hotelId: Int? = null): List<RoomDto> = transaction {
         Rooms.selectAll()
     }
 
-    query.orderBy(Rooms.number to SortOrder.ASC).map { it.toDto(hotelNames, typeNames, occupiedRoomIds, blockedRoomIds) }
+    query.orderBy(Rooms.number to SortOrder.ASC)
+        .map { it.toDto(hotelNames, typeNames, occupiedRoomIds, blockedRoomIds, roomTagMap) }
 }
 
 // ─── Mutations ────────────────────────────────────────────────────────────────
 
 private fun createRoom(req: CreateRoomRequest): RoomDto = transaction {
-    val hotelName = Hotels.selectAll()
-        .where { Hotels.id eq req.hotelId }
-        .first()[Hotels.name]
-
+    val hotelName  = Hotels.selectAll().where { Hotels.id eq req.hotelId }.first()[Hotels.name]
     val roomTypeId = findOrCreateRoomType(req.hotelId, req.typeName)
 
     val newId = Rooms.insert {
@@ -99,6 +114,11 @@ private fun createRoom(req: CreateRoomRequest): RoomDto = transaction {
         it[Rooms.description] = req.description
     } get Rooms.id
 
+    req.tags.forEach { tagName ->
+        val tagId = findOrCreateTag(req.hotelId, tagName)
+        RoomTags.insert { it[RoomTags.roomId] = newId; it[RoomTags.tagId] = tagId }
+    }
+
     RoomDto(
         id          = newId,
         hotelId     = req.hotelId,
@@ -109,6 +129,7 @@ private fun createRoom(req: CreateRoomRequest): RoomDto = transaction {
         maxGuests   = req.maxGuests,
         status      = "free",
         description = req.description,
+        tags        = req.tags,
         archivedAt  = null
     )
 }
@@ -125,10 +146,17 @@ private fun updateRoom(id: Int, req: UpdateRoomRequest): RoomDto = transaction {
         it[Rooms.description] = req.description
     }
 
+    RoomTags.deleteWhere { RoomTags.roomId eq id }
+    req.tags.forEach { tagName ->
+        val tagId = findOrCreateTag(room[Rooms.hotelId], tagName)
+        RoomTags.insert { it[RoomTags.roomId] = id; it[RoomTags.tagId] = tagId }
+    }
+
     val hotelNames = Hotels.selectAll().associate { it[Hotels.id] to it[Hotels.name] }
     val typeNames  = RoomTypes.selectAll().associate { it[RoomTypes.id] to it[RoomTypes.name] }
     val (occupiedRoomIds, blockedRoomIds) = loadStatusSets()
-    Rooms.selectAll().where { Rooms.id eq id }.first().toDto(hotelNames, typeNames, occupiedRoomIds, blockedRoomIds)
+    Rooms.selectAll().where { Rooms.id eq id }.first()
+        .toDto(hotelNames, typeNames, occupiedRoomIds, blockedRoomIds, mapOf(id to loadTagsForRoom(id)))
 }
 
 private fun setArchived(id: Int, archived: Boolean): RoomDto = transaction {
@@ -138,7 +166,8 @@ private fun setArchived(id: Int, archived: Boolean): RoomDto = transaction {
     val hotelNames = Hotels.selectAll().associate { it[Hotels.id] to it[Hotels.name] }
     val typeNames  = RoomTypes.selectAll().associate { it[RoomTypes.id] to it[RoomTypes.name] }
     val (occupiedRoomIds, blockedRoomIds) = loadStatusSets()
-    Rooms.selectAll().where { Rooms.id eq id }.first().toDto(hotelNames, typeNames, occupiedRoomIds, blockedRoomIds)
+    Rooms.selectAll().where { Rooms.id eq id }.first()
+        .toDto(hotelNames, typeNames, occupiedRoomIds, blockedRoomIds, mapOf(id to loadTagsForRoom(id)))
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -153,11 +182,24 @@ private fun findOrCreateRoomType(hotelId: Int, typeName: String): Int =
             it[RoomTypes.name]    = typeName
         } get RoomTypes.id)
 
+private fun findOrCreateTag(hotelId: Int, name: String): Int {
+    val normalized = name.trim().lowercase()
+    return Tags.selectAll()
+        .where { (Tags.hotelId eq hotelId) and (Tags.name eq normalized) }
+        .firstOrNull()
+        ?.get(Tags.id)
+        ?: (Tags.insert {
+            it[Tags.hotelId] = hotelId
+            it[Tags.name]    = normalized
+        } get Tags.id)
+}
+
 private fun ResultRow.toDto(
     hotelNames: Map<Int, String>,
     typeNames: Map<Int, String>,
     occupiedRoomIds: Set<Int>,
-    blockedRoomIds: Set<Int>
+    blockedRoomIds: Set<Int>,
+    roomTagMap: Map<Int, List<String>>
 ) = RoomDto(
     id          = this[Rooms.id],
     hotelId     = this[Rooms.hotelId],
@@ -172,5 +214,6 @@ private fun ResultRow.toDto(
         else                              -> "free"
     },
     description = this[Rooms.description],
+    tags        = roomTagMap[this[Rooms.id]] ?: emptyList(),
     archivedAt  = this[Rooms.archivedAt]?.toString()
 )

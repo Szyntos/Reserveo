@@ -12,6 +12,9 @@ data class HotelDto(
 )
 
 @Serializable
+data class TagDto(val id: Int, val name: String)
+
+@Serializable
 data class RoomDto(
     val id: Int,
     val hotelId: Int,
@@ -22,6 +25,7 @@ data class RoomDto(
     val maxGuests: Int,
     val status: String,
     val description: String?,
+    val tags: List<String> = emptyList(),
     val archivedAt: String?
 )
 
@@ -115,7 +119,8 @@ data class CreateRoomRequest(
     val number: String,
     val floor: Int? = null,
     val maxGuests: Int,
-    val description: String? = null
+    val description: String? = null,
+    val tags: List<String> = emptyList()
 )
 
 @Serializable
@@ -124,7 +129,8 @@ data class UpdateRoomRequest(
     val number: String,
     val floor: Int? = null,
     val maxGuests: Int,
-    val description: String? = null
+    val description: String? = null,
+    val tags: List<String> = emptyList()
 )
 
 @Serializable
