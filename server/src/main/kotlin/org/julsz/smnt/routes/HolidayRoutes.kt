@@ -57,6 +57,9 @@ private fun queryHolidays(hotelId: Int?): List<HolidayDto> = transaction {
 }
 
 private fun importHolidaysFromCsv(req: ImportHolidaysRequest): List<HolidayDto> {
+    val existing = queryHolidays(req.hotelId)
+    val existingByFromDate = existing.groupBy { it.fromDate }
+
     val lines = req.csv.lines()
     val results = mutableListOf<HolidayDto>()
     for (line in lines) {
@@ -82,12 +85,23 @@ private fun importHolidaysFromCsv(req: ImportHolidaysRequest): List<HolidayDto> 
         // skip header row
         if (name.equals("holiday", ignoreCase = true) || name.equals("święto", ignoreCase = true)) continue
 
-        results += createHoliday(CreateHolidayRequest(
-            hotelId  = req.hotelId,
-            name     = name,
-            fromDate = from.toString(),
-            toDate   = to.toString()
-        ))
+        val fromStr = from.toString()
+        val match = existingByFromDate[fromStr]?.firstOrNull()
+        when {
+            match != null && match.name == name -> continue // same day, same name — skip
+            match != null -> {                              // same day, different name — overwrite
+                transaction {
+                    Holidays.update({ Holidays.id eq match.id }) { it[Holidays.name] = name }
+                }
+                results += match.copy(name = name)
+            }
+            else -> results += createHoliday(CreateHolidayRequest(
+                hotelId  = req.hotelId,
+                name     = name,
+                fromDate = fromStr,
+                toDate   = to.toString()
+            ))
+        }
     }
     return results
 }

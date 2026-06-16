@@ -33,6 +33,7 @@ import org.julsz.smnt.invoice.*
 import java.awt.Desktop
 import java.io.File
 import java.time.LocalDate
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 
 @Composable
@@ -52,7 +53,6 @@ fun InvoicePage(
     var invoiceSettings  by remember { mutableStateOf<InvoiceSettingsDto?>(null) }
     var loading          by remember { mutableStateOf(true) }
     var showCreate       by remember { mutableStateOf(false) }
-    var nextNumber       by remember { mutableStateOf("FA 1/${LocalDate.now().year}") }
     var deleteTarget     by remember { mutableStateOf<InvoiceDto?>(null) }
     var editTarget       by remember { mutableStateOf<InvoiceDto?>(null) }
     // Captured separately so that calling onInitialConsumed() doesn't clear it before the dialog opens
@@ -63,8 +63,6 @@ fun InvoicePage(
         try {
             invoices        = client.get("$BASE_URL/api/invoices?hotelId=${hotel.hotelId}").body()
             reservations    = client.get("$BASE_URL/api/reservations?hotelId=${hotel.hotelId}").body()
-            nextNumber      = client.get("$BASE_URL/api/invoices/next-number?hotelId=${hotel.hotelId}")
-                .body<NextInvoiceNumberResponse>().number
             invoiceSettings = client.get("$BASE_URL/api/hotels/${hotel.hotelId}/invoice-settings").body()
         } catch (e: Exception) { snackbar.showSnackbar(s.errorMsg(e.message ?: "?")) }
         loading = false
@@ -117,7 +115,6 @@ fun InvoicePage(
             hotel              = hotel,
             reservations       = reservations,
             existingInvoices   = invoices,
-            nextNumber         = nextNumber,
             initialReservation = dialogInitialRes,
             invoiceSettings    = invoiceSettings,
             fontScale          = fontScale,
@@ -187,7 +184,7 @@ private fun InvoiceListTable(
             TableHeaderCell(s.invoiceNumberPreviewLabel, Modifier.width(130.dp))
             TableHeaderCell(s.invoiceIssueDateLabel.trimEnd('*', ' '), Modifier.width(100.dp))
             TableHeaderCell(s.buyerSection,               Modifier.weight(1f))
-            TableHeaderCell(s.totalGrossLabel,            Modifier.width(100.dp))
+            TableHeaderCell(s.totalAmountLabel,           Modifier.width(100.dp))
             Spacer(Modifier.width(170.dp))
         }
         HorizontalDivider()
@@ -223,7 +220,7 @@ private fun InvoiceRow(
         Text(inv.invoiceNumber, Modifier.width(130.dp), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
         Text(inv.issueDate,     Modifier.width(100.dp), style = MaterialTheme.typography.bodySmall)
         Text(inv.buyerName,     Modifier.weight(1f),    style = MaterialTheme.typography.bodySmall)
-        Text("%.2f PLN".format(inv.totalGross), Modifier.width(100.dp),
+        Text("%.2f PLN".format(inv.totalAmount), Modifier.width(100.dp),
             style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
         Column(Modifier.width(170.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -259,7 +256,6 @@ private fun CreateInvoiceDialog(
     hotel: UserHotelRoleDto,
     reservations: List<ReservationDto>,
     existingInvoices: List<InvoiceDto>,
-    nextNumber: String,
     initialReservation: ReservationDto?,
     invoiceSettings: InvoiceSettingsDto?,
     fontScale: Float,
@@ -274,6 +270,8 @@ private fun CreateInvoiceDialog(
     val dueDays       = invoiceSettings?.defaultDueDays?.toLong() ?: 14L
 
     // ── Form state — prefilled from invoice settings ────────────────────────
+    var invoiceSeq        by remember { mutableStateOf("") }
+    val fullInvoiceNumber = "FA $invoiceSeq/${today.year}"
     var sellerName        by remember { mutableStateOf(invoiceSettings?.sellerName ?: hotel.hotelName) }
     var sellerAddress     by remember { mutableStateOf(invoiceSettings?.sellerAddress ?: "") }
     var sellerNip         by remember { mutableStateOf(invoiceSettings?.sellerNip ?: "") }
@@ -294,6 +292,7 @@ private fun CreateInvoiceDialog(
     var pendingAddRes     by remember { mutableStateOf<ReservationDto?>(null) }
     var items             by remember { mutableStateOf<List<InvoiceLineItem>>(emptyList()) }
     var submitting        by remember { mutableStateOf(false) }
+    var submitted         by remember { mutableStateOf(false) }
 
     fun populateFromReservations(resList: List<ReservationDto>) {
         if (resList.isEmpty()) { items = emptyList(); buyerName = ""; return }
@@ -310,7 +309,7 @@ private fun CreateInvoiceDialog(
     val resWithExistingInvoice = remember(selectedResList, existingInvoices) {
         selectedResList.firstOrNull { res -> existingInvoices.any { it.reservationId == res.id } }
     }
-    val isValid = sellerName.isNotBlank() && buyerName.isNotBlank() &&
+    val isValid = invoiceSeq.isNotBlank() && sellerName.isNotBlank() && buyerName.isNotBlank() &&
         issueDate.isNotBlank() && saleDate.isNotBlank() && dueDate.isNotBlank() &&
         items.isNotEmpty() && resWithExistingInvoice == null
 
@@ -338,18 +337,24 @@ private fun CreateInvoiceDialog(
 
                         // ── Invoice number + linked reservations ───────────
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            Column(Modifier.width(160.dp)) {
-                                Text(s.invoiceNumberPreviewLabel,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = MaterialTheme.colorScheme.primaryContainer,
-                                    modifier = Modifier.padding(top = 4.dp)
-                                ) {
-                                    Text(nextNumber, Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                        style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer)
+                            Column(Modifier.width(200.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                OutlinedTextField(
+                                    value         = invoiceSeq,
+                                    onValueChange = { invoiceSeq = it },
+                                    label         = { Text("FA  ___  / ${today.year}") },
+                                    placeholder   = { Text("np. 1") },
+                                    modifier      = Modifier.fillMaxWidth(),
+                                    singleLine    = true,
+                                    textStyle     = MaterialTheme.typography.bodySmall,
+                                    isError       = submitted && invoiceSeq.isBlank()
+                                )
+                                if (invoiceSeq.isNotBlank()) {
+                                    Text(
+                                        fullInvoiceNumber,
+                                        style     = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color     = MaterialTheme.colorScheme.primary
+                                    )
                                 }
                             }
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -400,7 +405,7 @@ private fun CreateInvoiceDialog(
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 SectionTitle(s.sellerSection)
-                                InvoiceTextField(sellerName, { sellerName = it }, s.sellerNameLabel)
+                                InvoiceTextField(sellerName, { sellerName = it }, s.sellerNameLabel, isError = submitted && sellerName.isBlank())
                                 InvoiceTextField(sellerAddress, { sellerAddress = it }, s.sellerAddressLabel)
                                 InvoiceTextField(sellerNip, { sellerNip = it }, s.nipLabel)
                                 InvoiceTextField(sellerRegon, { sellerRegon = it }, s.regonLabel)
@@ -410,9 +415,9 @@ private fun CreateInvoiceDialog(
                             }
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 SectionTitle(s.buyerSection)
-                                InvoiceTextField(buyerName, { buyerName = it }, s.buyerNameLabel)
+                                InvoiceTextField(buyerName, { buyerName = it }, s.buyerNameLabel, isError = submitted && buyerName.isBlank())
                                 InvoiceTextField(buyerAddress, { buyerAddress = it }, s.buyerAddressLabel)
-                                InvoiceTextField(buyerNip, { buyerNip = it }, s.buyerNipLabel)
+                                InvoiceTextField(buyerNip, { buyerNip = it }, s.nipLabel)
                                 InvoiceTextField(buyerRegon, { buyerRegon = it }, s.regonLabel)
                             }
                         }
@@ -422,9 +427,9 @@ private fun CreateInvoiceDialog(
                         // ── Dates + Payment ────────────────────────────────
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                InvoiceTextField(issueDate, { issueDate = it }, s.invoiceIssueDateLabel, placeholder = "YYYY-MM-DD")
-                                InvoiceTextField(saleDate,  { saleDate  = it }, s.invoiceSaleDateLabel,  placeholder = "YYYY-MM-DD")
-                                InvoiceTextField(dueDate,   { dueDate   = it }, s.invoiceDueDateLabel,   placeholder = "YYYY-MM-DD")
+                                InvoiceTextField(issueDate, { issueDate = it }, s.invoiceIssueDateLabel, placeholder = "YYYY-MM-DD", isError = submitted && issueDate.isBlank())
+                                InvoiceTextField(saleDate,  { saleDate  = it }, s.invoiceSaleDateLabel,  placeholder = "YYYY-MM-DD", isError = submitted && saleDate.isBlank())
+                                InvoiceTextField(dueDate,   { dueDate   = it }, s.invoiceDueDateLabel,   placeholder = "YYYY-MM-DD", isError = submitted && dueDate.isBlank())
                             }
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text(s.paymentMethodLabel, style = MaterialTheme.typography.labelSmall,
@@ -445,10 +450,7 @@ private fun CreateInvoiceDialog(
                         )
 
                         HorizontalDivider()
-
-                        // ── VAT summary ────────────────────────────────────
-                        SectionTitle(s.vatSummarySection)
-                        VatSummaryTable(totals)
+                        TotalAmountRow(totals)
                     }
 
                     VerticalScrollbar(
@@ -468,12 +470,15 @@ private fun CreateInvoiceDialog(
                     Spacer(Modifier.width(8.dp))
                     Button(
                         onClick = {
+                            submitted = true
+                            if (!isValid) return@Button
                             scope.launch {
                                 submitting = true
                                 try {
                                     val req = CreateInvoiceRequest(
                                         hotelId           = hotel.hotelId,
                                         reservationId     = selectedResList.firstOrNull()?.id,
+                                        invoiceNumber     = fullInvoiceNumber,
                                         issueDate         = issueDate,
                                         saleDate          = saleDate,
                                         dueDate           = dueDate,
@@ -492,12 +497,11 @@ private fun CreateInvoiceDialog(
                                         notes             = invoiceNotes.ifBlank { null },
                                         items             = items.mapIndexed { idx, it ->
                                             CreateInvoiceItemRequest(
-                                                ordinal      = idx + 1,
-                                                name         = it.name,
-                                                quantity     = it.quantity,
-                                                unit         = it.unit,
-                                                unitNetPrice = it.unitNetPrice,
-                                                vatRate      = it.vatRate.code
+                                                ordinal   = idx + 1,
+                                                name      = it.name,
+                                                quantity  = it.quantity,
+                                                unit      = it.unit,
+                                                unitPrice = it.unitPrice
                                             )
                                         }
                                     )
@@ -512,7 +516,7 @@ private fun CreateInvoiceDialog(
                                 submitting = false
                             }
                         },
-                        enabled = isValid && !submitting
+                        enabled = !submitting
                     ) {
                         if (submitting) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                         else Text(s.createAndDownloadBtn)
@@ -561,7 +565,8 @@ private fun InvoiceTextField(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,
-    placeholder: String = ""
+    placeholder: String = "",
+    isError: Boolean = false
 ) {
     OutlinedTextField(
         value         = value,
@@ -569,7 +574,8 @@ private fun InvoiceTextField(
         label         = { Text(label) },
         modifier      = Modifier.fillMaxWidth(),
         singleLine    = true,
-        textStyle     = MaterialTheme.typography.bodySmall
+        textStyle     = MaterialTheme.typography.bodySmall,
+        isError       = isError
     )
 }
 
@@ -582,7 +588,8 @@ private fun PaymentMethodSelector(
     val methods = listOf(
         "transfer" to s.paymentMethodTransfer,
         "cash"     to s.paymentMethodCash,
-        "card"     to s.paymentMethodCard
+        "card"     to s.paymentMethodCard,
+        "blik"     to s.paymentMethodBlik
     )
     Row(
         Modifier.clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surface),
@@ -710,13 +717,12 @@ private fun ItemsEditor(
         OutlinedButton(
             onClick = {
                 onChange(items + InvoiceLineItem(
-                    tempId       = nextId(),
-                    ordinal      = items.size + 1,
-                    name         = "",
-                    quantity     = 1.0,
-                    unit         = "szt.",
-                    unitNetPrice = 0.0,
-                    vatRate      = VatRate.RATE_ZW
+                    tempId    = nextId(),
+                    ordinal   = items.size + 1,
+                    name      = "",
+                    quantity  = 1.0,
+                    unit      = "szt.",
+                    unitPrice = 0.0
                 ))
             },
             shape = RoundedCornerShape(6.dp),
@@ -733,21 +739,18 @@ private fun ItemRow(
     onChange: (InvoiceLineItem) -> Unit,
     onDelete: () -> Unit
 ) {
-    var nameText    by remember(item.tempId) { mutableStateOf(item.name) }
-    var unitText    by remember(item.tempId) { mutableStateOf(item.unit) }
-    var qtyText     by remember(item.tempId) { mutableStateOf(item.quantity.let { if (it % 1.0 == 0.0) it.toLong().toString() else "%.3f".format(it) }) }
-    var priceText   by remember(item.tempId) { mutableStateOf("%.2f".format(item.unitNetPrice)) }
-    var vatExpanded by remember { mutableStateOf(false) }
+    var nameText  by remember(item.tempId) { mutableStateOf(item.name) }
+    var unitText  by remember(item.tempId) { mutableStateOf(item.unit) }
+    var qtyText   by remember(item.tempId) { mutableStateOf(item.quantity.let { if (it % 1.0 == 0.0) it.toLong().toString() else String.format(Locale.ROOT, "%.6f", it).trimEnd('0').trimEnd('.') }) }
+    var priceText by remember(item.tempId) { mutableStateOf("%.2f".format(item.unitPrice)) }
 
-    val qty   = qtyText.replace(',', '.').toDoubleOrNull() ?: item.quantity
-    val price = priceText.replace(',', '.').toDoubleOrNull() ?: item.unitNetPrice
-    val net   = qty * price
-    val gross = net + net * item.vatRate.fraction
+    val qty    = qtyText.replace(',', '.').toDoubleOrNull() ?: item.quantity
+    val price  = priceText.replace(',', '.').toDoubleOrNull() ?: item.unitPrice
+    val amount = qty * price
 
-    fun commit() = onChange(item.copy(name = nameText, unit = unitText, quantity = qty, unitNetPrice = price))
+    fun commit() = onChange(item.copy(name = nameText, unit = unitText, quantity = qty, unitPrice = price))
 
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        // ── Line 1: ordinal · name · delete ───────────────────────────────
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -772,7 +775,6 @@ private fun ItemRow(
             }
         }
 
-        // ── Line 2 (indented): unit · qty · price · VAT · = net · = gross ─
         Row(
             Modifier.fillMaxWidth().padding(start = 30.dp, end = 44.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -788,7 +790,11 @@ private fun ItemRow(
             )
             OutlinedTextField(
                 value         = qtyText,
-                onValueChange = { qtyText = it },
+                onValueChange = { v ->
+                    qtyText = v
+                    val newQty = v.replace(',', '.').toDoubleOrNull() ?: qty
+                    onChange(item.copy(name = nameText, unit = unitText, quantity = newQty, unitPrice = price))
+                },
                 modifier      = Modifier.width(76.dp),
                 label         = { Text("Ilość") },
                 textStyle     = MaterialTheme.typography.bodySmall,
@@ -796,84 +802,38 @@ private fun ItemRow(
             )
             OutlinedTextField(
                 value         = priceText,
-                onValueChange = { priceText = it },
+                onValueChange = { v ->
+                    priceText = v
+                    val newPrice = v.replace(',', '.').toDoubleOrNull() ?: price
+                    onChange(item.copy(name = nameText, unit = unitText, quantity = qty, unitPrice = newPrice))
+                },
                 modifier      = Modifier.width(100.dp),
-                label         = { Text("Cena netto") },
+                label         = { Text("Cena") },
                 textStyle     = MaterialTheme.typography.bodySmall,
                 singleLine    = true
             )
-            // VAT rate dropdown — matched height to OutlinedTextField default (~56dp)
-            Box(Modifier.width(86.dp)) {
-                OutlinedButton(
-                    onClick        = { vatExpanded = true },
-                    shape          = RoundedCornerShape(4.dp),
-                    modifier       = Modifier.fillMaxWidth().height(56.dp),
-                    contentPadding = PaddingValues(horizontal = 6.dp)
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("VAT", style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(item.vatRate.label, style = MaterialTheme.typography.bodyMedium)
-                    }
-                }
-                DropdownMenu(expanded = vatExpanded, onDismissRequest = { vatExpanded = false }) {
-                    VatRate.ALL.forEach { rate ->
-                        DropdownMenuItem(
-                            text    = { Text(rate.label, style = MaterialTheme.typography.bodySmall) },
-                            onClick = {
-                                onChange(item.copy(vatRate = rate, quantity = qty, unitNetPrice = price))
-                                vatExpanded = false
-                            }
-                        )
-                    }
-                }
-            }
-            // Read-only totals
             Column(Modifier.weight(1f)) {
-                Text("netto", style = MaterialTheme.typography.labelSmall,
+                Text("wartość", style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("%.2f".format(net), style = MaterialTheme.typography.bodySmall)
-            }
-            Column(Modifier.weight(1f)) {
-                Text("brutto", style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("%.2f".format(gross), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+                Text("%.2f".format(amount), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
             }
         }
     }
 }
 
 @Composable
-private fun VatSummaryTable(totals: InvoiceTotals) {
+private fun TotalAmountRow(totals: InvoiceTotals) {
     val s = LocalStrings.current
-    Column(
+    Row(
         Modifier.fillMaxWidth(0.5f).clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant),
-        verticalArrangement = Arrangement.spacedBy(0.dp)
+            .background(MaterialTheme.colorScheme.primaryContainer)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 8.dp, vertical = 4.dp)) {
-            Text("Stawka", Modifier.width(60.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
-            Text(s.totalNetLabel,   Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
-            Text(s.totalVatLabel,   Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
-            Text(s.totalGrossLabel, Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
-        }
-        totals.vatSummaries.forEach { vs ->
-            val rateLabel = vs.vatRate.code + if (vs.vatRate.code != "zw" && vs.vatRate.code != "0") "%" else ""
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp)) {
-                Text(rateLabel, Modifier.width(60.dp), style = MaterialTheme.typography.bodySmall)
-                Text("%.2f".format(vs.netAmount),   Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-                Text("%.2f".format(vs.vatAmount),   Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-                Text("%.2f".format(vs.grossAmount), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-            }
-        }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
-        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
-            Text("Razem", Modifier.width(60.dp), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-            Text("%.2f".format(totals.totalNet),   Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-            Text("%.2f".format(totals.totalVat),   Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-            Text("%.2f PLN".format(totals.totalGross), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-        }
+        Text(s.totalAmountLabel, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onPrimaryContainer)
+        Text("%.2f PLN".format(totals.totalAmount), style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
     }
 }
 
@@ -892,7 +852,12 @@ private fun EditInvoiceDialog(
     val scope         = rememberCoroutineScope()
     val tempIdCounter = remember { AtomicInteger(invoice.items.size + 1) }
 
-    var invoiceNumber     by remember { mutableStateOf(invoice.invoiceNumber) }
+    val faRegex = remember { Regex("^FA (.+)/(\\d{4})$") }
+    val faMatch = remember { faRegex.find(invoice.invoiceNumber) }
+    val parsedSeq  = remember { faMatch?.groupValues?.get(1) ?: invoice.invoiceNumber }
+    val parsedYear = remember { faMatch?.groupValues?.get(2)?.toIntOrNull() ?: LocalDate.now().year }
+    var invoiceSeq      by remember { mutableStateOf(parsedSeq) }
+    val fullInvoiceNumber = "FA $invoiceSeq/$parsedYear"
     var sellerName        by remember { mutableStateOf(invoice.sellerName) }
     var sellerAddress     by remember { mutableStateOf(invoice.sellerAddress ?: "") }
     var sellerNip         by remember { mutableStateOf(invoice.sellerNip ?: "") }
@@ -912,20 +877,20 @@ private fun EditInvoiceDialog(
     var items             by remember {
         mutableStateOf(invoice.items.mapIndexed { idx, item ->
             InvoiceLineItem(
-                tempId       = idx + 1,
-                ordinal      = item.ordinal,
-                name         = item.name,
-                quantity     = item.quantity,
-                unit         = item.unit,
-                unitNetPrice = item.unitNetPrice,
-                vatRate      = VatRate.fromCode(item.vatRate)
+                tempId    = idx + 1,
+                ordinal   = item.ordinal,
+                name      = item.name,
+                quantity  = item.quantity,
+                unit      = item.unit,
+                unitPrice = item.unitPrice
             )
         })
     }
     var submitting by remember { mutableStateOf(false) }
+    var submitted  by remember { mutableStateOf(false) }
 
     val totals  = remember(items) { InvoiceCalculator.calculateTotals(items) }
-    val isValid = sellerName.isNotBlank() && buyerName.isNotBlank() &&
+    val isValid = invoiceSeq.isNotBlank() && sellerName.isNotBlank() && buyerName.isNotBlank() &&
         issueDate.isNotBlank() && saleDate.isNotBlank() && dueDate.isNotBlank() && items.isNotEmpty()
 
     val scrollState = rememberScrollState()
@@ -949,8 +914,24 @@ private fun EditInvoiceDialog(
                             style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
 
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            Column(Modifier.width(200.dp)) {
-                                InvoiceTextField(invoiceNumber, { invoiceNumber = it }, s.invoiceNumberPreviewLabel)
+                            Column(Modifier.width(200.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                OutlinedTextField(
+                                    value         = invoiceSeq,
+                                    onValueChange = { invoiceSeq = it },
+                                    label         = { Text("FA  ___  / $parsedYear") },
+                                    modifier      = Modifier.fillMaxWidth(),
+                                    singleLine    = true,
+                                    textStyle     = MaterialTheme.typography.bodySmall,
+                                    isError       = submitted && invoiceSeq.isBlank()
+                                )
+                                if (invoiceSeq.isNotBlank()) {
+                                    Text(
+                                        fullInvoiceNumber,
+                                        style      = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color      = MaterialTheme.colorScheme.primary
+                                    )
+                                }
                             }
                         }
 
@@ -959,7 +940,7 @@ private fun EditInvoiceDialog(
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 SectionTitle(s.sellerSection)
-                                InvoiceTextField(sellerName,        { sellerName = it },        s.sellerNameLabel)
+                                InvoiceTextField(sellerName,        { sellerName = it },        s.sellerNameLabel,    isError = submitted && sellerName.isBlank())
                                 InvoiceTextField(sellerAddress,     { sellerAddress = it },     s.sellerAddressLabel)
                                 InvoiceTextField(sellerNip,         { sellerNip = it },         s.nipLabel)
                                 InvoiceTextField(sellerRegon,       { sellerRegon = it },       s.regonLabel)
@@ -969,9 +950,9 @@ private fun EditInvoiceDialog(
                             }
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 SectionTitle(s.buyerSection)
-                                InvoiceTextField(buyerName,    { buyerName = it },    s.buyerNameLabel)
+                                InvoiceTextField(buyerName,    { buyerName = it },    s.buyerNameLabel,    isError = submitted && buyerName.isBlank())
                                 InvoiceTextField(buyerAddress, { buyerAddress = it }, s.buyerAddressLabel)
-                                InvoiceTextField(buyerNip,     { buyerNip = it },     s.buyerNipLabel)
+                                InvoiceTextField(buyerNip,     { buyerNip = it },     s.nipLabel)
                                 InvoiceTextField(buyerRegon,   { buyerRegon = it },   s.regonLabel)
                             }
                         }
@@ -980,9 +961,9 @@ private fun EditInvoiceDialog(
 
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                InvoiceTextField(issueDate, { issueDate = it }, s.invoiceIssueDateLabel, placeholder = "YYYY-MM-DD")
-                                InvoiceTextField(saleDate,  { saleDate  = it }, s.invoiceSaleDateLabel,  placeholder = "YYYY-MM-DD")
-                                InvoiceTextField(dueDate,   { dueDate   = it }, s.invoiceDueDateLabel,   placeholder = "YYYY-MM-DD")
+                                InvoiceTextField(issueDate, { issueDate = it }, s.invoiceIssueDateLabel, placeholder = "YYYY-MM-DD", isError = submitted && issueDate.isBlank())
+                                InvoiceTextField(saleDate,  { saleDate  = it }, s.invoiceSaleDateLabel,  placeholder = "YYYY-MM-DD", isError = submitted && saleDate.isBlank())
+                                InvoiceTextField(dueDate,   { dueDate   = it }, s.invoiceDueDateLabel,   placeholder = "YYYY-MM-DD", isError = submitted && dueDate.isBlank())
                             }
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text(s.paymentMethodLabel, style = MaterialTheme.typography.labelSmall,
@@ -1002,9 +983,7 @@ private fun EditInvoiceDialog(
                         )
 
                         HorizontalDivider()
-
-                        SectionTitle(s.vatSummarySection)
-                        VatSummaryTable(totals)
+                        TotalAmountRow(totals)
                     }
 
                     VerticalScrollbar(
@@ -1023,11 +1002,13 @@ private fun EditInvoiceDialog(
                     Spacer(Modifier.width(8.dp))
                     Button(
                         onClick = {
+                            submitted = true
+                            if (!isValid) return@Button
                             scope.launch {
                                 submitting = true
                                 try {
                                     val req = UpdateInvoiceRequest(
-                                        invoiceNumber     = invoiceNumber,
+                                        invoiceNumber     = fullInvoiceNumber,
                                         issueDate         = issueDate,
                                         saleDate          = saleDate,
                                         dueDate           = dueDate,
@@ -1046,12 +1027,11 @@ private fun EditInvoiceDialog(
                                         notes             = invoiceNotes.ifBlank { null },
                                         items             = items.mapIndexed { idx, it ->
                                             CreateInvoiceItemRequest(
-                                                ordinal      = idx + 1,
-                                                name         = it.name,
-                                                quantity     = it.quantity,
-                                                unit         = it.unit,
-                                                unitNetPrice = it.unitNetPrice,
-                                                vatRate      = it.vatRate.code
+                                                ordinal   = idx + 1,
+                                                name      = it.name,
+                                                quantity  = it.quantity,
+                                                unit      = it.unit,
+                                                unitPrice = it.unitPrice
                                             )
                                         }
                                     )
@@ -1066,7 +1046,7 @@ private fun EditInvoiceDialog(
                                 submitting = false
                             }
                         },
-                        enabled = isValid && !submitting
+                        enabled = !submitting
                     ) {
                         if (submitting) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                         else Text(s.save)

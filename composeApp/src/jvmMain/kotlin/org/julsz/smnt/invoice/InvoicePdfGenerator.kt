@@ -30,28 +30,20 @@ object InvoicePdfGenerator {
             setWidths(floatArrayOf(1.1f, 0.9f))
             setSpacingAfter(12f)
         }
-
-        val sellerCell = buildSellerCell(invoice, normalFont, boldFont, smallFont)
-        headerTable.addCell(sellerCell)
-
-        val metaCell = buildMetaCell(invoice, normalFont, boldFont, titleFont, smallFont)
-        headerTable.addCell(metaCell)
-
+        headerTable.addCell(buildSellerCell(invoice, normalFont, boldFont, smallFont))
+        headerTable.addCell(buildMetaCell(invoice, normalFont, boldFont, titleFont, smallFont))
         document.add(headerTable)
 
         // ── Buyer ─────────────────────────────────────────────────────────────
-        document.add(buildBuyerSection(invoice, normalFont, boldFont, smallFont))
+        document.add(buildBuyerSection(invoice, normalFont, boldFont))
         document.add(Paragraph(" "))
 
         // ── Items table ───────────────────────────────────────────────────────
         document.add(buildItemsTable(invoice.items, normalFont, boldFont, smallFont, smallBoldFont))
         document.add(Paragraph(" "))
 
-        // ── VAT summary + totals ──────────────────────────────────────────────
-        val totals = InvoiceCalculator.calculateTotals(
-            invoice.items.map { it.toDomain() }
-        )
-        document.add(buildVatSummary(totals, normalFont, boldFont, smallFont, smallBoldFont))
+        // ── Totals ────────────────────────────────────────────────────────────
+        document.add(buildTotalsSection(invoice.totalAmount, normalFont, boldFont, smallFont, smallBoldFont))
         document.add(Paragraph(" "))
 
         // ── Payment info ──────────────────────────────────────────────────────
@@ -59,7 +51,7 @@ object InvoicePdfGenerator {
         document.add(Paragraph(" "))
 
         // ── Amount in words ───────────────────────────────────────────────────
-        val amountWords = AmountInWords.convert(invoice.totalGross, Locale.forLanguageTag("pl"))
+        val amountWords = AmountInWords.convert(invoice.totalAmount, Locale.forLanguageTag("pl"))
         val amountPara = Paragraph("Słownie: $amountWords", boldFont).apply { spacingAfter = 24f }
         document.add(amountPara)
 
@@ -90,7 +82,7 @@ object InvoicePdfGenerator {
     }
 
     private fun resolveBaseFont(bold: Boolean): BaseFont {
-        val winPaths = if (bold) listOf(
+        val paths = if (bold) listOf(
             "C:/Windows/Fonts/arialbd.ttf",
             "C:/Windows/Fonts/calibrib.ttf",
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
@@ -101,10 +93,8 @@ object InvoicePdfGenerator {
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
             "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"
         )
-        for (path in winPaths) {
-            try {
-                return BaseFont.createFont(path, BaseFont.IDENTITY_H, BaseFont.EMBEDDED)
-            } catch (_: Exception) {}
+        for (path in paths) {
+            try { return BaseFont.createFont(path, BaseFont.IDENTITY_H, BaseFont.EMBEDDED) } catch (_: Exception) {}
         }
         val fallback = if (bold) BaseFont.TIMES_BOLD else BaseFont.TIMES_ROMAN
         return BaseFont.createFont(fallback, "Cp1250", false)
@@ -127,7 +117,7 @@ object InvoicePdfGenerator {
     private fun buildMetaCell(inv: InvoiceDto, normal: Font, bold: Font, title: Font, small: Font): PdfPCell {
         val p = Paragraph()
         p.alignment = Element.ALIGN_RIGHT
-        p.add(Chunk("FAKTURA VAT\n", title))
+        p.add(Chunk("FAKTURA\n", title))
         p.add(Chunk("Nr: ${inv.invoiceNumber}\n\n", bold))
         p.add(Chunk("Data wystawienia:   ${formatDate(inv.issueDate)}\n", normal))
         p.add(Chunk("Data sprzedaży:     ${formatDate(inv.saleDate)}\n", normal))
@@ -139,7 +129,7 @@ object InvoicePdfGenerator {
         return c
     }
 
-    private fun buildBuyerSection(inv: InvoiceDto, normal: Font, bold: Font, small: Font): PdfPTable {
+    private fun buildBuyerSection(inv: InvoiceDto, normal: Font, bold: Font): PdfPTable {
         val t = PdfPTable(1).apply {
             widthPercentage = 50f
             horizontalAlignment = Element.ALIGN_LEFT
@@ -165,75 +155,43 @@ object InvoicePdfGenerator {
         items: List<InvoiceItemDto>,
         normal: Font, bold: Font, small: Font, smallBold: Font
     ): PdfPTable {
-        val colWidths = floatArrayOf(0.4f, 3f, 0.6f, 0.5f, 1.1f, 1.1f, 0.6f)
-        val t = PdfPTable(7).apply {
+        val t = PdfPTable(6).apply {
             widthPercentage = 100f
-            setWidths(colWidths)
+            setWidths(floatArrayOf(0.4f, 3f, 0.6f, 0.5f, 1.2f, 1.2f))
         }
-        val headers = listOf(
-            "Lp.", "Nazwa towaru/usługi", "Ilość", "J.m.",
-            "Cena jednostkowa\nbez podatku [zł,gr]",
-            "Wartość\nbez podatku [zł,gr]",
-            "Stawka\nVAT"
-        )
-        headers.forEach { h ->
-            t.addCell(headerCell(h, smallBold))
-        }
+        listOf("Lp.", "Nazwa towaru/usługi", "Ilość", "J.m.", "Cena jednostkowa [zł,gr]", "Wartość [zł,gr]")
+            .forEach { h -> t.addCell(headerCell(h, smallBold)) }
+
         items.forEachIndexed { idx, item ->
             val bg = if (idx % 2 == 0) Color.WHITE else Color(248, 248, 248)
-            t.addCell(dataCell("${item.ordinal}", small, bg, Element.ALIGN_CENTER))
-            t.addCell(dataCell(item.name, small, bg, Element.ALIGN_LEFT))
-            t.addCell(dataCell(fmt(item.quantity, 3), small, bg, Element.ALIGN_RIGHT))
-            t.addCell(dataCell(item.unit, small, bg, Element.ALIGN_CENTER))
-            t.addCell(dataCell(money(item.unitNetPrice), small, bg, Element.ALIGN_RIGHT))
-            t.addCell(dataCell(money(item.netAmount), small, bg, Element.ALIGN_RIGHT))
-            t.addCell(dataCell(item.vatRate + if (item.vatRate != "zw" && item.vatRate != "0") "%" else "", small, bg, Element.ALIGN_CENTER))
+            t.addCell(dataCell("${item.ordinal}",            small, bg, Element.ALIGN_CENTER))
+            t.addCell(dataCell(item.name,                    small, bg, Element.ALIGN_LEFT))
+            t.addCell(dataCell(fmt(item.quantity, 3),        small, bg, Element.ALIGN_RIGHT))
+            t.addCell(dataCell(item.unit,                    small, bg, Element.ALIGN_CENTER))
+            t.addCell(dataCell(money(item.unitPrice),        small, bg, Element.ALIGN_RIGHT))
+            t.addCell(dataCell(money(item.amount),           small, bg, Element.ALIGN_RIGHT))
         }
         return t
     }
 
-    private fun buildVatSummary(
-        totals: InvoiceTotals,
+    private fun buildTotalsSection(
+        totalAmount: Double,
         normal: Font, bold: Font, small: Font, smallBold: Font
     ): PdfPTable {
         val wrapper = PdfPTable(2).apply {
             widthPercentage = 100f
             setWidths(floatArrayOf(1.2f, 0.8f))
         }
+        wrapper.addCell(PdfPCell().noBorder())
 
-        // VAT breakdown (left cell)
-        val vatTable = PdfPTable(4).apply {
-            widthPercentage = 100f
-            setWidths(floatArrayOf(0.5f, 1f, 1f, 1f))
-        }
-        listOf("Stawka", "Netto", "VAT", "Brutto").forEach { vatTable.addCell(headerCell(it, smallBold)) }
-        totals.vatSummaries.forEach { s ->
-            val rateLabel = s.vatRate.code + if (s.vatRate.code != "zw" && s.vatRate.code != "0") "%" else ""
-            vatTable.addCell(dataCell(rateLabel, small, Color.WHITE, Element.ALIGN_CENTER))
-            vatTable.addCell(dataCell(money(s.netAmount),   small, Color.WHITE, Element.ALIGN_RIGHT))
-            vatTable.addCell(dataCell(money(s.vatAmount),   small, Color.WHITE, Element.ALIGN_RIGHT))
-            vatTable.addCell(dataCell(money(s.grossAmount), small, Color.WHITE, Element.ALIGN_RIGHT))
-        }
-        val leftCell = PdfPCell(vatTable).noBorder().apply { paddingRight = 12f }
-        wrapper.addCell(leftCell)
-
-        // Totals (right cell)
         val totalsTable = PdfPTable(2).apply {
             widthPercentage = 100f
             setWidths(floatArrayOf(1.2f, 0.8f))
         }
-        fun totRow(label: String, value: String, highlight: Boolean = false) {
-            val f = if (highlight) bold else small
-            totalsTable.addCell(dataCell(label, f, if (highlight) HEADER_BG else Color.WHITE, Element.ALIGN_LEFT))
-            totalsTable.addCell(dataCell(value, f, if (highlight) HEADER_BG else Color.WHITE, Element.ALIGN_RIGHT))
-        }
-        totRow("Razem netto:", money(totals.totalNet))
-        totRow("Razem VAT:", money(totals.totalVat))
-        totRow("RAZEM DO ZAPŁATY:", "${money(totals.totalGross)} PLN", highlight = true)
+        totalsTable.addCell(dataCell("RAZEM DO ZAPŁATY:", bold, HEADER_BG, Element.ALIGN_LEFT))
+        totalsTable.addCell(dataCell("${money(totalAmount)} PLN", bold, HEADER_BG, Element.ALIGN_RIGHT))
 
-        val rightCell = PdfPCell(totalsTable).noBorder()
-        wrapper.addCell(rightCell)
-
+        wrapper.addCell(PdfPCell(totalsTable).noBorder())
         return wrapper
     }
 
@@ -304,21 +262,12 @@ object InvoicePdfGenerator {
         "transfer" -> "przelew"
         "cash"     -> "gotówka"
         "card"     -> "karta"
+        "blik"     -> "BLIK"
         else       -> method
     }
 
     private fun money(value: Double): String = "%.2f".format(value).replace('.', ',')
 
     private fun fmt(value: Double, decimals: Int): String =
-        "%.${decimals}f".format(value).trimEnd('0').trimEnd(',').replace('.', ',')
-
-    private fun InvoiceItemDto.toDomain(): InvoiceLineItem = InvoiceLineItem(
-        tempId       = id,
-        ordinal      = ordinal,
-        name         = name,
-        quantity     = quantity,
-        unit         = unit,
-        unitNetPrice = unitNetPrice,
-        vatRate      = VatRate.fromCode(vatRate)
-    )
+        "%.${decimals}f".format(value).trimEnd('0').trimEnd('.').replace('.', ',')
 }

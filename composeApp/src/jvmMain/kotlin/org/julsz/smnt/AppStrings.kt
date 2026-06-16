@@ -317,7 +317,6 @@ interface AppStrings {
     val bankAccountLabel: String
     val buyerNameLabel: String
     val buyerAddressLabel: String
-    val buyerNipLabel: String
     val invoiceIssueDateLabel: String
     val invoiceSaleDateLabel: String
     val invoiceDueDateLabel: String
@@ -325,13 +324,10 @@ interface AppStrings {
     val paymentMethodTransfer: String
     val paymentMethodCash: String
     val paymentMethodCard: String
+    val paymentMethodBlik: String
     val itemsSection: String
     val addItemBtn: String
-    val vatRateLabel: String
-    val vatSummarySection: String
-    val totalNetLabel: String
-    val totalVatLabel: String
-    val totalGrossLabel: String
+    val totalAmountLabel: String
     val createAndDownloadBtn: String
     val linkedReservationLabel: String
     val selectReservationOptional: String
@@ -604,7 +600,7 @@ object EnglishStrings : AppStrings {
     override val defaultDueDaysLabel      = "Default due days"
     override val savedLabel               = "Saved"
     override val navInvoices              = "Invoices"
-    override val invoicesTitle            = "VAT Invoices"
+    override val invoicesTitle            = "Invoices"
     override val newInvoiceBtn            = "New Invoice"
     override val createInvoiceBtn         = "Create Invoice"
     override val noInvoices               = "No invoices yet."
@@ -613,12 +609,11 @@ object EnglishStrings : AppStrings {
     override val buyerSection             = "Buyer"
     override val sellerNameLabel          = "Seller name *"
     override val sellerAddressLabel       = "Address"
-    override val nipLabel                 = "NIP (tax ID)"
+    override val nipLabel                 = "NIP"
     override val regonLabel               = "REGON"
     override val bankAccountLabel         = "Bank account number"
     override val buyerNameLabel           = "Buyer name *"
     override val buyerAddressLabel        = "Buyer address"
-    override val buyerNipLabel            = "Buyer NIP"
     override val invoiceIssueDateLabel    = "Issue date *"
     override val invoiceSaleDateLabel     = "Sale date *"
     override val invoiceDueDateLabel      = "Due date *"
@@ -626,13 +621,10 @@ object EnglishStrings : AppStrings {
     override val paymentMethodTransfer    = "Bank transfer"
     override val paymentMethodCash        = "Cash"
     override val paymentMethodCard        = "Card"
+    override val paymentMethodBlik        = "BLIK"
     override val itemsSection             = "Line items"
     override val addItemBtn               = "Add item"
-    override val vatRateLabel             = "VAT rate"
-    override val vatSummarySection        = "VAT summary"
-    override val totalNetLabel            = "Total net"
-    override val totalVatLabel            = "Total VAT"
-    override val totalGrossLabel          = "Total gross"
+    override val totalAmountLabel         = "Total"
     override val createAndDownloadBtn     = "Create & Download PDF"
     override val linkedReservationLabel    = "Link to reservation(s)"
     override val selectReservationOptional = "Select reservation (optional)"
@@ -922,17 +914,17 @@ object PolishStrings : AppStrings {
     override val overdueCheckOuts   = "Zaległe wymeldowania"
     override val noOverdueCheckOuts = "Brak zaległych wymeldowań"
     override val configInvoiceTitle        = "Ustawienia faktur"
-    override val configInvoiceDesc        = "Skonfiguruj domyślne dane sprzedawcy do faktur VAT"
+    override val configInvoiceDesc        = "Skonfiguruj domyślne dane sprzedawcy do faktur"
     override val invoiceConfigTitle       = "Ustawienia faktur"
     override val invoiceConfigSubtitle    = "Domyślne dane sprzedawcy używane przy wystawianiu faktur"
     override val defaultDueDaysLabel      = "Domyślny termin płatności (dni)"
     override val savedLabel               = "Zapisano"
     override val navInvoices              = "Faktury"
-    override val invoicesTitle            = "Faktury VAT"
+    override val invoicesTitle            = "Faktury"
     override val newInvoiceBtn            = "Nowa faktura"
     override val createInvoiceBtn         = "Wystaw fakturę"
     override val noInvoices               = "Brak faktur."
-    override val createInvoiceTitle       = "Nowa faktura VAT"
+    override val createInvoiceTitle       = "Nowa faktura"
     override val sellerSection            = "Sprzedawca"
     override val buyerSection             = "Nabywca"
     override val sellerNameLabel          = "Nazwa sprzedawcy *"
@@ -942,7 +934,6 @@ object PolishStrings : AppStrings {
     override val bankAccountLabel         = "Nr rachunku bankowego"
     override val buyerNameLabel           = "Nazwa nabywcy *"
     override val buyerAddressLabel        = "Adres nabywcy"
-    override val buyerNipLabel            = "NIP nabywcy"
     override val invoiceIssueDateLabel    = "Data wystawienia *"
     override val invoiceSaleDateLabel     = "Data sprzedaży *"
     override val invoiceDueDateLabel      = "Termin płatności *"
@@ -950,13 +941,10 @@ object PolishStrings : AppStrings {
     override val paymentMethodTransfer    = "Przelew"
     override val paymentMethodCash        = "Gotówka"
     override val paymentMethodCard        = "Karta"
+    override val paymentMethodBlik        = "BLIK"
     override val itemsSection             = "Pozycje faktury"
     override val addItemBtn               = "Dodaj pozycję"
-    override val vatRateLabel             = "Stawka VAT"
-    override val vatSummarySection        = "Podsumowanie VAT"
-    override val totalNetLabel            = "Razem netto"
-    override val totalVatLabel            = "Razem VAT"
-    override val totalGrossLabel          = "Razem brutto"
+    override val totalAmountLabel         = "Razem"
     override val createAndDownloadBtn     = "Utwórz i pobierz PDF"
     override val linkedReservationLabel    = "Powiąż z rezerwacjami"
     override val selectReservationOptional = "Wybierz rezerwację (opcjonalnie)"

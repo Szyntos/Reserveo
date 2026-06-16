@@ -326,11 +326,8 @@ data class InvoiceItemDto(
     val name: String,
     val quantity: Double,
     val unit: String,
-    val unitNetPrice: Double,
-    val vatRate: String,
-    val netAmount: Double,
-    val vatAmount: Double,
-    val grossAmount: Double
+    val unitPrice: Double,
+    val amount: Double
 )
 
 @Serializable
@@ -354,9 +351,7 @@ data class InvoiceDto(
     val buyerAddress: String?,
     val buyerNip: String?,
     val buyerRegon: String?,
-    val totalNet: Double,
-    val totalVat: Double,
-    val totalGross: Double,
+    val totalAmount: Double,
     val notes: String?,
     val createdAt: String,
     val items: List<InvoiceItemDto> = emptyList()
@@ -368,15 +363,14 @@ data class CreateInvoiceItemRequest(
     val name: String,
     val quantity: Double,
     val unit: String,
-    val unitNetPrice: Double,
-    val vatRate: String
+    val unitPrice: Double
 )
 
 @Serializable
 data class CreateInvoiceRequest(
     val hotelId: Int,
     val reservationId: Int?,
-    val invoiceNumber: String? = null,
+    val invoiceNumber: String,
     val issueDate: String,
     val saleDate: String,
     val dueDate: String,

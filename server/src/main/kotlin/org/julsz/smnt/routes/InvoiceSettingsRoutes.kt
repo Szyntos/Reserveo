@@ -64,7 +64,7 @@ private fun upsert(hotelId: Int, req: SaveInvoiceSettingsRequest): InvoiceSettin
         }
     } else {
         InvoiceSettings.insert {
-            it[InvoiceSettings.hotelId]              = hotelId
+            it[InvoiceSettings.hotelId] = hotelId
             it[sellerName]           = req.sellerName
             it[sellerAddress]        = req.sellerAddress
             it[sellerNip]            = req.sellerNip
