@@ -22,11 +22,11 @@ suspend fun saveFilePicker(title: String, defaultName: String, filter: String): 
 
 /**
  * Opens the native Windows "Open" dialog via PowerShell / Windows Forms.
- * Returns the chosen [File], or null if the user cancelled.
+ * Returns the file content as a String, or null if the user cancelled.
  */
-suspend fun openFilePicker(title: String, filter: String): File? =
+actual suspend fun openFilePicker(title: String, filter: String): String? =
     withContext(Dispatchers.IO) {
-        runPs(buildPsScript(dialogClass = "OpenFileDialog", title = title, filter = filter))
+        runPs(buildPsScript(dialogClass = "OpenFileDialog", title = title, filter = filter))?.readText()
     }
 
 // ─────────────────────────────────────────────────────────────────────────────

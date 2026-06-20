@@ -51,6 +51,7 @@ fun HotelPickerScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(cs.surface)
+                .statusBarsPadding()
                 .padding(horizontal = 24.dp, vertical = 14.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically

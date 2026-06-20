@@ -1,5 +1,6 @@
 package org.julsz.smnt
 
+import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -16,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -74,21 +76,33 @@ fun MainApp(
     var currentScreen          by remember { mutableStateOf(AppScreen.Dashboard) }
     var invoiceForReservation  by remember { mutableStateOf<ReservationDto?>(null) }
     val snackbarState = remember { SnackbarHostState() }
+    var sidebarOpen            by remember { mutableStateOf(false) }
 
     CompositionLocalProvider(LocalSnackbar provides snackbarState) {
         Box(Modifier.fillMaxSize()) {
-            Row(Modifier.fillMaxSize()) {
-                AppSidebar(
-                    currentUser    = currentUser,
-                    selectedHotel  = selectedHotel,
-                    currentScreen  = currentScreen,
-                    onScreenChange = { currentScreen = it },
-                    onSwitchHotel  = onSwitchHotel,
-                    onLogout       = onLogout,
-                    isDark         = isDark,
-                    onThemeToggle  = onThemeToggle
-                )
-                VerticalDivider()
+            // Main content column (full width, behind the overlay)
+            Column(Modifier.fillMaxSize()) {
+                // Top bar with hamburger button
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surface)
+                        .statusBarsPadding()
+                        .height(48.dp)
+                        .padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { sidebarOpen = !sidebarOpen },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        HamburgerIcon(tint = MaterialTheme.colorScheme.onSurface)
+                    }
+                }
+                HorizontalDivider()
                 Box(Modifier.fillMaxSize().padding(28.dp)) {
                     when (currentScreen) {
                         AppScreen.Dashboard    -> DashboardPage(client = client, hotel = selectedHotel, noShowAfterDays = noShowAfterDays, autoCheckOutAfterDays = autoCheckOutAfterDays)
@@ -108,6 +122,40 @@ fun MainApp(
                     }
                 }
             }
+
+            // Scrim — dims content when sidebar is open
+            AnimatedVisibility(
+                visible = sidebarOpen,
+                enter = fadeIn(),
+                exit  = fadeOut()
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.4f))
+                        .clickable { sidebarOpen = false }
+                )
+            }
+
+            // Sidebar slides in from the left
+            AnimatedVisibility(
+                visible = sidebarOpen,
+                enter = slideInHorizontally(initialOffsetX = { -it }),
+                exit  = slideOutHorizontally(targetOffsetX = { -it })
+            ) {
+                AppSidebar(
+                    currentUser    = currentUser,
+                    selectedHotel  = selectedHotel,
+                    currentScreen  = currentScreen,
+                    onScreenChange = { screen -> currentScreen = screen; sidebarOpen = false },
+                    onSwitchHotel  = { sidebarOpen = false; onSwitchHotel() },
+                    onLogout       = { sidebarOpen = false; onLogout() },
+                    isDark         = isDark,
+                    onThemeToggle  = onThemeToggle,
+                    modifier       = Modifier.shadow(elevation = 16.dp)
+                )
+            }
+
             SnackbarHost(
                 hostState = snackbarState,
                 modifier  = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp)
@@ -127,12 +175,13 @@ private fun AppSidebar(
     onSwitchHotel: () -> Unit,
     onLogout: () -> Unit,
     isDark: Boolean,
-    onThemeToggle: () -> Unit
+    onThemeToggle: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val s  = LocalStrings.current
     val cs = MaterialTheme.colorScheme
     Column(
-        modifier = Modifier
+        modifier = modifier
             .width(240.dp)
             .fillMaxHeight()
             .background(cs.surfaceVariant),
@@ -311,6 +360,19 @@ private fun SidebarItem(label: String, selected: Boolean, onClick: () -> Unit) {
     }
 }
 
+@Composable
+private fun HamburgerIcon(tint: Color, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.size(20.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        repeat(3) {
+            Box(Modifier.fillMaxWidth().height(2.dp).background(tint, RoundedCornerShape(1.dp)))
+        }
+    }
+}
+
 // ─── Pages ────────────────────────────────────────────────────────────────────
 
 @Composable
@@ -457,81 +519,167 @@ private fun DashboardPage(client: HttpClient, hotel: UserHotelRoleDto, noShowAft
         }
     }
 
-    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-        Text(hotel.hotelName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val isWide = maxWidth >= 700.dp
 
         if (loading) {
-            CircularProgressIndicator()
-        } else {
-            // ── Stat cards ────────────────────────────────────────────────────
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatCard(
-                    title    = s.statCheckedIn,
-                    value    = if (totalRooms > 0) "$checkedInCount / $totalRooms" else "$checkedInCount",
-                    subtitle = if (totalRooms > 0) "$occupancyPct% ${s.statOccupancy}" else "",
-                    valueColor = if (checkedInCount > 0) MaterialTheme.colorScheme.primary
-                                 else MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f)
-                )
-                StatCard(
-                    title    = s.statMonthRevenue,
-                    value    = "${"%.0f".format(monthCollected)} PLN",
-                    subtitle = Month.of(thisMonth).getDisplayName(TextStyle.FULL, s.locale),
-                    modifier = Modifier.weight(1f)
-                )
-                StatCard(
-                    title    = s.statUpcoming7d,
-                    value    = "$next7",
-                    subtitle = s.arrivals,
-                    modifier = Modifier.weight(1f)
-                )
-                StatCard(
-                    title    = s.statPendingDp,
-                    value    = "$pendingDpCount",
-                    subtitle = s.reservationsTitle,
-                    valueColor = if (pendingDpCount > 0) MaterialTheme.colorScheme.error
-                                 else MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f)
-                )
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
             }
-
-            // ── Arrivals / Departures / Overdue ───────────────────────────────
-            Row(
-                Modifier.fillMaxWidth().weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+        } else if (isWide) {
+            Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                Text(hotel.hotelName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                // ── Stat cards ────────────────────────────────────────────────
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    StatCard(
+                        title      = s.statCheckedIn,
+                        value      = if (totalRooms > 0) "$checkedInCount / $totalRooms" else "$checkedInCount",
+                        subtitle   = if (totalRooms > 0) "$occupancyPct% ${s.statOccupancy}" else "",
+                        valueColor = if (checkedInCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                        modifier   = Modifier.weight(1f)
+                    )
+                    StatCard(
+                        title    = s.statMonthRevenue,
+                        value    = "${"%.0f".format(monthCollected)} PLN",
+                        subtitle = Month.of(thisMonth).getDisplayName(TextStyle.FULL, s.locale),
+                        modifier = Modifier.weight(1f)
+                    )
+                    StatCard(
+                        title    = s.statUpcoming7d,
+                        value    = "$next7",
+                        subtitle = s.arrivals,
+                        modifier = Modifier.weight(1f)
+                    )
+                    StatCard(
+                        title      = s.statPendingDp,
+                        value      = "$pendingDpCount",
+                        subtitle   = s.reservationsTitle,
+                        valueColor = if (pendingDpCount > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                        modifier   = Modifier.weight(1f)
+                    )
+                }
+                // ── Arrivals / Departures / Overdue ───────────────────────────
+                Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    DashboardTile(
+                        title        = s.arrivals,
+                        date         = todayStr,
+                        pending      = arrivals.filter { it.status in listOf("confirmed", "pending") },
+                        done         = arrivals.filter { it.status == "checked_in" },
+                        pendingLabel = s.notArrived,
+                        doneLabel    = s.arrived,
+                        emptyLabel   = s.noArrivalsToday,
+                        onAction     = { updateStatus(it, "checked_in") },
+                        modifier     = Modifier.weight(1f)
+                    )
+                    DashboardTile(
+                        title        = s.departures,
+                        date         = todayStr,
+                        pending      = departures.filter { it.status == "checked_in" },
+                        done         = departures.filter { it.status == "checked_out" },
+                        pendingLabel = s.notDeparted,
+                        doneLabel    = s.departed,
+                        emptyLabel   = s.noDeparturesToday,
+                        onAction     = { updateStatus(it, "checked_out") },
+                        modifier     = Modifier.weight(1f)
+                    )
+                    OverdueTile(
+                        reservations = overdue,
+                        onSetStatus  = { res, newStatus -> updateStatus(res, newStatus) },
+                        modifier     = Modifier.weight(1f)
+                    )
+                    OverdueCheckOutsTile(
+                        reservations = overdueCheckOuts,
+                        onSetStatus  = { res, newStatus -> updateStatus(res, newStatus) },
+                        modifier     = Modifier.weight(1f)
+                    )
+                }
+            }
+        } else {
+            // ── Narrow (portrait / mobile) — scrollable stacked layout ────────
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(bottom = 16.dp)
             ) {
-                DashboardTile(
-                    title        = s.arrivals,
-                    date         = todayStr,
-                    pending      = arrivals.filter { it.status in listOf("confirmed", "pending") },
-                    done         = arrivals.filter { it.status == "checked_in" },
-                    pendingLabel = s.notArrived,
-                    doneLabel    = s.arrived,
-                    emptyLabel   = s.noArrivalsToday,
-                    onAction     = { updateStatus(it, "checked_in") },
-                    modifier     = Modifier.weight(1f)
-                )
-                DashboardTile(
-                    title        = s.departures,
-                    date         = todayStr,
-                    pending      = departures.filter { it.status == "checked_in" },
-                    done         = departures.filter { it.status == "checked_out" },
-                    pendingLabel = s.notDeparted,
-                    doneLabel    = s.departed,
-                    emptyLabel   = s.noDeparturesToday,
-                    onAction     = { updateStatus(it, "checked_out") },
-                    modifier     = Modifier.weight(1f)
-                )
-                OverdueTile(
-                    reservations = overdue,
-                    onSetStatus  = { res, newStatus -> updateStatus(res, newStatus) },
-                    modifier     = Modifier.weight(1f)
-                )
-                OverdueCheckOutsTile(
-                    reservations = overdueCheckOuts,
-                    onSetStatus  = { res, newStatus -> updateStatus(res, newStatus) },
-                    modifier     = Modifier.weight(1f)
-                )
+                item {
+                    Text(hotel.hotelName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                }
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            StatCard(
+                                title      = s.statCheckedIn,
+                                value      = if (totalRooms > 0) "$checkedInCount / $totalRooms" else "$checkedInCount",
+                                subtitle   = if (totalRooms > 0) "$occupancyPct% ${s.statOccupancy}" else "",
+                                valueColor = if (checkedInCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                modifier   = Modifier.weight(1f)
+                            )
+                            StatCard(
+                                title    = s.statMonthRevenue,
+                                value    = "${"%.0f".format(monthCollected)} PLN",
+                                subtitle = Month.of(thisMonth).getDisplayName(TextStyle.FULL, s.locale),
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            StatCard(
+                                title    = s.statUpcoming7d,
+                                value    = "$next7",
+                                subtitle = s.arrivals,
+                                modifier = Modifier.weight(1f)
+                            )
+                            StatCard(
+                                title      = s.statPendingDp,
+                                value      = "$pendingDpCount",
+                                subtitle   = s.reservationsTitle,
+                                valueColor = if (pendingDpCount > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                                modifier   = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+                item {
+                    DashboardTile(
+                        title        = s.arrivals,
+                        date         = todayStr,
+                        pending      = arrivals.filter { it.status in listOf("confirmed", "pending") },
+                        done         = arrivals.filter { it.status == "checked_in" },
+                        pendingLabel = s.notArrived,
+                        doneLabel    = s.arrived,
+                        emptyLabel   = s.noArrivalsToday,
+                        onAction     = { updateStatus(it, "checked_in") },
+                        modifier     = Modifier.fillMaxWidth()
+                    )
+                }
+                item {
+                    DashboardTile(
+                        title        = s.departures,
+                        date         = todayStr,
+                        pending      = departures.filter { it.status == "checked_in" },
+                        done         = departures.filter { it.status == "checked_out" },
+                        pendingLabel = s.notDeparted,
+                        doneLabel    = s.departed,
+                        emptyLabel   = s.noDeparturesToday,
+                        onAction     = { updateStatus(it, "checked_out") },
+                        modifier     = Modifier.fillMaxWidth()
+                    )
+                }
+                item {
+                    OverdueTile(
+                        reservations = overdue,
+                        onSetStatus  = { res, newStatus -> updateStatus(res, newStatus) },
+                        modifier     = Modifier.fillMaxWidth(),
+                        scrollable   = false
+                    )
+                }
+                item {
+                    OverdueCheckOutsTile(
+                        reservations = overdueCheckOuts,
+                        onSetStatus  = { res, newStatus -> updateStatus(res, newStatus) },
+                        modifier     = Modifier.fillMaxWidth(),
+                        scrollable   = false
+                    )
+                }
             }
         }
     }
@@ -674,7 +822,8 @@ private fun DashboardTile(
 private fun OverdueTile(
     reservations: List<ReservationDto>,
     onSetStatus: (ReservationDto, String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    scrollable: Boolean = true
 ) {
     val s        = LocalStrings.current
     val cs       = MaterialTheme.colorScheme
@@ -720,8 +869,11 @@ private fun OverdueTile(
             if (reservations.isEmpty()) {
                 Text(s.noOverdueCheckIns, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    items(reservations) { res ->
+                Column(
+                    modifier = if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    reservations.forEach { res ->
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(res.guestName, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
                             Text(
@@ -753,7 +905,8 @@ private fun OverdueTile(
 private fun OverdueCheckOutsTile(
     reservations: List<ReservationDto>,
     onSetStatus: (ReservationDto, String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    scrollable: Boolean = true
 ) {
     val s        = LocalStrings.current
     val cs       = MaterialTheme.colorScheme
@@ -799,8 +952,11 @@ private fun OverdueCheckOutsTile(
             if (reservations.isEmpty()) {
                 Text(s.noOverdueCheckOuts, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    items(reservations) { res ->
+                Column(
+                    modifier = if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    reservations.forEach { res ->
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(res.guestName, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
                             Text(

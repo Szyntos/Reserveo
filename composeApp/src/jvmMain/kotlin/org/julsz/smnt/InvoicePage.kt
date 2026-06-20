@@ -37,12 +37,12 @@ import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 
 @Composable
-fun InvoicePage(
+actual fun InvoicePage(
     client: HttpClient,
     hotel: UserHotelRoleDto,
-    initialReservation: ReservationDto? = null,
-    onInitialConsumed: () -> Unit = {},
-    fontScale: Float = 1.0f
+    initialReservation: ReservationDto?,
+    onInitialConsumed: () -> Unit,
+    fontScale: Float
 ) {
     val s        = LocalStrings.current
     val snackbar = LocalSnackbar.current

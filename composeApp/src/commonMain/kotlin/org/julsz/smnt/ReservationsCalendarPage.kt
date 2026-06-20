@@ -1,10 +1,5 @@
 package org.julsz.smnt
 
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.HorizontalScrollbar
-import androidx.compose.foundation.TooltipArea
-import androidx.compose.foundation.TooltipPlacement
-import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -16,7 +11,6 @@ import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -45,7 +39,6 @@ import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.http.*
-import androidx.compose.ui.unit.DpOffset
 import kotlinx.coroutines.launch
 import java.time.DayOfWeek
 import java.time.Instant
@@ -1118,8 +1111,8 @@ private fun ReservationDetailDialog(
                                 innerTextField()
                             }
                         )
-                        VerticalScrollbar(
-                            adapter = rememberScrollbarAdapter(editScrollState),
+                        AppVerticalScrollbar(
+                            state    = editScrollState,
                             modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
                         )
                     }
@@ -1152,8 +1145,8 @@ private fun ReservationDetailDialog(
                                 Text(description, style = MaterialTheme.typography.bodySmall)
                             }
                         }
-                        VerticalScrollbar(
-                            adapter = rememberScrollbarAdapter(scrollState),
+                        AppVerticalScrollbar(
+                            state    = scrollState,
                             modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
                         )
                     }
@@ -2970,8 +2963,7 @@ private fun ReservationsTimelineView(
                             val holidayForDay = holidayMap[day]
                             val isHoliday = holidayForDay != null
 
-                            @OptIn(ExperimentalFoundationApi::class)
-                            TooltipArea(
+                            AppTooltipArea(
                                 tooltip = {
                                     if (holidayForDay != null) {
                                         Surface(
@@ -2988,10 +2980,7 @@ private fun ReservationsTimelineView(
                                             )
                                         }
                                     }
-                                },
-                                tooltipPlacement = TooltipPlacement.CursorPoint(
-                                    offset = DpOffset(0.dp, 16.dp)
-                                )
+                                }
                             ) {
                                 Column(
                                     Modifier.width(DAY_W).fillMaxHeight()
@@ -3574,16 +3563,16 @@ private fun ReservationsTimelineView(
                     }
                 }
                 // Vertical scrollbar (right edge)
-                VerticalScrollbar(
-                    adapter  = rememberScrollbarAdapter(vScroll),
+                AppVerticalScrollbar(
+                    state    = vScroll,
                     modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
                 )
                 // Horizontal scrollbar (bottom edge)
-                HorizontalScrollbar(
-                    adapter  = rememberScrollbarAdapter(hScroll),
+                AppHorizontalScrollbar(
+                    state    = hScroll,
                     modifier = Modifier.align(Alignment.BottomStart)
                         .fillMaxWidth()
-                        .padding(end = 8.dp)  // leave space for vertical scrollbar
+                        .padding(end = 8.dp)
                 )
             }
         }

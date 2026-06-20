@@ -1,9 +1,7 @@
 package org.julsz.smnt
 
-import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -273,8 +271,8 @@ private fun InvoiceConfigPage(client: HttpClient, hotel: UserHotelRoleDto, onBac
                 }
             }
         }
-        VerticalScrollbar(
-            adapter  = rememberScrollbarAdapter(scrollState),
+        AppVerticalScrollbar(
+            state    = scrollState,
             modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
         )
     }
@@ -378,12 +376,10 @@ private fun HolidaysConfigPage(client: HttpClient, hotel: UserHotelRoleDto, onBa
                             OutlinedButton(onClick = {
                                 scope.launch {
                                     try {
-                                        val file = openFilePicker(
+                                        val csv = openFilePicker(
                                             title  = s.importCsvBtn,
                                             filter = "CSV files (*.csv)|*.csv|All files (*.*)|*.*"
-                                        )
-                                        if (file == null) return@launch
-                                        val csv = withContext(Dispatchers.IO) { file.readText() }
+                                        ) ?: return@launch
                                         val response: ImportHolidaysResponse = client.post("$BASE_URL/api/holidays/import") {
                                             contentType(ContentType.Application.Json)
                                             setBody(ImportHolidaysRequest(hotelId = hotel.hotelId, csv = csv))
@@ -464,8 +460,8 @@ private fun HolidaysConfigPage(client: HttpClient, hotel: UserHotelRoleDto, onBa
             }
         }
 
-        VerticalScrollbar(
-            adapter  = rememberScrollbarAdapter(scrollState),
+        AppVerticalScrollbar(
+            state    = scrollState,
             modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
         )
     }

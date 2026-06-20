@@ -26,8 +26,6 @@ import io.ktor.serialization.kotlinx.json.*
 import java.io.File
 import java.util.Properties
 
-internal const val BASE_URL = "http://localhost:8080"
-
 // ─── Settings persistence ─────────────────────────────────────────────────────
 
 private data class AppSettings(

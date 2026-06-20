@@ -45,6 +45,7 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.androidx.activity.compose)
+            implementation(libs.ktor.client.cio.mp)
         }
         commonMain.dependencies {
             implementation(libs.compose.runtime)
@@ -56,6 +57,8 @@ kotlin {
             implementation(libs.androidx.lifecycle.viewmodelCompose)
             implementation(libs.androidx.lifecycle.runtimeCompose)
             implementation(projects.shared)
+            implementation(libs.ktor.client.content.negotiation.mp)
+            implementation(libs.ktor.serialization.kotlinx.json.mp)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
@@ -64,8 +67,6 @@ kotlin {
             implementation(compose.desktop.currentOs)
             implementation(libs.kotlinx.coroutinesSwing)
             implementation(libs.ktor.client.cio)
-            implementation(libs.ktor.client.content.negotiation)
-            implementation(libs.ktor.serialization.kotlinx.json)
             implementation(libs.openpdf)
         }
     }
@@ -93,6 +94,7 @@ android {
         }
     }
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
@@ -100,6 +102,7 @@ android {
 
 dependencies {
     debugImplementation(libs.compose.uiTooling)
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
 }
 
 compose.desktop {
