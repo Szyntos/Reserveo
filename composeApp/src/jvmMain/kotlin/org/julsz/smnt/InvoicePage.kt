@@ -141,7 +141,7 @@ actual fun InvoicePage(
     }
 
     deleteTarget?.let { inv ->
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { deleteTarget = null },
             title   = { Text(s.deleteInvoiceTitle) },
             text    = { Text("${inv.invoiceNumber} · ${inv.buyerName}") },
@@ -526,7 +526,7 @@ private fun CreateInvoiceDialog(
 
             // ── Guest-mismatch warning ─────────────────────────────────────
             pendingAddRes?.let { pending ->
-                AlertDialog(
+                AppAlertDialog(
                     onDismissRequest = { pendingAddRes = null },
                     title = { Text(s.differentGuestTitle) },
                     text  = {

@@ -308,7 +308,7 @@ private fun AddRoomDialog(
     var tags        by remember { mutableStateOf<List<String>>(emptyList()) }
 
     val s = LocalStrings.current
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(s.addRoomTitle) },
         text = {
@@ -366,7 +366,7 @@ private fun EditRoomDialog(
     var tags        by remember { mutableStateOf(room.tags) }
 
     val s = LocalStrings.current
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(s.editRoomTitle(room.number)) },
         text = {
@@ -424,7 +424,7 @@ private fun RoomFormFields(
     OutlinedTextField(typeName, onTypeName, label = { Text(s.roomTypeLabel) },
         placeholder = { Text(s.roomTypePlaceholder) },
         singleLine = true, modifier = Modifier.fillMaxWidth())
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(number, onNumber, label = { Text(s.numberLabel) },
             singleLine = true, modifier = Modifier.weight(1f))
         OutlinedTextField(floor, onFloor, label = { Text(s.floorLabel) },
@@ -498,7 +498,7 @@ private fun RoomFormFields(
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             ExposedDropdownMenuBox(
                 expanded = expanded,
                 onExpandedChange = { expanded = it && suggestions.isNotEmpty() },

@@ -3,6 +3,8 @@ package org.julsz.smnt
 import androidx.compose.runtime.compositionLocalOf
 import java.util.Locale
 
+val LocalFontScale = compositionLocalOf { 1.0f }
+
 interface AppStrings {
     val locale: Locale
 
@@ -52,6 +54,7 @@ interface AppStrings {
     val settingsAppearance: String
     val settingsFontSize: String
     val settingsTimeline: String
+    val settingsTimelineDisplay: String
     val settingsCenterViewRange: String
     val settingsNoShowAfterDays: String
     val settingsAutoCheckOutAfterDays: String
@@ -232,6 +235,10 @@ interface AppStrings {
     val scaleYear: String
     val today: String
     val widthLabel: String
+    val heightLabel: String
+    val labelWidthLabel: String
+    val showRoomTypeLabel: String
+    val hideRoomTypeLabel: String
     val fullDay: String
     val halfShiftLabel: String
     val hideCancelled: String
@@ -243,6 +250,9 @@ interface AppStrings {
 
     // Block room dialog
     val blockRoomTitle: String
+    val blockAllRoomsLabel: String
+    val allRoomsLabel: String
+    fun blockReservationConflict(rooms: String): String
     val reasonLabel: String
     val reasonPlaceholder: String
     val blockBtn: String
@@ -383,6 +393,7 @@ object EnglishStrings : AppStrings {
     override val settingsAppearance = "Appearance"
     override val settingsFontSize = "Font size"
     override val settingsTimeline = "Timeline"
+    override val settingsTimelineDisplay = "Timeline display"
     override val settingsCenterViewRange = "Center view range"
     override val settingsNoShowAfterDays = "Auto no-show after"
     override val settingsAutoCheckOutAfterDays = "Auto check-out after"
@@ -545,6 +556,10 @@ object EnglishStrings : AppStrings {
     override val scaleYear = "Year"
     override val today = "Today"
     override val widthLabel = "Width:"
+    override val heightLabel = "Height:"
+    override val labelWidthLabel = "Label:"
+    override val showRoomTypeLabel = "Type"
+    override val hideRoomTypeLabel = "No type"
     override val fullDay = "Full day"
     override val halfShiftLabel = "Half shift"
     override val hideCancelled = "Hide cancelled"
@@ -557,6 +572,9 @@ object EnglishStrings : AppStrings {
         return "$n adult${if (count != 1.0) "s" else ""}"
     }
     override val blockRoomTitle = "Block Room"
+    override val blockAllRoomsLabel = "Block all rooms"
+    override val allRoomsLabel = "All rooms"
+    override fun blockReservationConflict(rooms: String) = "Cannot block — active reservations in: $rooms"
     override val reasonLabel = "Reason"
     override val reasonPlaceholder = "Maintenance, cleaning…"
     override val blockBtn = "Block"
@@ -688,6 +706,7 @@ object PolishStrings : AppStrings {
     override val settingsAppearance = "Wygląd"
     override val settingsFontSize = "Rozmiar czcionki"
     override val settingsTimeline = "Oś czasu"
+    override val settingsTimelineDisplay = "Wygląd osi czasu"
     override val settingsCenterViewRange = "Zakres widoku"
     override val settingsNoShowAfterDays = "Automatyczna nieobecność po"
     override val settingsAutoCheckOutAfterDays = "Automatyczne wymeldowanie po"
@@ -858,6 +877,10 @@ object PolishStrings : AppStrings {
     override val scaleYear = "Rok"
     override val today = "Dziś"
     override val widthLabel = "Szer.:"
+    override val heightLabel = "Wys.:"
+    override val labelWidthLabel = "Etyk.:"
+    override val showRoomTypeLabel = "Typ"
+    override val hideRoomTypeLabel = "Bez typu"
     override val fullDay = "Pełny dzień"
     override val halfShiftLabel = "Pół dnia"
     override val hideCancelled = "Ukryj anulowane"
@@ -870,6 +893,9 @@ object PolishStrings : AppStrings {
         return "$n dorosłych"
     }
     override val blockRoomTitle = "Zablokuj pokój"
+    override val blockAllRoomsLabel = "Zablokuj wszystkie pokoje"
+    override val allRoomsLabel = "Wszystkie pokoje"
+    override fun blockReservationConflict(rooms: String) = "Nie można zablokować — aktywne rezerwacje w: $rooms"
     override val reasonLabel = "Powód"
     override val reasonPlaceholder = "Konserwacja, sprzątanie…"
     override val blockBtn = "Zablokuj"

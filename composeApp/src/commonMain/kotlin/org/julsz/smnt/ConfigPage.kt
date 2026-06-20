@@ -42,6 +42,7 @@ fun ConfigPage(client: HttpClient, hotel: UserHotelRoleDto) {
 
 // ─── Hub ──────────────────────────────────────────────────────────────────────
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ConfigHub(hotel: UserHotelRoleDto, onNavigate: (ConfigSection) -> Unit) {
     val s = LocalStrings.current
@@ -59,7 +60,10 @@ private fun ConfigHub(hotel: UserHotelRoleDto, onNavigate: (ConfigSection) -> Un
             )
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement   = Arrangement.spacedBy(16.dp)
+        ) {
             ConfigSection.entries.forEach { entity ->
                 val title = when (entity) {
                     ConfigSection.Rooms         -> s.configRoomsTitle

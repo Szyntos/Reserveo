@@ -1,14 +1,19 @@
+@file:OptIn(ExperimentalLayoutApi::class)
+
 package org.julsz.smnt
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -92,7 +97,22 @@ private fun buildResWeeks(year: Int, month: Int): List<List<RCalDay>> {
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
 @Composable
-fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, centerDays: Int = 30, noShowAfterDays: Int = 14, autoCheckOutAfterDays: Int = 3, onCreateInvoice: ((ReservationDto) -> Unit)? = null, onViewInvoice: ((InvoiceDto) -> Unit)? = null) {
+fun ReservationsCalendarPage(
+    client: HttpClient,
+    hotel: UserHotelRoleDto,
+    centerDays: Int = 30,
+    noShowAfterDays: Int = 14,
+    autoCheckOutAfterDays: Int = 3,
+    timelineDayWidth: Float = 40f,
+    onTimelineDayWidthChange: (Float) -> Unit = {},
+    timelineRowHeight: Float = 34f,
+    onTimelineRowHeightChange: (Float) -> Unit = {},
+    timelineLabelWidth: Float = 96f,
+    onTimelineLabelWidthChange: (Float) -> Unit = {},
+    timelineShowRoomType: Boolean = true,
+    onCreateInvoice: ((ReservationDto) -> Unit)? = null,
+    onViewInvoice: ((InvoiceDto) -> Unit)? = null
+) {
     val scope = rememberCoroutineScope()
 
     var reservations by remember { mutableStateOf<List<ReservationDto>>(emptyList()) }
@@ -110,6 +130,8 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
     var timelineScale  by remember { mutableStateOf(TimelineScale.Center) }
     var showNewDialog         by remember { mutableStateOf(false) }
     var showNewExternalDialog by remember { mutableStateOf(false) }
+    var showBlockDialog       by remember { mutableStateOf(false) }
+    var blockSubmitting       by remember { mutableStateOf(false) }
     var dragMode          by remember { mutableStateOf(DragMode.Reservation) }
     var optionRes         by remember { mutableStateOf<ReservationDto?>(null) }
     var editReservation   by remember { mutableStateOf<ReservationDto?>(null) }
@@ -188,117 +210,140 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
 
     Column(Modifier.fillMaxSize()) {
         // ── Header ────────────────────────────────────────────────────────────
-        Row(
-            Modifier.fillMaxWidth().padding(bottom = 16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text(s.reservationsTitle, style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold)
-                Text("${hotel.hotelName} · ${reservations.size} ${s.totalLabel}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+        val showNav = !(currentView == ResView.Timeline && timelineScale == TimelineScale.Center)
+        val periodLabel = when {
+            currentView == ResView.Calendar -> "$displayYear"
+            timelineScale == TimelineScale.Center -> "±${centerDays}d"
+            timelineScale == TimelineScale.Year -> "$displayYear"
+            else -> "${Month.of(displayMonth).getDisplayName(java.time.format.TextStyle.SHORT, s.locale)} $displayYear"
+        }
+        val navBack: () -> Unit = {
+            when {
+                currentView == ResView.Calendar || timelineScale == TimelineScale.Year -> displayYear--
+                displayMonth == 1 -> { displayMonth = 12; displayYear-- }
+                else -> displayMonth--
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically) {
-                // View toggle
-                Row(
-                    Modifier.clip(RoundedCornerShape(6.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    listOf(ResView.Calendar to s.viewCalendar, ResView.Timeline to s.viewTimeline).forEach { (view, label) ->
-                        val sel = currentView == view
-                        Box(
-                            Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(if (sel) MaterialTheme.colorScheme.primary else Color.Transparent)
-                                .clickable { currentView = view }
-                                .padding(horizontal = 10.dp, vertical = 6.dp)
-                        ) {
-                            Text(label, style = MaterialTheme.typography.labelMedium,
-                                color = if (sel) MaterialTheme.colorScheme.onPrimary
-                                        else MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
+        }
+        val navForward: () -> Unit = {
+            when {
+                currentView == ResView.Calendar || timelineScale == TimelineScale.Year -> displayYear++
+                displayMonth == 12 -> { displayMonth = 1; displayYear++ }
+                else -> displayMonth++
+            }
+        }
+        val viewToggle: @Composable () -> Unit = {
+            Row(Modifier.clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
+                listOf(ResView.Calendar to s.viewCalendar, ResView.Timeline to s.viewTimeline).forEach { (view, label) ->
+                    val sel = currentView == view
+                    Box(
+                        Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (sel) MaterialTheme.colorScheme.primary else Color.Transparent)
+                            .clickable { currentView = view }
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Text(label, style = MaterialTheme.typography.labelMedium,
+                            color = if (sel) MaterialTheme.colorScheme.onPrimary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                }
-                Spacer(Modifier.width(4.dp))
-                // Navigation — hidden for center scale (no anchor to navigate)
-                val showNav = !(currentView == ResView.Timeline && timelineScale == TimelineScale.Center)
-                if (showNav) {
-                    IconButton(onClick = {
-                        when {
-                            currentView == ResView.Calendar || timelineScale == TimelineScale.Year -> displayYear--
-                            displayMonth == 1 -> { displayMonth = 12; displayYear-- }
-                            else -> displayMonth--
-                        }
-                    }, Modifier.size(32.dp)) { Text("◀", style = MaterialTheme.typography.labelLarge) }
-                }
-                Text(
-                    when {
-                        currentView == ResView.Calendar -> "$displayYear"
-                        timelineScale == TimelineScale.Center -> "±${centerDays}d"
-                        timelineScale == TimelineScale.Year -> "$displayYear"
-                        else -> "${Month.of(displayMonth).getDisplayName(java.time.format.TextStyle.SHORT, s.locale)} $displayYear"
-                    },
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                if (showNav) {
-                    IconButton(onClick = {
-                        when {
-                            currentView == ResView.Calendar || timelineScale == TimelineScale.Year -> displayYear++
-                            displayMonth == 12 -> { displayMonth = 1; displayYear++ }
-                            else -> displayMonth++
-                        }
-                    }, Modifier.size(32.dp)) { Text("▶", style = MaterialTheme.typography.labelLarge) }
-                }
-                Spacer(Modifier.width(4.dp))
-                OutlinedButton(onClick = { showNewExternalDialog = true }, enabled = rooms.isNotEmpty()) {
-                    Text(s.newExternalBtn)
-                }
-                Button(onClick = { showNewDialog = true }, enabled = rooms.isNotEmpty()) {
-                    Text(s.newReservationBtn)
                 }
             }
         }
-
-        // ── Status legend (clickable — toggles filter) ────────────────────────
-        Row(
-            Modifier.padding(bottom = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            STATUS_PALETTE.entries.forEach { (status, colors) ->
-                val (bg, fg) = colors
-                val hidden = status in hiddenStatuses
-                Box(
-                    Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(if (hidden) Color.Transparent else bg)
-                        .border(
-                            width = 1.dp,
-                            color = fg.copy(alpha = if (hidden) 0.35f else 0f),
-                            shape = RoundedCornerShape(4.dp)
-                        )
-                        .clickable {
-                            hiddenStatuses = if (hidden) hiddenStatuses - status
-                                            else         hiddenStatuses + status
-                        }
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
+        BoxWithConstraints(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+            val isNarrow = maxWidth < 560.dp
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                // Row 1: title + view toggle (+ nav on wide)
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        s.statusName(status),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = fg.copy(alpha = if (hidden) 0.35f else 1f)
-                    )
+                    Column {
+                        Text(s.reservationsTitle, style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold)
+                        Text("${hotel.hotelName} · ${reservations.size} ${s.totalLabel}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        viewToggle()
+                        if (!isNarrow) {
+                            Spacer(Modifier.width(4.dp))
+                            if (showNav) {
+                                IconButton(onClick = navBack, Modifier.size(32.dp)) {
+                                    Text("◀", style = MaterialTheme.typography.labelLarge)
+                                }
+                            }
+                            Text(periodLabel, style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold)
+                            if (showNav) {
+                                IconButton(onClick = navForward, Modifier.size(32.dp)) {
+                                    Text("▶", style = MaterialTheme.typography.labelLarge)
+                                }
+                            }
+                        }
+                    }
+                }
+                // Row 2 (narrow only): navigation arrows + period label
+                if (isNarrow) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        if (showNav) {
+                            IconButton(onClick = navBack, Modifier.size(32.dp)) {
+                                Text("◀", style = MaterialTheme.typography.labelLarge)
+                            }
+                        }
+                        Text(periodLabel, style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold)
+                        if (showNav) {
+                            IconButton(onClick = navForward, Modifier.size(32.dp)) {
+                                Text("▶", style = MaterialTheme.typography.labelLarge)
+                            }
+                        }
+                    }
+                }
+                // Last row: action buttons — horizontal scroll so they never stack vertically
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Button(
+                        onClick = { showNewDialog = true },
+                        enabled = rooms.isNotEmpty(),
+                        contentPadding = if (isNarrow) PaddingValues(horizontal = 8.dp, vertical = 4.dp) else ButtonDefaults.ContentPadding
+                    ) {
+                        Text(s.newReservationBtn,
+                            style = if (isNarrow) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelLarge)
+                    }
+                    OutlinedButton(
+                        onClick = { showNewExternalDialog = true },
+                        enabled = rooms.isNotEmpty(),
+                        contentPadding = if (isNarrow) PaddingValues(horizontal = 8.dp, vertical = 4.dp) else ButtonDefaults.ContentPadding
+                    ) {
+                        Text(s.newExternalBtn,
+                            style = if (isNarrow) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelLarge)
+                    }
+                    OutlinedButton(
+                        onClick = { showBlockDialog = true },
+                        enabled = rooms.isNotEmpty(),
+                        contentPadding = if (isNarrow) PaddingValues(horizontal = 8.dp, vertical = 4.dp) else ButtonDefaults.ContentPadding
+                    ) {
+                        Text(s.blockRoomBtn,
+                            style = if (isNarrow) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelLarge)
+                    }
                 }
             }
         }
 
         // ── Content ───────────────────────────────────────────────────────────
         if (loading) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }
         } else {
@@ -306,66 +351,77 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
                 if (hiddenStatuses.isEmpty()) reservations
                 else reservations.filter { it.status !in hiddenStatuses }
             }
-            when (currentView) {
-            ResView.Calendar -> LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
-                (1..12).forEach { m ->
-                    item(key = "month_${displayYear}_$m") {
-                        ResMonthCalendar(
-                            year         = displayYear,
-                            month        = m,
-                            reservations = visibleReservations,
-                            holidays     = holidays,
-                            onResClick   = { optionRes = it }
-                        )
-                        if (m < 12) HorizontalDivider(Modifier.padding(vertical = 16.dp))
-                        else Spacer(Modifier.height(16.dp))
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                when (currentView) {
+                ResView.Calendar -> LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+                    (1..12).forEach { m ->
+                        item(key = "month_${displayYear}_$m") {
+                            ResMonthCalendar(
+                                year         = displayYear,
+                                month        = m,
+                                reservations = visibleReservations,
+                                holidays     = holidays,
+                                onResClick   = { optionRes = it }
+                            )
+                            if (m < 12) HorizontalDivider(Modifier.padding(vertical = 16.dp))
+                            else Spacer(Modifier.height(16.dp))
+                        }
                     }
+                }
+                ResView.Timeline -> ReservationsTimelineView(
+                    rooms            = rooms.sortedWith(compareBy({ it.number.toIntOrNull() ?: Int.MAX_VALUE }, { it.number })),
+                    reservations     = reservations,
+                    blocks           = roomBlocks,
+                    holidays         = holidays,
+                    year             = displayYear,
+                    month            = displayMonth,
+                    scale            = timelineScale,
+                    onScaleChange    = { timelineScale = it },
+                    centerDays       = centerDays,
+                    onEditRequest    = { optionRes = it },
+                    onBlockClick     = { editBlock = it },
+                    dragMode         = dragMode,
+                    onDragModeChange = { dragMode = it },
+                    hiddenStatuses         = hiddenStatuses,
+                    onHiddenStatusesChange = { hiddenStatuses = it },
+                    dayWidthPx          = timelineDayWidth,
+                    onDayWidthPxChange  = onTimelineDayWidthChange,
+                    rowHeightPx         = timelineRowHeight,
+                    onRowHeightPxChange = onTimelineRowHeightChange,
+                    labelWidthPx        = timelineLabelWidth,
+                    onLabelWidthPxChange = onTimelineLabelWidthChange,
+                    showRoomType        = timelineShowRoomType,
+                    onBlockRequest   = { room, cin, cout ->
+                        scope.launch {
+                            try {
+                                client.post("$BASE_URL/api/room-blocks") {
+                                    contentType(ContentType.Application.Json)
+                                    setBody(CreateRoomBlockRequest(
+                                        roomId   = room.id,
+                                        fromDate = cin.toString(),
+                                        toDate   = cout.toString(),
+                                        reason   = null
+                                    ))
+                                }
+                                loadData(showLoading = false)
+                            } catch (e: Exception) { snackbar.showSnackbar(s.errorMsg(e.message ?: "?")) }
+                        }
+                    },
+                    onCreateRequest  = { room, cin, cout ->
+                        prefillRoom     = room
+                        prefillCheckIn  = cin.toString()
+                        prefillCheckOut = cout.toString()
+                        showNewDialog   = true
+                    },
+                    onCreateExternalRequest = { room, cin, cout ->
+                        prefillRoom     = room
+                        prefillCheckIn  = cin.toString()
+                        prefillCheckOut = cout.toString()
+                        showNewExternalDialog = true
+                    }
+                )
                 }
             }
-            ResView.Timeline -> ReservationsTimelineView(
-                rooms            = rooms.sortedWith(compareBy({ it.number.toIntOrNull() ?: Int.MAX_VALUE }, { it.number })),
-                reservations     = visibleReservations,
-                blocks           = roomBlocks,
-                holidays         = holidays,
-                year             = displayYear,
-                month            = displayMonth,
-                scale            = timelineScale,
-                onScaleChange    = { timelineScale = it },
-                centerDays       = centerDays,
-                onEditRequest    = { optionRes = it },
-                onBlockClick     = { editBlock = it },
-                dragMode         = dragMode,
-                onDragModeChange = { dragMode = it },
-                onBlockRequest   = { room, cin, cout ->
-                    scope.launch {
-                        try {
-                            client.post("$BASE_URL/api/room-blocks") {
-                                contentType(ContentType.Application.Json)
-                                setBody(CreateRoomBlockRequest(
-                                    roomId   = room.id,
-                                    fromDate = cin.toString(),
-                                    toDate   = cout.toString(),
-                                    reason   = null
-                                ))
-                            }
-                            loadData(showLoading = false)
-                        } catch (e: Exception) { snackbar.showSnackbar(s.errorMsg(e.message ?: "?")) }
-                    }
-                },
-                onCreateRequest  = { room, cin, cout ->
-                    prefillRoom     = room
-                    prefillCheckIn  = cin.toString()
-                    prefillCheckOut = cout.toString()
-                    showNewDialog   = true
-                },
-                onCreateExternalRequest = { room, cin, cout ->
-                    prefillRoom     = room
-                    prefillCheckIn  = cin.toString()
-                    prefillCheckOut = cout.toString()
-                    showNewExternalDialog = true
-                }
-            )
-        }
         }
     }
 
@@ -582,6 +638,32 @@ fun ReservationsCalendarPage(client: HttpClient, hotel: UserHotelRoleDto, center
             onDismiss         = { paymentsRes = null },
             onPaymentsChanged = { scope.launch { loadData(showLoading = false) } },
             onViewInvoice     = onViewInvoice?.let { cb -> { inv -> paymentsRes = null; cb(inv) } }
+        )
+    }
+
+    // ── Block Room dialog ──────────────────────────────────────────────────────
+    if (showBlockDialog) {
+        BlockRoomDialog(
+            rooms        = rooms,
+            reservations = reservations,
+            isSubmitting = blockSubmitting,
+            onDismiss    = { showBlockDialog = false; blockSubmitting = false },
+            onConfirm    = { requests ->
+                scope.launch {
+                    blockSubmitting = true
+                    try {
+                        requests.forEach { req ->
+                            client.post("$BASE_URL/api/room-blocks") {
+                                contentType(ContentType.Application.Json)
+                                setBody(req)
+                            }
+                        }
+                        showBlockDialog = false
+                        loadData(showLoading = false)
+                    } catch (e: Exception) { snackbar.showSnackbar(s.errorMsg(e.message ?: "?")) }
+                    finally { blockSubmitting = false }
+                }
+            }
         )
     }
 
@@ -950,12 +1032,12 @@ private fun ReservationDetailDialog(
         } catch (_: Exception) {}
     }
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(s.reservationDetailTitle(res.id)) },
         text = {
             Column(
-                Modifier.width(440.dp).verticalScroll(rememberScrollState()),
+                Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 // Guest header
@@ -1237,16 +1319,16 @@ private fun ManagePaymentsDialog(
     val totalPaid = remember(payments) { payments.sumOf { it.amount } }
     val remaining = res.totalAmount?.let { it - totalPaid }
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(s.paymentsTitle(res.id)) },
         text = {
             Column(
-                Modifier.width(460.dp).verticalScroll(rememberScrollState()),
+                Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 // Summary row
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     res.totalAmount?.let {
                         Column {
                             Text(s.totalLabel, style = MaterialTheme.typography.labelSmall,
@@ -1483,7 +1565,7 @@ private fun ManagePaymentsDialog(
                             .getOrElse { LocalDate.now().atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() }
                     }
                     val dpState = rememberDatePickerState(initialSelectedDateMillis = initMillis)
-                    DatePickerDialog(
+                    AppDatePickerDialog(
                         onDismissRequest = { showDatePicker = false },
                         confirmButton = {
                             TextButton(onClick = {
@@ -1726,11 +1808,11 @@ private fun NewReservationDialog(
     val valid = selectedRoom != null && guestReady &&
         checkIn.isNotBlank() && checkOut.isNotBlank() && adults.toDoubleOrNull() != null && !conflict
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(s.newReservationTitle) },
         text = {
-            Column(Modifier.width(420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 ExposedDropdownMenuBox(expanded = roomExpanded, onExpandedChange = { roomExpanded = it }) {
                     OutlinedTextField(
                         value = selectedRoom?.let { "${s.roomLabel(it.number)} · ${it.typeName}" } ?: s.selectRoomHint,
@@ -1761,10 +1843,10 @@ private fun NewReservationDialog(
                     onPhoneNumberChange = { guestPhoneNumber = it }
                 )
                 HorizontalDivider()
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ResDatePickerField(s.checkInLabel,  checkIn,  { checkIn  = it }, Modifier.weight(1f))
-                    ResDatePickerField(s.checkOutLabel, checkOut, { checkOut = it }, Modifier.weight(1f))
-                }
+                ResDateRangePickerFields(
+                    checkInLabel = s.checkInLabel, checkIn = checkIn, onCheckInChange = { checkIn = it },
+                    checkOutLabel = s.checkOutLabel, checkOut = checkOut, onCheckOutChange = { checkOut = it }
+                )
                 if (conflict) {
                     Row(
                         Modifier.fillMaxWidth()
@@ -1827,11 +1909,11 @@ private fun NewReservationDialog(
                                 }
                             }
                         }
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             OutlinedTextField(
                                 value = adjAmountInput, onValueChange = { adjAmountInput = it },
                                 label = { Text(s.adjustmentAmountLabel, style = MaterialTheme.typography.labelSmall) },
-                                singleLine = true, modifier = Modifier.width(130.dp)
+                                singleLine = true, modifier = Modifier.widthIn(min = 90.dp, max = 130.dp)
                             )
                             OutlinedTextField(
                                 value = adjDescInput, onValueChange = { adjDescInput = it },
@@ -1985,11 +2067,11 @@ private fun NewExternalReservationDialog(
     val valid = selectedRoom != null && guestReady &&
         checkIn.isNotBlank() && checkOut.isNotBlank() && adults.toDoubleOrNull() != null && !conflict
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(s.newExternalReservationTitle) },
         text = {
-            Column(Modifier.width(420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(
                     Modifier.fillMaxWidth()
                         .clip(RoundedCornerShape(6.dp))
@@ -2031,10 +2113,10 @@ private fun NewExternalReservationDialog(
                     phoneNumber = guestPhoneNumber, onPhoneNumberChange = { guestPhoneNumber = it }
                 )
                 HorizontalDivider()
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ResDatePickerField(s.checkInLabel,  checkIn,  { checkIn  = it }, Modifier.weight(1f))
-                    ResDatePickerField(s.checkOutLabel, checkOut, { checkOut = it }, Modifier.weight(1f))
-                }
+                ResDateRangePickerFields(
+                    checkInLabel = s.checkInLabel, checkIn = checkIn, onCheckInChange = { checkIn = it },
+                    checkOutLabel = s.checkOutLabel, checkOut = checkOut, onCheckOutChange = { checkOut = it }
+                )
                 if (conflict) {
                     Row(
                         Modifier.fillMaxWidth()
@@ -2050,7 +2132,7 @@ private fun NewExternalReservationDialog(
                             color = MaterialTheme.colorScheme.onErrorContainer)
                     }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = adults, onValueChange = { adults = it },
                         label = { Text(s.adultsLabel) }, singleLine = true, modifier = Modifier.weight(1f)
@@ -2211,7 +2293,7 @@ private fun ReservationEditDialog(
         checkIn.isNotBlank() && checkOut.isNotBlank() && adults.toDoubleOrNull() != null && !conflict
 
     if (showDeleteConfirm) {
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             title = { Text(s.deleteReservationTitle(existing.id)) },
             text  = { Text(s.cannotBeUndone) },
@@ -2221,11 +2303,11 @@ private fun ReservationEditDialog(
         return
     }
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(s.editReservationTitle(existing.id)) },
         text = {
-            Column(Modifier.width(420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (isExternal) {
                     Row(
                         Modifier.fillMaxWidth()
@@ -2530,10 +2612,10 @@ private fun ReservationFormFields(
             }
         }
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        ResDatePickerField(s.checkInLabel,  checkIn,  onCheckInChange,  Modifier.weight(1f))
-        ResDatePickerField(s.checkOutLabel, checkOut, onCheckOutChange, Modifier.weight(1f))
-    }
+    ResDateRangePickerFields(
+        checkInLabel = s.checkInLabel, checkIn = checkIn, onCheckInChange = onCheckInChange,
+        checkOutLabel = s.checkOutLabel, checkOut = checkOut, onCheckOutChange = onCheckOutChange
+    )
     OutlinedTextField(adults, onAdultsChange, label = { Text(s.adultsLabel) }, singleLine = true, modifier = Modifier.fillMaxWidth())
     ExposedDropdownMenuBox(expanded = statusExpanded, onExpandedChange = onStatusExpandChange) {
         OutlinedTextField(
@@ -2670,6 +2752,15 @@ private fun ReservationsTimelineView(
     onBlockClick: (RoomBlockDto) -> Unit,
     dragMode: DragMode = DragMode.Reservation,
     onDragModeChange: (DragMode) -> Unit = {},
+    hiddenStatuses: Set<String> = emptySet(),
+    onHiddenStatusesChange: (Set<String>) -> Unit = {},
+    dayWidthPx: Float = 40f,
+    onDayWidthPxChange: (Float) -> Unit = {},
+    rowHeightPx: Float = 34f,
+    onRowHeightPxChange: (Float) -> Unit = {},
+    labelWidthPx: Float = 96f,
+    onLabelWidthPxChange: (Float) -> Unit = {},
+    showRoomType: Boolean = true,
     onBlockRequest: (room: RoomDto, checkIn: LocalDate, checkOut: LocalDate) -> Unit = { _, _, _ -> },
     onCreateRequest: (room: RoomDto, checkIn: LocalDate, checkOut: LocalDate) -> Unit,
     onCreateExternalRequest: (room: RoomDto, checkIn: LocalDate, checkOut: LocalDate) -> Unit = { _, _, _ -> }
@@ -2677,7 +2768,7 @@ private fun ReservationsTimelineView(
     val s             = LocalStrings.current
     val scope         = rememberCoroutineScope()
     var dragState     by remember { mutableStateOf<TimelineDragState?>(null) }
-    var dayWidthPx    by remember { mutableStateOf(40f) }
+    var showOptions   by remember { mutableStateOf(false) }
     var viewportWidthPx by remember { mutableStateOf(0) }
     var halfShift     by remember { mutableStateOf(false) }
     var showCancelled by remember { mutableStateOf(false) }
@@ -2742,16 +2833,20 @@ private fun ReservationsTimelineView(
     val totalWidth   = DAY_W * days.size
 
     val fs           = density.fontScale
-    val ROW_H        = 34.dp * fs
-    val LANE_H       = 30.dp * fs
+    val ROW_H        = rowHeightPx.dp * fs
+    val LANE_H       = (rowHeightPx - 4f).dp * fs
     val SPLIT_ROW_H  = LANE_H * 2
     val MONTH_ROW_H  = 18.dp * fs
     val DAY_ROW_H    = 46.dp * fs
     val HEAD_H       = if (scale == TimelineScale.Month) DAY_ROW_H else MONTH_ROW_H + DAY_ROW_H
-    val LABEL_W      = 96.dp * fs
-    val BAND_H       = 22.dp * fs
+    val LABEL_W      = labelWidthPx.dp * fs
+    val BAND_H       = (rowHeightPx - 12f).dp * fs
 
-    val resByRoom    = remember(reservations) { reservations.groupBy { it.roomId } }
+    val visibleReservations = remember(reservations, hiddenStatuses) {
+        if (hiddenStatuses.isEmpty()) reservations
+        else reservations.filter { it.status !in hiddenStatuses }
+    }
+    val resByRoom    = remember(visibleReservations) { visibleReservations.groupBy { it.roomId } }
     val blocksByRoom = remember(blocks) { blocks.groupBy { it.roomId } }
     val holidayMap: Map<LocalDate, HolidayDto> = remember(holidays, dateStart, dateEnd) {
         buildMap {
@@ -2796,127 +2891,204 @@ private fun ReservationsTimelineView(
     }
 
     Column(Modifier.fillMaxSize()) {
-        // ── Controls row ──────────────────────────────────────────────────────
-        Row(
-            Modifier.fillMaxWidth().padding(bottom = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+        // ── Controls ──────────────────────────────────────────────────────────
+        Column(
+            Modifier.fillMaxWidth().padding(bottom = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            // Scale pill
-            Row(Modifier.clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
-                listOf(TimelineScale.Center to s.scaleCenter, TimelineScale.Month to s.scaleMonth, TimelineScale.Year to s.scaleYear).forEach { (sc, label) ->
-                    val sel = scale == sc
-                    Box(
-                        Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(if (sel) MaterialTheme.colorScheme.secondary else Color.Transparent)
-                            .clickable { onScaleChange(sc) }
-                            .padding(horizontal = 10.dp, vertical = 5.dp)
-                    ) {
-                        Text(label, style = MaterialTheme.typography.labelMedium,
-                            color = if (sel) MaterialTheme.colorScheme.onSecondary
-                                    else MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+            // Always-visible row: today, cancelled, drag mode, options toggle
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Today button
+                Box(
+                    Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .clickable {
+                            scope.launch {
+                                val dayPx = with(density) { dayWidthPx.dp.roundToPx() }
+                                if (!today.isBefore(dateStart) && !today.isAfter(dateEnd)) {
+                                    val dayOffset = ChronoUnit.DAYS.between(dateStart, today).toInt()
+                                    val centered  = (dayOffset * dayPx - viewportWidthPx / 2 + dayPx / 2).coerceAtLeast(0)
+                                    hScroll.animateScrollTo(centered)
+                                }
+                            }
+                        }
+                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                ) {
+                    Text(s.today, style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-            }
-            // Today button
-            Box(
-                Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .clickable {
-                        scope.launch {
-                            val dayPx = with(density) { dayWidthPx.dp.roundToPx() }
-                            if (!today.isBefore(dateStart) && !today.isAfter(dateEnd)) {
-                                val dayOffset = ChronoUnit.DAYS.between(dateStart, today).toInt()
-                                val centered  = (dayOffset * dayPx - viewportWidthPx / 2 + dayPx / 2).coerceAtLeast(0)
-                                hScroll.animateScrollTo(centered)
+                // Show/hide cancelled
+                val cancelBtnColor = if (showCancelled) MaterialTheme.colorScheme.errorContainer
+                                     else MaterialTheme.colorScheme.surfaceVariant
+                Box(
+                    Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(cancelBtnColor)
+                        .clickable { showCancelled = !showCancelled }
+                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                ) {
+                    Text(
+                        if (showCancelled) s.hideCancelled else s.showCancelled,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (showCancelled) MaterialTheme.colorScheme.onErrorContainer
+                                else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                // Drag mode (desktop only)
+                if (!IS_ANDROID) {
+                    Row(Modifier.clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
+                        listOf(
+                            DragMode.Reservation to s.dragModeReservation,
+                            DragMode.External    to s.dragModeExternal,
+                            DragMode.Block       to s.dragModeBlock
+                        ).forEach { (mode, label) ->
+                            val sel = dragMode == mode
+                            val bg = when {
+                                !sel                      -> Color.Transparent
+                                mode == DragMode.Block    -> Color(0xFF607D8B)
+                                mode == DragMode.External -> MaterialTheme.colorScheme.tertiary
+                                else                      -> MaterialTheme.colorScheme.primary
+                            }
+                            val fg = when {
+                                !sel                      -> MaterialTheme.colorScheme.onSurfaceVariant
+                                mode == DragMode.Block    -> Color.White
+                                mode == DragMode.External -> MaterialTheme.colorScheme.onTertiary
+                                else                      -> MaterialTheme.colorScheme.onPrimary
+                            }
+                            Box(
+                                Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(bg)
+                                    .clickable { onDragModeChange(mode) }
+                                    .padding(horizontal = 10.dp, vertical = 5.dp)
+                            ) {
+                                Text(label, style = MaterialTheme.typography.labelMedium, color = fg)
                             }
                         }
                     }
-                    .padding(horizontal = 10.dp, vertical = 5.dp)
-            ) {
-                Text(s.today, style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            // Day width slider
-            Text(s.widthLabel, style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Slider(
-                value         = dayWidthPx,
-                onValueChange = { dayWidthPx = it },
-                valueRange    = 16f..80f,
-                modifier      = Modifier.width(160.dp)
-            )
-            Text("${dayWidthPx.toInt()}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.width(24.dp))
-            Spacer(Modifier.width(4.dp))
-            // Half-shift pill
-            Row(Modifier.clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
-                listOf(false to s.fullDay, true to s.halfShiftLabel).forEach { (v, label) ->
-                    val sel = halfShift == v
-                    Box(
-                        Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(if (sel) MaterialTheme.colorScheme.tertiary else Color.Transparent)
-                            .clickable { halfShift = v }
-                            .padding(horizontal = 10.dp, vertical = 5.dp)
-                    ) {
-                        Text(label, style = MaterialTheme.typography.labelMedium,
-                            color = if (sel) MaterialTheme.colorScheme.onTertiary
-                                    else MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                }
+                Spacer(Modifier.weight(1f))
+                // Options toggle
+                Box(
+                    Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(
+                            if (showOptions) MaterialTheme.colorScheme.primaryContainer
+                            else MaterialTheme.colorScheme.surfaceVariant
+                        )
+                        .clickable { showOptions = !showOptions }
+                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                ) {
+                    Text(
+                        if (showOptions) "▲" else "▼",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (showOptions) MaterialTheme.colorScheme.onPrimaryContainer
+                                else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
-            Spacer(Modifier.width(4.dp))
-            // Show/hide cancellations button
-            val cancelBtnColor = if (showCancelled) MaterialTheme.colorScheme.errorContainer
-                                 else MaterialTheme.colorScheme.surfaceVariant
-            Box(
-                Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(cancelBtnColor)
-                    .clickable { showCancelled = !showCancelled }
-                    .padding(horizontal = 10.dp, vertical = 5.dp)
-            ) {
-                Text(
-                    if (showCancelled) s.hideCancelled else s.showCancelled,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (showCancelled) MaterialTheme.colorScheme.onErrorContainer
-                            else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Spacer(Modifier.width(4.dp))
-            // Drag mode pill: Reservation / External / Block
-            Row(Modifier.clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
+
+            // Collapsible options panel: scale, half-shift, width, height
+            if (showOptions) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Scale pill
+                    Row(Modifier.clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
+                        listOf(TimelineScale.Center to s.scaleCenter, TimelineScale.Month to s.scaleMonth, TimelineScale.Year to s.scaleYear).forEach { (sc, label) ->
+                            val sel = scale == sc
+                            Box(
+                                Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(if (sel) MaterialTheme.colorScheme.secondary else Color.Transparent)
+                                    .clickable { onScaleChange(sc) }
+                                    .padding(horizontal = 10.dp, vertical = 5.dp)
+                            ) {
+                                Text(label, style = MaterialTheme.typography.labelMedium,
+                                    color = if (sel) MaterialTheme.colorScheme.onSecondary
+                                            else MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                    // Half-shift pill
+                    Row(Modifier.clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
+                        listOf(false to s.fullDay, true to s.halfShiftLabel).forEach { (v, label) ->
+                            val sel = halfShift == v
+                            Box(
+                                Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(if (sel) MaterialTheme.colorScheme.tertiary else Color.Transparent)
+                                    .clickable { halfShift = v }
+                                    .padding(horizontal = 10.dp, vertical = 5.dp)
+                            ) {
+                                Text(label, style = MaterialTheme.typography.labelMedium,
+                                    color = if (sel) MaterialTheme.colorScheme.onTertiary
+                                            else MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
+                // Width / height / label-width sliders
                 listOf(
-                    DragMode.Reservation to s.dragModeReservation,
-                    DragMode.External    to s.dragModeExternal,
-                    DragMode.Block       to s.dragModeBlock
-                ).forEach { (mode, label) ->
-                    val sel = dragMode == mode
-                    val bg = when {
-                        !sel                    -> Color.Transparent
-                        mode == DragMode.Block  -> Color(0xFF607D8B)
-                        mode == DragMode.External -> MaterialTheme.colorScheme.tertiary
-                        else                    -> MaterialTheme.colorScheme.primary
-                    }
-                    val fg = when {
-                        !sel                    -> MaterialTheme.colorScheme.onSurfaceVariant
-                        mode == DragMode.Block  -> Color.White
-                        mode == DragMode.External -> MaterialTheme.colorScheme.onTertiary
-                        else                    -> MaterialTheme.colorScheme.onPrimary
-                    }
-                    Box(
-                        Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(bg)
-                            .clickable { onDragModeChange(mode) }
-                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                    Triple(s.widthLabel,      dayWidthPx,   onDayWidthPxChange)   to (16f..80f),
+                    Triple(s.heightLabel,     rowHeightPx,  onRowHeightPxChange)  to (24f..72f),
+                    Triple(s.labelWidthLabel, labelWidthPx, onLabelWidthPxChange) to (40f..160f)
+                ).forEach { (triple, range) ->
+                    val (label, value, onChange) = triple
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(label, style = MaterialTheme.typography.labelMedium, color = fg)
+                        Text(label, style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.width(48.dp))
+                        Slider(value = value, onValueChange = onChange,
+                            valueRange = range, modifier = Modifier.weight(1f))
+                        Text("${value.toInt()}", style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.width(28.dp))
+                    }
+                }
+                // Status filter chips
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    STATUS_PALETTE.entries.forEach { (status, colors) ->
+                        val (bg, fg) = colors
+                        val hidden = status in hiddenStatuses
+                        Box(
+                            Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(if (hidden) Color.Transparent else bg)
+                                .border(
+                                    width = 1.dp,
+                                    color = fg.copy(alpha = if (hidden) 0.35f else 0f),
+                                    shape = RoundedCornerShape(4.dp)
+                                )
+                                .clickable {
+                                    onHiddenStatusesChange(
+                                        if (hidden) hiddenStatuses - status
+                                        else        hiddenStatuses + status
+                                    )
+                                }
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Text(
+                                s.statusName(status),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = fg.copy(alpha = if (hidden) 0.35f else 1f)
+                            )
+                        }
                     }
                 }
             }
@@ -3057,9 +3229,11 @@ private fun ReservationsTimelineView(
                             Column(Modifier.weight(1f)) {
                                 Text("${s.roomAbbr} ${room.number}", style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Medium, maxLines = 1)
-                                Text(room.typeName, style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                if (showRoomType) {
+                                    Text(room.typeName, style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
                             }
                             Text(
                                 if (isExpanded) "▲" else "▼",
@@ -3079,8 +3253,21 @@ private fun ReservationsTimelineView(
                 // Main scrollable content
                 Box(
                     Modifier.fillMaxSize()
-                        .verticalScroll(vScroll)
-                        .horizontalScroll(hScroll)
+                        .run {
+                            if (IS_ANDROID) {
+                                pointerInput(Unit) {
+                                    detectDragGestures { change, dragAmount ->
+                                        change.consume()
+                                        hScroll.dispatchRawDelta(-dragAmount.x)
+                                        vScroll.dispatchRawDelta(-dragAmount.y)
+                                    }
+                                }
+                                    .verticalScroll(vScroll, enabled = false)
+                                    .horizontalScroll(hScroll, enabled = false)
+                            } else {
+                                verticalScroll(vScroll).horizontalScroll(hScroll)
+                            }
+                        }
                 ) {
                     val latestReservations = rememberUpdatedState(reservations)
                     val latestBlocks = rememberUpdatedState(blocks)
@@ -3149,6 +3336,7 @@ private fun ReservationsTimelineView(
                                     .fillMaxWidth()
                                     .height(rowH)
                                     .pointerInput(room.id, DAY_W, days.size, halfShift, dragMode) {
+                                        if (IS_ANDROID) return@pointerInput
                                         fun toIdx(x: Float): Int {
                                             val raw = if (halfShift)
                                                 ((x / DAY_W.toPx()) - 0.5f).toInt()
@@ -3680,11 +3868,11 @@ private fun GuestInputSection(
             }
         } else {
             // Input fields
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(firstName, onFirstNameChange, label = { Text(s.firstNameLabel) }, singleLine = true, modifier = Modifier.weight(1f))
                 OutlinedTextField(lastName,  onLastNameChange,  label = { Text(s.lastNameLabel) },  singleLine = true, modifier = Modifier.weight(1f))
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = countryCode, onValueChange = onCountryCodeChange,
                     label = { Text(s.codeLabel) },
@@ -3783,32 +3971,72 @@ private fun GuestInputSection(
 @Composable
 private fun BlockRoomDialog(
     rooms: List<RoomDto>,
+    reservations: List<ReservationDto>,
+    isSubmitting: Boolean,
     onDismiss: () -> Unit,
-    onConfirm: (CreateRoomBlockRequest) -> Unit
+    onConfirm: (List<CreateRoomBlockRequest>) -> Unit
 ) {
-    var selectedRoom by remember { mutableStateOf(rooms.firstOrNull()) }
-    var roomExpanded by remember { mutableStateOf(false) }
-    var fromDate     by remember { mutableStateOf("") }
-    var toDate       by remember { mutableStateOf("") }
-    var reason       by remember { mutableStateOf("") }
-
-    val valid = selectedRoom != null && fromDate.isNotBlank() && toDate.isNotBlank()
+    var selectedRoom  by remember { mutableStateOf(rooms.firstOrNull()) }
+    var roomExpanded  by remember { mutableStateOf(false) }
+    var blockAllRooms by remember { mutableStateOf(false) }
+    var fromDate      by remember { mutableStateOf("") }
+    var toDate        by remember { mutableStateOf("") }
+    var reason        by remember { mutableStateOf("") }
+    var showRangePicker by remember { mutableStateOf(false) }
     val s = LocalStrings.current
 
-    AlertDialog(
+    val rangePickerState = rememberDateRangePickerState()
+
+    val conflictingRooms = remember(blockAllRooms, selectedRoom, fromDate, toDate, reservations) {
+        val cin  = runCatching { LocalDate.parse(fromDate.trim()) }.getOrNull() ?: return@remember emptyList()
+        val cout = runCatching { LocalDate.parse(toDate.trim()) }.getOrNull()  ?: return@remember emptyList()
+        if (!cout.isAfter(cin)) return@remember emptyList()
+        val toCheck = if (blockAllRooms) rooms else listOfNotNull(selectedRoom)
+        toCheck.filter { room ->
+            reservations.any { r ->
+                r.roomId == room.id &&
+                r.status !in listOf("cancelled", "no_show") &&
+                LocalDate.parse(r.checkInDate).isBefore(cout) &&
+                LocalDate.parse(r.checkOutDate).isAfter(cin)
+            }
+        }
+    }
+    val hasConflict = conflictingRooms.isNotEmpty()
+    val datesOk     = fromDate.isNotBlank() && toDate.isNotBlank()
+    val roomOk      = blockAllRooms || selectedRoom != null
+    val valid       = roomOk && datesOk && !hasConflict && !isSubmitting
+
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(s.blockRoomTitle) },
         text = {
-            Column(Modifier.width(380.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                ExposedDropdownMenuBox(expanded = roomExpanded, onExpandedChange = { roomExpanded = it }) {
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                // All-rooms checkbox
+                Row(
+                    Modifier.fillMaxWidth().clickable { blockAllRooms = !blockAllRooms },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Checkbox(checked = blockAllRooms, onCheckedChange = { blockAllRooms = it })
+                    Text(s.blockAllRoomsLabel, style = MaterialTheme.typography.bodyMedium)
+                }
+                // Room picker — disabled when blocking all
+                ExposedDropdownMenuBox(
+                    expanded = roomExpanded && !blockAllRooms,
+                    onExpandedChange = { if (!blockAllRooms) roomExpanded = it }
+                ) {
                     OutlinedTextField(
-                        value = selectedRoom?.let { "${s.roomLabel(it.number)} · ${it.typeName}" } ?: s.selectRoomHint,
+                        value = when {
+                            blockAllRooms -> s.allRoomsLabel
+                            else -> selectedRoom?.let { "${s.roomLabel(it.number)} · ${it.typeName}" } ?: s.selectRoomHint
+                        },
                         onValueChange = {}, readOnly = true, label = { Text(s.roomFieldLabel) },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(roomExpanded) },
+                        trailingIcon  = { if (!blockAllRooms) ExposedDropdownMenuDefaults.TrailingIcon(roomExpanded) },
+                        enabled  = !blockAllRooms,
                         modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
                         singleLine = true
                     )
-                    ExposedDropdownMenu(expanded = roomExpanded, onDismissRequest = { roomExpanded = false }) {
+                    ExposedDropdownMenu(expanded = roomExpanded && !blockAllRooms, onDismissRequest = { roomExpanded = false }) {
                         rooms.forEach { room ->
                             DropdownMenuItem(
                                 text  = { Text("${s.roomLabel(room.number)} · ${room.typeName}") },
@@ -3817,9 +4045,32 @@ private fun BlockRoomDialog(
                         }
                     }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ResDatePickerField(s.fromLabel, fromDate, { fromDate = it }, Modifier.weight(1f))
-                    ResDatePickerField(s.toLabel,   toDate,   { toDate   = it }, Modifier.weight(1f))
+                // Date range row — single click opens a combined range picker
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = fromDate,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text(s.fromLabel) },
+                        trailingIcon = {
+                            TextButton(onClick = { showRangePicker = true },
+                                contentPadding = PaddingValues(horizontal = 4.dp)) { Text("📅") }
+                        },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = toDate,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text(s.toLabel) },
+                        trailingIcon = {
+                            TextButton(onClick = { showRangePicker = true },
+                                contentPadding = PaddingValues(horizontal = 4.dp)) { Text("📅") }
+                        },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
                 }
                 OutlinedTextField(
                     reason, { reason = it },
@@ -3828,23 +4079,66 @@ private fun BlockRoomDialog(
                     singleLine  = true,
                     modifier    = Modifier.fillMaxWidth()
                 )
+                if (hasConflict) {
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(MaterialTheme.colorScheme.errorContainer)
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("⚠", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer)
+                        Text(
+                            s.blockReservationConflict(conflictingRooms.joinToString { s.roomAbbr + " " + it.number }),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
             Button(
                 onClick = {
-                    onConfirm(CreateRoomBlockRequest(
-                        roomId   = selectedRoom!!.id,
-                        fromDate = fromDate.trim(),
-                        toDate   = toDate.trim(),
-                        reason   = reason.trim().ifBlank { null }
-                    ))
+                    val toBlock = if (blockAllRooms) rooms else listOfNotNull(selectedRoom)
+                    onConfirm(toBlock.map { room ->
+                        CreateRoomBlockRequest(
+                            roomId   = room.id,
+                            fromDate = fromDate.trim(),
+                            toDate   = toDate.trim(),
+                            reason   = reason.trim().ifBlank { null }
+                        )
+                    })
                 },
                 enabled = valid
             ) { Text(s.blockBtn) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(s.cancel) } }
     )
+
+    if (showRangePicker) {
+        AppDatePickerDialog(
+            onDismissRequest = { showRangePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    val startMs = rangePickerState.selectedStartDateMillis
+                    val endMs   = rangePickerState.selectedEndDateMillis
+                    if (startMs != null) {
+                        fromDate = Instant.ofEpochMilli(startMs).atZone(ZoneOffset.UTC).toLocalDate().toString()
+                    }
+                    if (endMs != null) {
+                        toDate = Instant.ofEpochMilli(endMs).atZone(ZoneOffset.UTC).toLocalDate().toString()
+                    }
+                    showRangePicker = false
+                }) { Text(s.ok) }
+            },
+            dismissButton = { TextButton(onClick = { showRangePicker = false }) { Text(s.cancel) } }
+        ) {
+            DateRangePicker(state = rangePickerState, modifier = Modifier.weight(1f))
+        }
+    }
 }
 
 // ─── Block delete dialog ──────────────────────────────────────────────────────
@@ -3864,19 +4158,19 @@ private fun EditGuestDialog(
     var blacklisted by remember(guest.id) { mutableStateOf(guest.blacklisted) }
     var notes       by remember(guest.id) { mutableStateOf(guest.notes ?: "") }
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("${guest.firstName} ${guest.lastName}") },
         text = {
             Column(
-                Modifier.width(420.dp).verticalScroll(rememberScrollState()),
+                Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(firstName, { firstName = it }, label = { Text(s.firstNameLabel) }, singleLine = true, modifier = Modifier.weight(1f))
                     OutlinedTextField(lastName,  { lastName  = it }, label = { Text(s.lastNameLabel) },  singleLine = true, modifier = Modifier.weight(1f))
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = countryCode, onValueChange = { countryCode = it },
                         label = { Text(s.codeLabel) }, prefix = { Text("+") },
@@ -3933,7 +4227,7 @@ private fun RoomBlockDeleteDialog(
     onConfirm: () -> Unit
 ) {
     val s = LocalStrings.current
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(s.removeBlockTitle) },
         text  = { Text(s.removeBlockConfirm(block.roomNumber, block.fromDate, block.toDate, block.reason)) },
@@ -3947,50 +4241,69 @@ private fun RoomBlockDeleteDialog(
     )
 }
 
-// ─── Date picker field (local copy) ───────────────────────────────────────────
+// ─── Date range picker fields ──────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ResDatePickerField(
-    label: String,
-    dateString: String,
-    onDateSelected: (String) -> Unit,
-    modifier: Modifier = Modifier
+private fun ResDateRangePickerFields(
+    checkInLabel: String, checkIn: String, onCheckInChange: (String) -> Unit,
+    checkOutLabel: String, checkOut: String, onCheckOutChange: (String) -> Unit
 ) {
     var showPicker by remember { mutableStateOf(false) }
-    val initialMillis = remember(dateString) {
-        if (dateString.isNotBlank()) runCatching {
-            LocalDate.parse(dateString).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+    val initStart = remember {
+        if (checkIn.isNotBlank()) runCatching {
+            LocalDate.parse(checkIn).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
         }.getOrNull() else null
     }
-    val pickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
-
-    OutlinedTextField(
-        value         = dateString,
-        onValueChange = {},
-        readOnly      = true,
-        label         = { Text(label) },
-        trailingIcon  = {
-            TextButton(onClick = { showPicker = true },
-                contentPadding = PaddingValues(horizontal = 4.dp)) { Text("📅") }
-        },
-        modifier   = modifier,
-        singleLine = true
+    val initEnd = remember {
+        if (checkOut.isNotBlank()) runCatching {
+            LocalDate.parse(checkOut).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+        }.getOrNull() else null
+    }
+    val rangeState = rememberDateRangePickerState(
+        initialSelectedStartDateMillis = initStart,
+        initialSelectedEndDateMillis   = initEnd
     )
+
+    FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(
+            value = checkIn, onValueChange = {}, readOnly = true,
+            label = { Text(checkInLabel) },
+            trailingIcon = {
+                TextButton(onClick = { showPicker = true },
+                    contentPadding = PaddingValues(horizontal = 4.dp)) { Text("📅") }
+            },
+            modifier = Modifier.weight(1f), singleLine = true
+        )
+        OutlinedTextField(
+            value = checkOut, onValueChange = {}, readOnly = true,
+            label = { Text(checkOutLabel) },
+            trailingIcon = {
+                TextButton(onClick = { showPicker = true },
+                    contentPadding = PaddingValues(horizontal = 4.dp)) { Text("📅") }
+            },
+            modifier = Modifier.weight(1f), singleLine = true
+        )
+    }
 
     if (showPicker) {
         val s = LocalStrings.current
-        DatePickerDialog(
+        AppDatePickerDialog(
             onDismissRequest = { showPicker = false },
             confirmButton = {
                 TextButton(onClick = {
-                    pickerState.selectedDateMillis?.let { ms ->
-                        onDateSelected(Instant.ofEpochMilli(ms).atZone(ZoneOffset.UTC).toLocalDate().toString())
+                    rangeState.selectedStartDateMillis?.let { ms ->
+                        onCheckInChange(Instant.ofEpochMilli(ms).atZone(ZoneOffset.UTC).toLocalDate().toString())
+                    }
+                    rangeState.selectedEndDateMillis?.let { ms ->
+                        onCheckOutChange(Instant.ofEpochMilli(ms).atZone(ZoneOffset.UTC).toLocalDate().toString())
                     }
                     showPicker = false
                 }) { Text(s.ok) }
             },
             dismissButton = { TextButton(onClick = { showPicker = false }) { Text(s.cancel) } }
-        ) { DatePicker(state = pickerState) }
+        ) {
+            DateRangePicker(state = rangeState, modifier = Modifier.weight(1f))
+        }
     }
 }

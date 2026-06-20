@@ -129,7 +129,7 @@ private fun CreateHotelDialog(onDismiss: () -> Unit, onCreate: (CreateHotelReque
     var address by remember { mutableStateOf("") }
     var phone   by remember { mutableStateOf("") }
     var email   by remember { mutableStateOf("") }
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("New Hotel") },
         text = {
@@ -190,7 +190,7 @@ private fun CreateRoomDialog(
     var maxGuests     by remember { mutableStateOf("2") }
     var description   by remember { mutableStateOf("") }
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("New Room") },
         text = {
@@ -295,7 +295,7 @@ private fun CreateUserDialog(onDismiss: () -> Unit, onCreate: (CreateUserRequest
     var selectedRole by remember { mutableStateOf("user") }
     var roleExpanded by remember { mutableStateOf(false) }
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Register User") },
         text = {

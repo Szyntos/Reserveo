@@ -34,7 +34,11 @@ private data class AppSettings(
     val centerDays: Int = 30,
     val noShowAfterDays: Int = 14,
     val autoCheckOutAfterDays: Int = 3,
-    val language: String = "English"
+    val language: String = "English",
+    val timelineDayWidth: Float = 40f,
+    val timelineRowHeight: Float = 34f,
+    val timelineLabelWidth: Float = 96f,
+    val timelineShowRoomType: Boolean = true
 )
 
 private val settingsFile = File(System.getProperty("user.home"), ".reserveo_settings.properties")
@@ -48,7 +52,11 @@ private fun loadSettings(): AppSettings {
         centerDays            = props.getProperty("centerDays", "30").toInt(),
         noShowAfterDays       = props.getProperty("noShowAfterDays", "14").toInt(),
         autoCheckOutAfterDays = props.getProperty("autoCheckOutAfterDays", "3").toInt(),
-        language              = props.getProperty("language", "English")
+        language              = props.getProperty("language", "English"),
+        timelineDayWidth      = props.getProperty("timelineDayWidth", "40").toFloat(),
+        timelineRowHeight     = props.getProperty("timelineRowHeight", "34").toFloat(),
+        timelineLabelWidth    = props.getProperty("timelineLabelWidth", "96").toFloat(),
+        timelineShowRoomType  = props.getProperty("timelineShowRoomType", "true").toBoolean()
     )
 }
 
@@ -61,6 +69,10 @@ private fun saveSettings(s: AppSettings) {
         props["noShowAfterDays"]       = s.noShowAfterDays.toString()
         props["autoCheckOutAfterDays"] = s.autoCheckOutAfterDays.toString()
         props["language"]              = s.language
+        props["timelineDayWidth"]      = s.timelineDayWidth.toString()
+        props["timelineRowHeight"]     = s.timelineRowHeight.toString()
+        props["timelineLabelWidth"]    = s.timelineLabelWidth.toString()
+        props["timelineShowRoomType"]  = s.timelineShowRoomType.toString()
         settingsFile.outputStream().use { props.store(it, null) }
     } catch (_: Exception) {}
 }
@@ -142,9 +154,15 @@ fun AppRoot() {
     var language              by remember { mutableStateOf(
         AppLanguage.entries.firstOrNull { it.name == initial.language } ?: AppLanguage.English
     ) }
+    var timelineDayWidth      by remember { mutableStateOf(initial.timelineDayWidth) }
+    var timelineRowHeight     by remember { mutableStateOf(initial.timelineRowHeight) }
+    var timelineLabelWidth    by remember { mutableStateOf(initial.timelineLabelWidth) }
+    var timelineShowRoomType  by remember { mutableStateOf(initial.timelineShowRoomType) }
 
-    LaunchedEffect(isDark, fontScale, centerDays, noShowAfterDays, autoCheckOutAfterDays, language) {
-        saveSettings(AppSettings(isDark, fontScale, centerDays, noShowAfterDays, autoCheckOutAfterDays, language.name))
+    LaunchedEffect(isDark, fontScale, centerDays, noShowAfterDays, autoCheckOutAfterDays, language,
+                   timelineDayWidth, timelineRowHeight, timelineLabelWidth, timelineShowRoomType) {
+        saveSettings(AppSettings(isDark, fontScale, centerDays, noShowAfterDays, autoCheckOutAfterDays, language.name,
+                                 timelineDayWidth, timelineRowHeight, timelineLabelWidth, timelineShowRoomType))
     }
 
     fun logout() { currentUser = null; selectedHotel = null }
@@ -155,6 +173,7 @@ fun AppRoot() {
         val baseDensity = LocalDensity.current
         CompositionLocalProvider(
             LocalStrings provides language.strings,
+            LocalFontScale provides fontScale,
             LocalScrollbarStyle provides ScrollbarStyle(
                 minimalHeight       = 16.dp,
                 thickness           = 8.dp,
@@ -196,7 +215,15 @@ fun AppRoot() {
                             autoCheckOutAfterDays        = autoCheckOutAfterDays,
                             onAutoCheckOutAfterDaysChange = { autoCheckOutAfterDays = it },
                             language                     = language,
-                            onLanguageChange             = { language = it }
+                            onLanguageChange             = { language = it },
+                            timelineDayWidth             = timelineDayWidth,
+                            onTimelineDayWidthChange     = { timelineDayWidth = it },
+                            timelineRowHeight            = timelineRowHeight,
+                            onTimelineRowHeightChange    = { timelineRowHeight = it },
+                            timelineLabelWidth           = timelineLabelWidth,
+                            onTimelineLabelWidthChange   = { timelineLabelWidth = it },
+                            timelineShowRoomType         = timelineShowRoomType,
+                            onTimelineShowRoomTypeChange = { timelineShowRoomType = it }
                         )
                 }
             }

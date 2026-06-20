@@ -1,5 +1,7 @@
 package org.julsz.smnt
 
+import android.content.Context
+import android.content.SharedPreferences
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -12,13 +14,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
 
-// ─── Settings (in-memory on Android) ─────────────────────────────────────────
+// ─── Settings persistence ─────────────────────────────────────────────────────
 
 private data class AppSettings(
     val isDark: Boolean = true,
@@ -26,8 +29,46 @@ private data class AppSettings(
     val centerDays: Int = 30,
     val noShowAfterDays: Int = 14,
     val autoCheckOutAfterDays: Int = 3,
-    val language: String = "English"
+    val language: String = "English",
+    val timelineDayWidth: Float = 40f,
+    val timelineRowHeight: Float = 34f,
+    val timelineLabelWidth: Float = 96f,
+    val timelineShowRoomType: Boolean = true
 )
+
+private fun prefs(context: Context): SharedPreferences =
+    context.getSharedPreferences("reserveo_settings", Context.MODE_PRIVATE)
+
+private fun loadSettings(context: Context): AppSettings {
+    val p = prefs(context)
+    return AppSettings(
+        isDark                = p.getBoolean("isDark", true),
+        fontScale             = p.getFloat("fontScale", 1.0f),
+        centerDays            = p.getInt("centerDays", 30),
+        noShowAfterDays       = p.getInt("noShowAfterDays", 14),
+        autoCheckOutAfterDays = p.getInt("autoCheckOutAfterDays", 3),
+        language              = p.getString("language", "English") ?: "English",
+        timelineDayWidth      = p.getFloat("timelineDayWidth", 40f),
+        timelineRowHeight     = p.getFloat("timelineRowHeight", 34f),
+        timelineLabelWidth    = p.getFloat("timelineLabelWidth", 96f),
+        timelineShowRoomType  = p.getBoolean("timelineShowRoomType", true)
+    )
+}
+
+private fun saveSettings(context: Context, s: AppSettings) {
+    prefs(context).edit()
+        .putBoolean("isDark", s.isDark)
+        .putFloat("fontScale", s.fontScale)
+        .putInt("centerDays", s.centerDays)
+        .putInt("noShowAfterDays", s.noShowAfterDays)
+        .putInt("autoCheckOutAfterDays", s.autoCheckOutAfterDays)
+        .putString("language", s.language)
+        .putFloat("timelineDayWidth", s.timelineDayWidth)
+        .putFloat("timelineRowHeight", s.timelineRowHeight)
+        .putFloat("timelineLabelWidth", s.timelineLabelWidth)
+        .putBoolean("timelineShowRoomType", s.timelineShowRoomType)
+        .apply()
+}
 
 private val ReserveoDarkColors = darkColorScheme(
     primary              = Color(0xFF7B9EF0),
@@ -91,18 +132,33 @@ private val ReserveoLightColors = lightColorScheme(
 
 @Composable
 fun AppRoot() {
+    val context = LocalContext.current
     val client = remember { HttpClient(CIO) { install(ContentNegotiation) { json() } } }
     DisposableEffect(Unit) { onDispose { client.close() } }
 
     var currentUser   by remember { mutableStateOf<UserDto?>(null) }
     var selectedHotel by remember { mutableStateOf<UserHotelRoleDto?>(null) }
 
-    var isDark                by remember { mutableStateOf(true) }
-    var fontScale             by remember { mutableStateOf(1.0f) }
-    var centerDays            by remember { mutableStateOf(30) }
-    var noShowAfterDays       by remember { mutableStateOf(14) }
-    var autoCheckOutAfterDays by remember { mutableStateOf(3) }
-    var language              by remember { mutableStateOf(AppLanguage.English) }
+    val initial = remember { loadSettings(context) }
+    var isDark                by remember { mutableStateOf(initial.isDark) }
+    var fontScale             by remember { mutableStateOf(initial.fontScale) }
+    var centerDays            by remember { mutableStateOf(initial.centerDays) }
+    var noShowAfterDays       by remember { mutableStateOf(initial.noShowAfterDays) }
+    var autoCheckOutAfterDays by remember { mutableStateOf(initial.autoCheckOutAfterDays) }
+    var language              by remember { mutableStateOf(
+        AppLanguage.entries.firstOrNull { it.name == initial.language } ?: AppLanguage.English
+    ) }
+    var timelineDayWidth      by remember { mutableStateOf(initial.timelineDayWidth) }
+    var timelineRowHeight     by remember { mutableStateOf(initial.timelineRowHeight) }
+    var timelineLabelWidth    by remember { mutableStateOf(initial.timelineLabelWidth) }
+    var timelineShowRoomType  by remember { mutableStateOf(initial.timelineShowRoomType) }
+
+    LaunchedEffect(isDark, fontScale, centerDays, noShowAfterDays, autoCheckOutAfterDays, language,
+                   timelineDayWidth, timelineRowHeight, timelineLabelWidth, timelineShowRoomType) {
+        saveSettings(context, AppSettings(isDark, fontScale, centerDays, noShowAfterDays, autoCheckOutAfterDays,
+                                          language.name, timelineDayWidth, timelineRowHeight, timelineLabelWidth,
+                                          timelineShowRoomType))
+    }
 
     fun logout() { currentUser = null; selectedHotel = null }
 
@@ -112,6 +168,7 @@ fun AppRoot() {
         val baseDensity = LocalDensity.current
         CompositionLocalProvider(
             LocalStrings provides language.strings,
+            LocalFontScale provides fontScale,
             LocalDensity provides Density(baseDensity.density, fontScale)
         ) {
             Surface(Modifier.fillMaxSize()) {
@@ -145,7 +202,15 @@ fun AppRoot() {
                             autoCheckOutAfterDays         = autoCheckOutAfterDays,
                             onAutoCheckOutAfterDaysChange = { autoCheckOutAfterDays = it },
                             language                      = language,
-                            onLanguageChange              = { language = it }
+                            onLanguageChange              = { language = it },
+                            timelineDayWidth              = timelineDayWidth,
+                            onTimelineDayWidthChange      = { timelineDayWidth = it },
+                            timelineRowHeight             = timelineRowHeight,
+                            onTimelineRowHeightChange     = { timelineRowHeight = it },
+                            timelineLabelWidth            = timelineLabelWidth,
+                            onTimelineLabelWidthChange    = { timelineLabelWidth = it },
+                            timelineShowRoomType          = timelineShowRoomType,
+                            onTimelineShowRoomTypeChange  = { timelineShowRoomType = it }
                         )
                 }
             }

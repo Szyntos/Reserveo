@@ -3,6 +3,8 @@ package org.julsz.smnt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -500,7 +502,7 @@ private fun WeekRow(
 
 // ─── Add / Edit dialog ────────────────────────────────────────────────────────
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun PriceRuleDialog(
     title: String,
@@ -526,11 +528,11 @@ private fun PriceRuleDialog(
     val valid = selectedRoom != null && fromDate.isNotBlank() && toDate.isNotBlank()
         && minNights.toIntOrNull() != null && price.toDoubleOrNull() != null
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            Column(Modifier.width(380.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 val s = LocalStrings.current
                 if (fixedRoom == null) {
                     ExposedDropdownMenuBox(expanded = roomExpanded, onExpandedChange = { roomExpanded = it }) {
@@ -554,18 +556,18 @@ private fun PriceRuleDialog(
                         }
                     }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    DatePickerField(s.fromLabel, fromDate, { fromDate = it }, Modifier.weight(1f))
-                    DatePickerField(s.toLabel,   toDate,  { toDate   = it }, Modifier.weight(1f))
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                DateRangePickerFields(
+                    fromLabel = s.fromLabel, fromDate = fromDate, onFromChange = { fromDate = it },
+                    toLabel = s.toLabel, toDate = toDate, onToChange = { toDate = it }
+                )
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(minNights, { minNights = it }, label = { Text(s.minNightsLabel) },
                         singleLine = true, modifier = Modifier.weight(1f))
                     OutlinedTextField(maxNights, { maxNights = it }, label = { Text(s.maxNightsLabel) },
                         placeholder = { Text(s.blankNoLimit) }, singleLine = true,
                         modifier = Modifier.weight(1f))
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(price, { price = it }, label = { Text(s.priceLabel) },
                         singleLine = true, modifier = Modifier.weight(2f))
                     OutlinedTextField(currency, { currency = it }, label = { Text(s.currencyLabel) },
@@ -603,50 +605,69 @@ private fun PriceRuleDialog(
     )
 }
 
-// ─── Date picker field ────────────────────────────────────────────────────────
+// ─── Date range picker fields ─────────────────────────────────────────────────
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-private fun DatePickerField(
-    label: String,
-    dateString: String,
-    onDateSelected: (String) -> Unit,
-    modifier: Modifier = Modifier
+private fun DateRangePickerFields(
+    fromLabel: String, fromDate: String, onFromChange: (String) -> Unit,
+    toLabel: String, toDate: String, onToChange: (String) -> Unit
 ) {
     var showPicker by remember { mutableStateOf(false) }
-    val initialMillis = remember(dateString) {
-        if (dateString.isNotBlank()) runCatching {
-            LocalDate.parse(dateString).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+    val initStart = remember {
+        if (fromDate.isNotBlank()) runCatching {
+            LocalDate.parse(fromDate).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
         }.getOrNull() else null
     }
-    val pickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
-
-    OutlinedTextField(
-        value         = dateString,
-        onValueChange = {},
-        readOnly      = true,
-        label         = { Text(label) },
-        trailingIcon  = {
-            TextButton(onClick = { showPicker = true },
-                contentPadding = PaddingValues(horizontal = 4.dp)) { Text("📅") }
-        },
-        modifier   = modifier,
-        singleLine = true
+    val initEnd = remember {
+        if (toDate.isNotBlank()) runCatching {
+            LocalDate.parse(toDate).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+        }.getOrNull() else null
+    }
+    val rangeState = rememberDateRangePickerState(
+        initialSelectedStartDateMillis = initStart,
+        initialSelectedEndDateMillis   = initEnd
     )
+
+    FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(
+            value = fromDate, onValueChange = {}, readOnly = true,
+            label = { Text(fromLabel) },
+            trailingIcon = {
+                TextButton(onClick = { showPicker = true },
+                    contentPadding = PaddingValues(horizontal = 4.dp)) { Text("📅") }
+            },
+            modifier = Modifier.weight(1f), singleLine = true
+        )
+        OutlinedTextField(
+            value = toDate, onValueChange = {}, readOnly = true,
+            label = { Text(toLabel) },
+            trailingIcon = {
+                TextButton(onClick = { showPicker = true },
+                    contentPadding = PaddingValues(horizontal = 4.dp)) { Text("📅") }
+            },
+            modifier = Modifier.weight(1f), singleLine = true
+        )
+    }
 
     if (showPicker) {
         val s = LocalStrings.current
-        DatePickerDialog(
+        AppDatePickerDialog(
             onDismissRequest = { showPicker = false },
             confirmButton = {
                 TextButton(onClick = {
-                    pickerState.selectedDateMillis?.let { ms ->
-                        onDateSelected(Instant.ofEpochMilli(ms).atZone(ZoneOffset.UTC).toLocalDate().toString())
+                    rangeState.selectedStartDateMillis?.let { ms ->
+                        onFromChange(Instant.ofEpochMilli(ms).atZone(ZoneOffset.UTC).toLocalDate().toString())
+                    }
+                    rangeState.selectedEndDateMillis?.let { ms ->
+                        onToChange(Instant.ofEpochMilli(ms).atZone(ZoneOffset.UTC).toLocalDate().toString())
                     }
                     showPicker = false
                 }) { Text(s.ok) }
             },
             dismissButton = { TextButton(onClick = { showPicker = false }) { Text(s.cancel) } }
-        ) { DatePicker(state = pickerState) }
+        ) {
+            DateRangePicker(state = rangeState, modifier = Modifier.weight(1f))
+        }
     }
 }

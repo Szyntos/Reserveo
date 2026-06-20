@@ -124,7 +124,7 @@ actual fun InvoicePage(
     }
 
     deleteTarget?.let { inv ->
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { deleteTarget = null },
             title   = { Text(s.deleteInvoiceTitle) },
             text    = { Text("${inv.invoiceNumber} · ${inv.buyerName}") },

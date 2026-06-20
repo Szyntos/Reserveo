@@ -71,7 +71,15 @@ fun MainApp(
     autoCheckOutAfterDays: Int = 3,
     onAutoCheckOutAfterDaysChange: (Int) -> Unit = {},
     language: AppLanguage = AppLanguage.English,
-    onLanguageChange: (AppLanguage) -> Unit = {}
+    onLanguageChange: (AppLanguage) -> Unit = {},
+    timelineDayWidth: Float = 40f,
+    onTimelineDayWidthChange: (Float) -> Unit = {},
+    timelineRowHeight: Float = 34f,
+    onTimelineRowHeightChange: (Float) -> Unit = {},
+    timelineLabelWidth: Float = 96f,
+    onTimelineLabelWidthChange: (Float) -> Unit = {},
+    timelineShowRoomType: Boolean = true,
+    onTimelineShowRoomTypeChange: (Boolean) -> Unit = {}
 ) {
     var currentScreen          by remember { mutableStateOf(AppScreen.Dashboard) }
     var invoiceForReservation  by remember { mutableStateOf<ReservationDto?>(null) }
@@ -106,9 +114,18 @@ fun MainApp(
                 Box(Modifier.fillMaxSize().padding(28.dp)) {
                     when (currentScreen) {
                         AppScreen.Dashboard    -> DashboardPage(client = client, hotel = selectedHotel, noShowAfterDays = noShowAfterDays, autoCheckOutAfterDays = autoCheckOutAfterDays)
-                        AppScreen.Reservations -> ReservationsCalendarPage(client, selectedHotel, centerDays, noShowAfterDays, autoCheckOutAfterDays,
+                        AppScreen.Reservations -> ReservationsCalendarPage(
+                            client, selectedHotel, centerDays, noShowAfterDays, autoCheckOutAfterDays,
+                            timelineDayWidth          = timelineDayWidth,
+                            onTimelineDayWidthChange  = onTimelineDayWidthChange,
+                            timelineRowHeight         = timelineRowHeight,
+                            onTimelineRowHeightChange = onTimelineRowHeightChange,
+                            timelineLabelWidth        = timelineLabelWidth,
+                            onTimelineLabelWidthChange = onTimelineLabelWidthChange,
+                            timelineShowRoomType      = timelineShowRoomType,
                             onCreateInvoice = { res -> invoiceForReservation = res; currentScreen = AppScreen.Invoices },
-                            onViewInvoice   = { currentScreen = AppScreen.Invoices })
+                            onViewInvoice   = { currentScreen = AppScreen.Invoices }
+                        )
                         AppScreen.Statistics   -> StatisticsPage(client = client, hotel = selectedHotel)
                         AppScreen.Config       -> ConfigPage(client, selectedHotel)
                         AppScreen.Invoices     -> InvoicePage(
@@ -118,7 +135,17 @@ fun MainApp(
                             onInitialConsumed  = { invoiceForReservation = null },
                             fontScale          = fontScale
                         )
-                        AppScreen.Settings     -> SettingsPage(fontScale = fontScale, onFontScaleChange = onFontScaleChange, centerDays = centerDays, onCenterDaysChange = onCenterDaysChange, noShowAfterDays = noShowAfterDays, onNoShowAfterDaysChange = onNoShowAfterDaysChange, autoCheckOutAfterDays = autoCheckOutAfterDays, onAutoCheckOutAfterDaysChange = onAutoCheckOutAfterDaysChange, language = language, onLanguageChange = onLanguageChange)
+                        AppScreen.Settings     -> SettingsPage(
+                            fontScale = fontScale, onFontScaleChange = onFontScaleChange,
+                            centerDays = centerDays, onCenterDaysChange = onCenterDaysChange,
+                            noShowAfterDays = noShowAfterDays, onNoShowAfterDaysChange = onNoShowAfterDaysChange,
+                            autoCheckOutAfterDays = autoCheckOutAfterDays, onAutoCheckOutAfterDaysChange = onAutoCheckOutAfterDaysChange,
+                            language = language, onLanguageChange = onLanguageChange,
+                            timelineDayWidth = timelineDayWidth, onTimelineDayWidthChange = onTimelineDayWidthChange,
+                            timelineRowHeight = timelineRowHeight, onTimelineRowHeightChange = onTimelineRowHeightChange,
+                            timelineLabelWidth = timelineLabelWidth, onTimelineLabelWidthChange = onTimelineLabelWidthChange,
+                            timelineShowRoomType = timelineShowRoomType, onTimelineShowRoomTypeChange = onTimelineShowRoomTypeChange
+                        )
                     }
                 }
             }
@@ -1389,18 +1416,23 @@ private fun SettingsPage(
     noShowAfterDays: Int = 14, onNoShowAfterDaysChange: (Int) -> Unit = {},
     autoCheckOutAfterDays: Int = 3, onAutoCheckOutAfterDaysChange: (Int) -> Unit = {},
     language: AppLanguage = AppLanguage.English,
-    onLanguageChange: (AppLanguage) -> Unit = {}
+    onLanguageChange: (AppLanguage) -> Unit = {},
+    timelineDayWidth: Float = 40f, onTimelineDayWidthChange: (Float) -> Unit = {},
+    timelineRowHeight: Float = 34f, onTimelineRowHeightChange: (Float) -> Unit = {},
+    timelineLabelWidth: Float = 96f, onTimelineLabelWidthChange: (Float) -> Unit = {},
+    timelineShowRoomType: Boolean = true, onTimelineShowRoomTypeChange: (Boolean) -> Unit = {}
 ) {
     val s = LocalStrings.current
+    val scrollState = rememberScrollState()
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxSize().verticalScroll(scrollState),
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
         Text(s.settingsTitle, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
 
         Column(
             modifier = Modifier
-                .fillMaxWidth(0.55f)
+                .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .padding(20.dp),
@@ -1548,7 +1580,29 @@ private fun SettingsPage(
                 Text("7d", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("30d", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+
+            HorizontalDivider()
+            Text(s.settingsTimelineDisplay, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            HorizontalDivider()
+            Text(s.showRoomTypeLabel, style = MaterialTheme.typography.bodyMedium)
+            Row(Modifier.clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surface)) {
+                listOf(true to s.showRoomTypeLabel, false to s.hideRoomTypeLabel).forEach { (v, label) ->
+                    val sel = timelineShowRoomType == v
+                    Box(
+                        Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (sel) MaterialTheme.colorScheme.primary else Color.Transparent)
+                            .clickable { onTimelineShowRoomTypeChange(v) }
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(label, style = MaterialTheme.typography.labelMedium,
+                            color = if (sel) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
         }
+        Spacer(Modifier.height(24.dp))
     }
 }
 
