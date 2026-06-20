@@ -59,6 +59,11 @@ interface AppStrings {
     val settingsNoShowAfterDays: String
     val settingsAutoCheckOutAfterDays: String
     val settingsLanguage: String
+    val settingsServer: String
+    val settingsServerLocalhost: String
+    val settingsServerDeployment: String
+    val settingsServerCustom: String
+    val settingsServerCustomUrl: String
 
     // Config hub
     val configTitle: String
@@ -121,6 +126,19 @@ interface AppStrings {
     val blankNoLimit: String
     val priceLabel: String
     val currencyLabel: String
+
+    // Rule generator
+    val generateRulesBtn: String
+    val ruleGeneratorTitle: String
+    val ruleGeneratorDateRange: String
+    val ruleGeneratorFromYear: String
+    val ruleGeneratorToYear: String
+    val ruleGeneratorTiers: String
+    val ruleGeneratorAddTierFrom: String
+    val ruleGeneratorAddTierBtn: String
+    val ruleGeneratorGenerate: String
+    fun ruleGeneratorSuccess(count: Int): String
+    fun lastRuleDate(date: String): String
 
     // Dashboard
     val arrivals: String
@@ -398,6 +416,11 @@ object EnglishStrings : AppStrings {
     override val settingsNoShowAfterDays = "Auto no-show after"
     override val settingsAutoCheckOutAfterDays = "Auto check-out after"
     override val settingsLanguage = "Language"
+    override val settingsServer = "Server"
+    override val settingsServerLocalhost = "Localhost"
+    override val settingsServerDeployment = "Deployment"
+    override val settingsServerCustom = "Custom"
+    override val settingsServerCustomUrl = "Server URL"
     override val configTitle = "Config"
     override val configRoomsTitle = "Rooms"
     override val configRoomsDesc = "Manage rooms, statuses and availability"
@@ -452,6 +475,17 @@ object EnglishStrings : AppStrings {
     override val blankNoLimit = "blank = no limit"
     override val priceLabel = "Price / person / night *"
     override val currencyLabel = "Currency"
+    override val generateRulesBtn        = "Rule Generator"
+    override val ruleGeneratorTitle      = "Rule Generator"
+    override val ruleGeneratorDateRange  = "Date Range (year ignored)"
+    override val ruleGeneratorFromYear   = "From year"
+    override val ruleGeneratorToYear     = "To year"
+    override val ruleGeneratorTiers      = "Night tiers & prices"
+    override val ruleGeneratorAddTierFrom = "Add tier from night"
+    override val ruleGeneratorAddTierBtn  = "Add tier"
+    override val ruleGeneratorGenerate   = "Generate Rules"
+    override fun ruleGeneratorSuccess(count: Int) = "Generated $count rule${if (count != 1) "s" else ""}"
+    override fun lastRuleDate(date: String) = "Last existing rule ends: $date"
     override val arrivals = "Arrivals"
     override val departures = "Departures"
     override val notArrived = "Not arrived"
@@ -711,6 +745,11 @@ object PolishStrings : AppStrings {
     override val settingsNoShowAfterDays = "Automatyczna nieobecność po"
     override val settingsAutoCheckOutAfterDays = "Automatyczne wymeldowanie po"
     override val settingsLanguage = "Język"
+    override val settingsServer = "Serwer"
+    override val settingsServerLocalhost = "Lokalny"
+    override val settingsServerDeployment = "Wdrożenie"
+    override val settingsServerCustom = "Własny"
+    override val settingsServerCustomUrl = "URL serwera"
     override val configTitle = "Konfiguracja"
     override val configRoomsTitle = "Pokoje"
     override val configRoomsDesc = "Zarządzaj pokojami, statusami i dostępnością"
@@ -773,6 +812,21 @@ object PolishStrings : AppStrings {
     override val blankNoLimit = "puste = bez limitu"
     override val priceLabel = "Cena / osoba / noc *"
     override val currencyLabel = "Waluta"
+    override val generateRulesBtn        = "Generator reguł"
+    override val ruleGeneratorTitle      = "Generator reguł"
+    override val ruleGeneratorDateRange  = "Zakres dat (rok ignorowany)"
+    override val ruleGeneratorFromYear   = "Od roku"
+    override val ruleGeneratorToYear     = "Do roku"
+    override val ruleGeneratorTiers      = "Progi noclegowe i ceny"
+    override val ruleGeneratorAddTierFrom = "Dodaj próg od nocy"
+    override val ruleGeneratorAddTierBtn  = "Dodaj próg"
+    override val ruleGeneratorGenerate   = "Generuj reguły"
+    override fun ruleGeneratorSuccess(count: Int) = when {
+        count == 1             -> "Wygenerowano 1 regułę"
+        count in 2..4          -> "Wygenerowano $count reguły"
+        else                   -> "Wygenerowano $count reguł"
+    }
+    override fun lastRuleDate(date: String) = "Ostatnia istniejąca reguła kończy się: $date"
     override val arrivals = "Przyjazdy"
     override val departures = "Wyjazdy"
     override val notArrived = "Nie przyjechał"

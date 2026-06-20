@@ -33,7 +33,9 @@ private data class AppSettings(
     val timelineDayWidth: Float = 40f,
     val timelineRowHeight: Float = 34f,
     val timelineLabelWidth: Float = 96f,
-    val timelineShowRoomType: Boolean = true
+    val timelineShowRoomType: Boolean = true,
+    val serverMode: String = "deployment",
+    val customServerUrl: String = ""
 )
 
 private fun prefs(context: Context): SharedPreferences =
@@ -51,7 +53,9 @@ private fun loadSettings(context: Context): AppSettings {
         timelineDayWidth      = p.getFloat("timelineDayWidth", 40f),
         timelineRowHeight     = p.getFloat("timelineRowHeight", 34f),
         timelineLabelWidth    = p.getFloat("timelineLabelWidth", 96f),
-        timelineShowRoomType  = p.getBoolean("timelineShowRoomType", true)
+        timelineShowRoomType  = p.getBoolean("timelineShowRoomType", true),
+        serverMode            = p.getString("serverMode", "deployment") ?: "deployment",
+        customServerUrl       = p.getString("customServerUrl", "") ?: ""
     )
 }
 
@@ -67,6 +71,8 @@ private fun saveSettings(context: Context, s: AppSettings) {
         .putFloat("timelineRowHeight", s.timelineRowHeight)
         .putFloat("timelineLabelWidth", s.timelineLabelWidth)
         .putBoolean("timelineShowRoomType", s.timelineShowRoomType)
+        .putString("serverMode", s.serverMode)
+        .putString("customServerUrl", s.customServerUrl)
         .apply()
 }
 
@@ -139,7 +145,11 @@ fun AppRoot() {
     var currentUser   by remember { mutableStateOf<UserDto?>(null) }
     var selectedHotel by remember { mutableStateOf<UserHotelRoleDto?>(null) }
 
-    val initial = remember { loadSettings(context) }
+    val initial = remember {
+        val s = loadSettings(context)
+        BASE_URL = resolveServerUrl(s.serverMode, s.customServerUrl)
+        s
+    }
     var isDark                by remember { mutableStateOf(initial.isDark) }
     var fontScale             by remember { mutableStateOf(initial.fontScale) }
     var centerDays            by remember { mutableStateOf(initial.centerDays) }
@@ -152,12 +162,16 @@ fun AppRoot() {
     var timelineRowHeight     by remember { mutableStateOf(initial.timelineRowHeight) }
     var timelineLabelWidth    by remember { mutableStateOf(initial.timelineLabelWidth) }
     var timelineShowRoomType  by remember { mutableStateOf(initial.timelineShowRoomType) }
+    var serverMode            by remember { mutableStateOf(initial.serverMode) }
+    var customServerUrl       by remember { mutableStateOf(initial.customServerUrl) }
 
     LaunchedEffect(isDark, fontScale, centerDays, noShowAfterDays, autoCheckOutAfterDays, language,
-                   timelineDayWidth, timelineRowHeight, timelineLabelWidth, timelineShowRoomType) {
+                   timelineDayWidth, timelineRowHeight, timelineLabelWidth, timelineShowRoomType,
+                   serverMode, customServerUrl) {
+        BASE_URL = resolveServerUrl(serverMode, customServerUrl)
         saveSettings(context, AppSettings(isDark, fontScale, centerDays, noShowAfterDays, autoCheckOutAfterDays,
                                           language.name, timelineDayWidth, timelineRowHeight, timelineLabelWidth,
-                                          timelineShowRoomType))
+                                          timelineShowRoomType, serverMode, customServerUrl))
     }
 
     fun logout() { currentUser = null; selectedHotel = null }
@@ -174,7 +188,14 @@ fun AppRoot() {
             Surface(Modifier.fillMaxSize()) {
                 when {
                     currentUser == null ->
-                        LoginScreen(client, onLogin = { currentUser = it })
+                        LoginScreen(
+                            client                  = client,
+                            onLogin                 = { currentUser = it },
+                            serverMode              = serverMode,
+                            onServerModeChange      = { serverMode = it },
+                            customServerUrl         = customServerUrl,
+                            onCustomServerUrlChange = { customServerUrl = it }
+                        )
                     currentUser!!.appRole == "admin" ->
                         DbViewerApp(client, onLogout = ::logout)
                     selectedHotel == null ->
@@ -210,7 +231,11 @@ fun AppRoot() {
                             timelineLabelWidth            = timelineLabelWidth,
                             onTimelineLabelWidthChange    = { timelineLabelWidth = it },
                             timelineShowRoomType          = timelineShowRoomType,
-                            onTimelineShowRoomTypeChange  = { timelineShowRoomType = it }
+                            onTimelineShowRoomTypeChange  = { timelineShowRoomType = it },
+                            serverMode                    = serverMode,
+                            onServerModeChange            = { serverMode = it },
+                            customServerUrl               = customServerUrl,
+                            onCustomServerUrlChange       = { customServerUrl = it }
                         )
                 }
             }

@@ -77,11 +77,12 @@ private fun buildWeeks(year: Int, month: Int): List<List<CalDay>> {
 fun BasePriceConfigPage(client: HttpClient, hotel: UserHotelRoleDto, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
 
-    var rules        by remember { mutableStateOf<List<PriceRuleDto>>(emptyList()) }
-    var rooms        by remember { mutableStateOf<List<RoomDto>>(emptyList()) }
-    var loading      by remember { mutableStateOf(true) }
-    var error        by remember { mutableStateOf<String?>(null) }
-    var selectedRoom by remember { mutableStateOf<RoomDto?>(null) }
+    var rules         by remember { mutableStateOf<List<PriceRuleDto>>(emptyList()) }
+    var rooms         by remember { mutableStateOf<List<RoomDto>>(emptyList()) }
+    var loading       by remember { mutableStateOf(true) }
+    var error         by remember { mutableStateOf<String?>(null) }
+    var selectedRoom  by remember { mutableStateOf<RoomDto?>(null) }
+    var showGenerator by remember { mutableStateOf(false) }
 
     suspend fun loadData() {
         loading = true; error = null
@@ -94,26 +95,35 @@ fun BasePriceConfigPage(client: HttpClient, hotel: UserHotelRoleDto, onBack: () 
 
     LaunchedEffect(hotel.hotelId) { loadData() }
 
-    val current = selectedRoom
-    if (current == null) {
-        RoomTileGrid(
-            rooms    = rooms,
-            rules    = rules,
-            loading  = loading,
-            error    = error,
-            onBack   = onBack,
-            onSelect = { selectedRoom = it }
+    when {
+        showGenerator -> RuleGeneratorPage(
+            client        = client,
+            rooms         = rooms,
+            existingRules = rules,
+            onBack        = { showGenerator = false },
+            onDone        = { showGenerator = false; scope.launch { loadData() } }
         )
-    } else {
-        RoomCalendarView(
-            client   = client,
-            room     = current,
-            rules    = rules.filter { it.roomId == current.id },
-            allRooms = rooms,
-            error    = error,
-            onBack   = { selectedRoom = null },
-            onError  = { error = it },
-            onReload = { scope.launch { loadData() } }
+        selectedRoom != null -> {
+            val current = selectedRoom!!
+            RoomCalendarView(
+                client   = client,
+                room     = current,
+                rules    = rules.filter { it.roomId == current.id },
+                allRooms = rooms,
+                error    = error,
+                onBack   = { selectedRoom = null },
+                onError  = { error = it },
+                onReload = { scope.launch { loadData() } }
+            )
+        }
+        else -> RoomTileGrid(
+            rooms       = rooms,
+            rules       = rules,
+            loading     = loading,
+            error       = error,
+            onBack      = onBack,
+            onSelect    = { selectedRoom = it },
+            onGenerate  = { showGenerator = true }
         )
     }
 }
@@ -127,7 +137,8 @@ private fun RoomTileGrid(
     loading: Boolean,
     error: String?,
     onBack: () -> Unit,
-    onSelect: (RoomDto) -> Unit
+    onSelect: (RoomDto) -> Unit,
+    onGenerate: () -> Unit
 ) {
     val s = LocalStrings.current
     Column(Modifier.fillMaxSize()) {
@@ -148,9 +159,12 @@ private fun RoomTileGrid(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            error?.let {
-                Text(s.errorMsg(it), color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                error?.let {
+                    Text(s.errorMsg(it), color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall)
+                }
+                OutlinedButton(onClick = onGenerate) { Text(s.generateRulesBtn) }
             }
         }
 
@@ -613,28 +627,16 @@ private fun DateRangePickerFields(
     fromLabel: String, fromDate: String, onFromChange: (String) -> Unit,
     toLabel: String, toDate: String, onToChange: (String) -> Unit
 ) {
-    var showPicker by remember { mutableStateOf(false) }
-    val initStart = remember {
-        if (fromDate.isNotBlank()) runCatching {
-            LocalDate.parse(fromDate).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
-        }.getOrNull() else null
-    }
-    val initEnd = remember {
-        if (toDate.isNotBlank()) runCatching {
-            LocalDate.parse(toDate).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
-        }.getOrNull() else null
-    }
-    val rangeState = rememberDateRangePickerState(
-        initialSelectedStartDateMillis = initStart,
-        initialSelectedEndDateMillis   = initEnd
-    )
+    var showFromPicker by remember { mutableStateOf(false) }
+    var showToPicker   by remember { mutableStateOf(false) }
+    val s = LocalStrings.current
 
     FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(
             value = fromDate, onValueChange = {}, readOnly = true,
             label = { Text(fromLabel) },
             trailingIcon = {
-                TextButton(onClick = { showPicker = true },
+                TextButton(onClick = { showFromPicker = true },
                     contentPadding = PaddingValues(horizontal = 4.dp)) { Text("📅") }
             },
             modifier = Modifier.weight(1f), singleLine = true
@@ -643,31 +645,50 @@ private fun DateRangePickerFields(
             value = toDate, onValueChange = {}, readOnly = true,
             label = { Text(toLabel) },
             trailingIcon = {
-                TextButton(onClick = { showPicker = true },
+                TextButton(onClick = { showToPicker = true },
                     contentPadding = PaddingValues(horizontal = 4.dp)) { Text("📅") }
             },
             modifier = Modifier.weight(1f), singleLine = true
         )
     }
 
-    if (showPicker) {
-        val s = LocalStrings.current
+    if (showFromPicker) {
+        val dpState = rememberDatePickerState(
+            initialSelectedDateMillis = fromDate.takeIf { it.isNotBlank() }?.let {
+                runCatching { LocalDate.parse(it).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() }.getOrNull()
+            }
+        )
         AppDatePickerDialog(
-            onDismissRequest = { showPicker = false },
+            onDismissRequest = { showFromPicker = false },
             confirmButton = {
                 TextButton(onClick = {
-                    rangeState.selectedStartDateMillis?.let { ms ->
+                    dpState.selectedDateMillis?.let { ms ->
                         onFromChange(Instant.ofEpochMilli(ms).atZone(ZoneOffset.UTC).toLocalDate().toString())
                     }
-                    rangeState.selectedEndDateMillis?.let { ms ->
-                        onToChange(Instant.ofEpochMilli(ms).atZone(ZoneOffset.UTC).toLocalDate().toString())
-                    }
-                    showPicker = false
+                    showFromPicker = false
                 }) { Text(s.ok) }
             },
-            dismissButton = { TextButton(onClick = { showPicker = false }) { Text(s.cancel) } }
-        ) {
-            DateRangePicker(state = rangeState, modifier = Modifier.weight(1f))
-        }
+            dismissButton = { TextButton(onClick = { showFromPicker = false }) { Text(s.cancel) } }
+        ) { DatePicker(state = dpState) }
+    }
+
+    if (showToPicker) {
+        val dpState = rememberDatePickerState(
+            initialSelectedDateMillis = toDate.takeIf { it.isNotBlank() }?.let {
+                runCatching { LocalDate.parse(it).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() }.getOrNull()
+            }
+        )
+        AppDatePickerDialog(
+            onDismissRequest = { showToPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    dpState.selectedDateMillis?.let { ms ->
+                        onToChange(Instant.ofEpochMilli(ms).atZone(ZoneOffset.UTC).toLocalDate().toString())
+                    }
+                    showToPicker = false
+                }) { Text(s.ok) }
+            },
+            dismissButton = { TextButton(onClick = { showToPicker = false }) { Text(s.cancel) } }
+        ) { DatePicker(state = dpState) }
     }
 }

@@ -79,7 +79,11 @@ fun MainApp(
     timelineLabelWidth: Float = 96f,
     onTimelineLabelWidthChange: (Float) -> Unit = {},
     timelineShowRoomType: Boolean = true,
-    onTimelineShowRoomTypeChange: (Boolean) -> Unit = {}
+    onTimelineShowRoomTypeChange: (Boolean) -> Unit = {},
+    serverMode: String = "localhost",
+    onServerModeChange: (String) -> Unit = {},
+    customServerUrl: String = "",
+    onCustomServerUrlChange: (String) -> Unit = {}
 ) {
     var currentScreen          by remember { mutableStateOf(AppScreen.Dashboard) }
     var invoiceForReservation  by remember { mutableStateOf<ReservationDto?>(null) }
@@ -144,7 +148,9 @@ fun MainApp(
                             timelineDayWidth = timelineDayWidth, onTimelineDayWidthChange = onTimelineDayWidthChange,
                             timelineRowHeight = timelineRowHeight, onTimelineRowHeightChange = onTimelineRowHeightChange,
                             timelineLabelWidth = timelineLabelWidth, onTimelineLabelWidthChange = onTimelineLabelWidthChange,
-                            timelineShowRoomType = timelineShowRoomType, onTimelineShowRoomTypeChange = onTimelineShowRoomTypeChange
+                            timelineShowRoomType = timelineShowRoomType, onTimelineShowRoomTypeChange = onTimelineShowRoomTypeChange,
+                            serverMode = serverMode, onServerModeChange = onServerModeChange,
+                            customServerUrl = customServerUrl, onCustomServerUrlChange = onCustomServerUrlChange
                         )
                     }
                 }
@@ -1420,7 +1426,9 @@ private fun SettingsPage(
     timelineDayWidth: Float = 40f, onTimelineDayWidthChange: (Float) -> Unit = {},
     timelineRowHeight: Float = 34f, onTimelineRowHeightChange: (Float) -> Unit = {},
     timelineLabelWidth: Float = 96f, onTimelineLabelWidthChange: (Float) -> Unit = {},
-    timelineShowRoomType: Boolean = true, onTimelineShowRoomTypeChange: (Boolean) -> Unit = {}
+    timelineShowRoomType: Boolean = true, onTimelineShowRoomTypeChange: (Boolean) -> Unit = {},
+    serverMode: String = "localhost", onServerModeChange: (String) -> Unit = {},
+    customServerUrl: String = "", onCustomServerUrlChange: (String) -> Unit = {}
 ) {
     val s = LocalStrings.current
     val scrollState = rememberScrollState()
@@ -1602,6 +1610,54 @@ private fun SettingsPage(
                 }
             }
         }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(s.settingsServer, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            HorizontalDivider()
+            val serverOptions = listOf(
+                "localhost"  to s.settingsServerLocalhost,
+                "deployment" to s.settingsServerDeployment,
+                "custom"     to s.settingsServerCustom
+            )
+            Row(Modifier.clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surface)) {
+                serverOptions.forEach { (mode, label) ->
+                    val selected = serverMode == mode
+                    Box(
+                        Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent)
+                            .clickable(enabled = !selected) { onServerModeChange(mode) }
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            label,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (selected) MaterialTheme.colorScheme.onPrimary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            if (serverMode == "custom") {
+                OutlinedTextField(
+                    value = customServerUrl,
+                    onValueChange = onCustomServerUrlChange,
+                    label = { Text(s.settingsServerCustomUrl) },
+                    placeholder = { Text("https://example.com") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+
         Spacer(Modifier.height(24.dp))
     }
 }
