@@ -761,7 +761,11 @@ private fun ResWeekRow(
 
             val showLabel = clampFrom == from || clampFrom == weekStart
             val s = LocalStrings.current
-            val label = "${s.roomAbbr} ${res.roomNumber} · ${res.guestName}"
+            val noteHead = res.description?.takeIf { it.isNotBlank() }?.replace("\n", "; ")
+            val label = buildString {
+                append("${s.roomAbbr} ${res.roomNumber} · ${res.guestName}")
+                if (noteHead != null) append(" · $noteHead")
+            }
             val dotColor = paymentDotColor(res.totalAmount, res.paidAmount)
             val showDpBadge = dpPending(res) && clampFrom == from
 
@@ -2772,8 +2776,16 @@ private fun ReservationsTimelineView(
         }
     }
     var expandedRoomId  by remember { mutableStateOf<Int?>(null) }
-    val EXPANDED_ROW_H  = 100.dp * fs
-    val EXPANDED_BAND_H = 88.dp * fs
+    // Per-room expanded band height: base content + 15dp per optional row (DP, note)
+    val expandedBandHByRoom = remember(reservations, rooms) {
+        val cancelSet = setOf("cancelled", "no_show")
+        rooms.associate { room ->
+            val activeRoomRes = reservations.filter { it.roomId == room.id && it.status !in cancelSet }
+            val hasDP   = activeRoomRes.any { it.requiresDownPayment }
+            val hasNote = activeRoomRes.any { it.description?.isNotBlank() == true }
+            room.id to (84 + ((if (hasDP) 1 else 0) + (if (hasNote) 1 else 0)) * 15)
+        }
+    }
     val hScroll      = rememberScrollState()
     val vScroll      = rememberScrollState()
     val divColor     = MaterialTheme.colorScheme.outlineVariant
@@ -3032,9 +3044,11 @@ private fun ReservationsTimelineView(
             Column(Modifier.width(LABEL_W).fillMaxHeight().verticalScroll(vScroll)) {
                 rooms.forEach { room ->
                     val isExpanded = expandedRoomId == room.id
+                    val expandedBandH = (expandedBandHByRoom[room.id] ?: 84).dp * fs
+                    val expandedRowH  = expandedBandH + 12.dp * fs
                     val rowH by animateDpAsState(
                         targetValue = when {
-                            isExpanded    -> EXPANDED_ROW_H
+                            isExpanded    -> expandedRowH
                             showCancelled -> SPLIT_ROW_H
                             else          -> ROW_H
                         },
@@ -3084,9 +3098,11 @@ private fun ReservationsTimelineView(
                     Column(Modifier.width(totalWidth)) {
                         rooms.forEach { room ->
                             val isExpanded = expandedRoomId == room.id
+                            val expandedBandH = (expandedBandHByRoom[room.id] ?: 84).dp * fs
+                            val expandedRowH  = expandedBandH + 12.dp * fs
                             val rowH by animateDpAsState(
                                 targetValue = when {
-                                    isExpanded    -> EXPANDED_ROW_H
+                                    isExpanded    -> expandedRowH
                                     showCancelled -> SPLIT_ROW_H
                                     else          -> ROW_H
                                 },
@@ -3244,7 +3260,7 @@ private fun ReservationsTimelineView(
                                     val bWidth     = geo[1] as Dp
                                     val leftRound  = geo[2] as Boolean
                                     val rightRound = geo[3] as Boolean
-                                    val blockBandH = if (isExpanded) EXPANDED_BAND_H else BAND_H
+                                    val blockBandH = if (isExpanded) expandedBandH else BAND_H
                                     val bTop = if (showCancelled && !isExpanded)
                                         LANE_H + (LANE_H - blockBandH) / 2
                                     else
@@ -3288,6 +3304,7 @@ private fun ReservationsTimelineView(
                                     val dotColorC  = paymentDotColor(res.totalAmount, res.paidAmount)
                                     val showDpC    = dpPending(res) && leftRound
                                     val hasNoteC   = res.description?.isNotBlank() == true
+                                    val noteLabelC = res.description?.takeIf { it.isNotBlank() }?.replace("\n", "; ")
                                     Box(
                                         Modifier
                                             .offset(x = bLeft, y = bTop)
@@ -3315,7 +3332,7 @@ private fun ReservationsTimelineView(
                                             else                                        -> 4.dp
                                         }
                                         Text(
-                                            res.guestName,
+                                            if (noteLabelC != null) "${res.guestName} · $noteLabelC" else res.guestName,
                                             modifier = Modifier.padding(start = if (showDpC) 18.dp else 4.dp,
                                                 end = endPaddingC)
                                                 .align(Alignment.CenterStart),
@@ -3345,7 +3362,7 @@ private fun ReservationsTimelineView(
                                     val bWidth     = geo[1] as Dp
                                     val leftRound  = geo[2] as Boolean
                                     val rightRound = geo[3] as Boolean
-                                    val bandH      = if (isExpanded) EXPANDED_BAND_H else BAND_H
+                                    val bandH      = if (isExpanded) expandedBandH else BAND_H
                                     val bTop = when {
                                         isExpanded                   -> (rowH - bandH) / 2
                                         showCancelled                -> LANE_H + (LANE_H - bandH) / 2
@@ -3355,6 +3372,7 @@ private fun ReservationsTimelineView(
                                     val dotColorA   = paymentDotColor(res.totalAmount, res.paidAmount)
                                     val showDpA     = dpPending(res) && leftRound
                                     val hasNoteA    = res.description?.isNotBlank() == true
+                                    val noteLabelA  = res.description?.takeIf { it.isNotBlank() }?.replace("\n", "; ")
                                     val isExternalA = res.source == "external"
                                     val nights = remember(res.checkInDate, res.checkOutDate) {
                                         runCatching {
@@ -3408,7 +3426,7 @@ private fun ReservationsTimelineView(
                                                 else                                        -> 4.dp
                                             }
                                             Text(
-                                                res.guestName,
+                                                if (noteLabelA != null) "${res.guestName} · $noteLabelA" else res.guestName,
                                                 modifier = Modifier.padding(start = leftBadgeWidth,
                                                     top = 4.dp,
                                                     end = endPaddingA),
@@ -3496,6 +3514,14 @@ private fun ReservationsTimelineView(
                                                         "DP: ${res.downPaymentAmount?.let { "${"%.0f".format(it)} PLN" } ?: "required"}",
                                                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                                                         color = Color(0xFFE65100),
+                                                        maxLines = 1, overflow = TextOverflow.Ellipsis
+                                                    )
+                                                }
+                                                if (noteLabelA != null) {
+                                                    Text(
+                                                        noteLabelA,
+                                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                                        color = fg.copy(alpha = 0.75f),
                                                         maxLines = 1, overflow = TextOverflow.Ellipsis
                                                     )
                                                 }

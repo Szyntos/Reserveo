@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -551,6 +552,7 @@ private fun DashboardTile(
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 pending.forEach { res ->
+                    val noteSnippet = res.description?.takeIf { it.isNotBlank() }?.replace("\n", "; ")
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween) {
                         Column(Modifier.weight(1f)) {
@@ -558,6 +560,11 @@ private fun DashboardTile(
                                 fontWeight = FontWeight.Medium)
                             Text(s.roomShort(res.roomNumber), style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (noteSnippet != null) {
+                                Text(noteSnippet, style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
                         }
                         IconButton(onClick = { onAction(res) }, modifier = Modifier.size(36.dp)) {
                             Text("✓", style = MaterialTheme.typography.titleSmall,
@@ -573,6 +580,7 @@ private fun DashboardTile(
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 done.forEach { res ->
+                    val noteSnippetDone = res.description?.takeIf { it.isNotBlank() }?.replace("\n", "; ")
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween) {
                         Column(Modifier.weight(1f)) {
@@ -580,6 +588,11 @@ private fun DashboardTile(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(s.roomShort(res.roomNumber), style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                            if (noteSnippetDone != null) {
+                                Text(noteSnippetDone, style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
                         }
                         Text("✓", style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
