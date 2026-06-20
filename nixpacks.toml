@@ -1,0 +1,11 @@
+[phases.setup]
+cmds = ["mkdir -p /opt/android-sdk"]
+
+[phases.build]
+cmds = [
+  "echo 'sdk.dir=/opt/android-sdk' > local.properties",
+  "./gradlew :server:installDist --no-daemon -x test"
+]
+
+[start]
+cmd = "server/build/install/server/bin/server"
