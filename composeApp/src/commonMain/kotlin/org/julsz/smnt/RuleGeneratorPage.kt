@@ -14,8 +14,6 @@ import io.ktor.client.*
 import io.ktor.client.request.*
 import io.ktor.http.*
 import kotlinx.coroutines.launch
-import java.time.Instant
-import java.time.ZoneOffset
 
 private data class NightTier(val minNights: Int, val maxNights: Int?, val label: String)
 
@@ -37,7 +35,6 @@ private fun computeTiers(breakpoints: List<Int>): List<NightTier> {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun GeneratorDateRangePicker(
     fromDate: String,
@@ -47,23 +44,7 @@ private fun GeneratorDateRangePicker(
     onFromChange: (String) -> Unit,
     onToChange: (String) -> Unit
 ) {
-    val s = LocalStrings.current
     var showPicker by remember { mutableStateOf(false) }
-
-    val initStart = remember(fromDate) {
-        if (fromDate.isNotBlank()) runCatching {
-            java.time.LocalDate.parse(fromDate).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
-        }.getOrNull() else null
-    }
-    val initEnd = remember(toDate) {
-        if (toDate.isNotBlank()) runCatching {
-            java.time.LocalDate.parse(toDate).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
-        }.getOrNull() else null
-    }
-    val rangeState = rememberDateRangePickerState(
-        initialSelectedStartDateMillis = initStart,
-        initialSelectedEndDateMillis   = initEnd
-    )
 
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(
@@ -91,23 +72,12 @@ private fun GeneratorDateRangePicker(
     }
 
     if (showPicker) {
-        AppDatePickerDialog(
-            onDismissRequest = { showPicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    rangeState.selectedStartDateMillis?.let { ms ->
-                        onFromChange(Instant.ofEpochMilli(ms).atZone(ZoneOffset.UTC).toLocalDate().toString())
-                    }
-                    rangeState.selectedEndDateMillis?.let { ms ->
-                        onToChange(Instant.ofEpochMilli(ms).atZone(ZoneOffset.UTC).toLocalDate().toString())
-                    }
-                    showPicker = false
-                }) { Text(s.ok) }
-            },
-            dismissButton = { TextButton(onClick = { showPicker = false }) { Text(s.cancel) } }
-        ) {
-            DateRangePicker(state = rangeState, modifier = Modifier.weight(1f).widthIn(min = 360.dp))
-        }
+        AppRangePickerDialog(
+            startDate = fromDate,
+            endDate   = toDate,
+            onDismiss = { showPicker = false },
+            onConfirm = { start, end -> onFromChange(start); onToChange(end); showPicker = false }
+        )
     }
 }
 
@@ -327,20 +297,25 @@ fun RuleGeneratorPage(
                             try {
                                 val yFrom = fromYear.toIntOrNull() ?: return@launch
                                 val yTo   = toYear.toIntOrNull()   ?: return@launch
+                                val baseFromYear = fromDate.substring(0, 4).toIntOrNull() ?: return@launch
+                                val baseToYear   = toDate.substring(0, 4).toIntOrNull()   ?: return@launch
+                                val fromMD = fromDate.substring(4) // "-MM-DD"
+                                val toMD   = toDate.substring(4)
                                 var count = 0
                                 for (year in yFrom..yTo) {
+                                    val offset = year - baseFromYear
+                                    val genFrom = "${baseFromYear + offset}$fromMD"
+                                    val genTo   = "${baseToYear + offset}$toMD"
                                     for (room in rooms) {
                                         tiers.forEachIndexed { tierIdx, tier ->
                                             val price = prices[room.id to tierIdx]
                                                 ?.toDoubleOrNull() ?: return@forEachIndexed
-                                            val fromMD = fromDate.substring(5) // MM-DD
-                                            val toMD   = toDate.substring(5)
                                             client.post("$BASE_URL/api/price-rules") {
                                                 contentType(ContentType.Application.Json)
                                                 setBody(CreatePriceRuleRequest(
                                                     roomId                 = room.id,
-                                                    fromDate               = "$year-$fromMD",
-                                                    toDate                 = "$year-$toMD",
+                                                    fromDate               = genFrom,
+                                                    toDate                 = genTo,
                                                     minNights              = tier.minNights,
                                                     maxNights              = tier.maxNights,
                                                     pricePerPersonPerNight = price,

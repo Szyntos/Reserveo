@@ -27,10 +27,8 @@ import io.ktor.client.request.*
 import io.ktor.http.*
 import kotlinx.coroutines.launch
 import java.time.DayOfWeek
-import java.time.Instant
 import java.time.LocalDate
 import java.time.Month
-import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
 import java.time.temporal.TemporalAdjusters
 import java.util.Locale
@@ -627,8 +625,7 @@ private fun DateRangePickerFields(
     fromLabel: String, fromDate: String, onFromChange: (String) -> Unit,
     toLabel: String, toDate: String, onToChange: (String) -> Unit
 ) {
-    var showFromPicker by remember { mutableStateOf(false) }
-    var showToPicker   by remember { mutableStateOf(false) }
+    var showPicker by remember { mutableStateOf(false) }
     val s = LocalStrings.current
 
     FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -636,7 +633,7 @@ private fun DateRangePickerFields(
             value = fromDate, onValueChange = {}, readOnly = true,
             label = { Text(fromLabel) },
             trailingIcon = {
-                TextButton(onClick = { showFromPicker = true },
+                TextButton(onClick = { showPicker = true },
                     contentPadding = PaddingValues(horizontal = 4.dp)) { Text("📅") }
             },
             modifier = Modifier.weight(1f), singleLine = true
@@ -645,50 +642,19 @@ private fun DateRangePickerFields(
             value = toDate, onValueChange = {}, readOnly = true,
             label = { Text(toLabel) },
             trailingIcon = {
-                TextButton(onClick = { showToPicker = true },
+                TextButton(onClick = { showPicker = true },
                     contentPadding = PaddingValues(horizontal = 4.dp)) { Text("📅") }
             },
             modifier = Modifier.weight(1f), singleLine = true
         )
     }
 
-    if (showFromPicker) {
-        val dpState = rememberDatePickerState(
-            initialSelectedDateMillis = fromDate.takeIf { it.isNotBlank() }?.let {
-                runCatching { LocalDate.parse(it).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() }.getOrNull()
-            }
+    if (showPicker) {
+        AppRangePickerDialog(
+            startDate = fromDate,
+            endDate   = toDate,
+            onDismiss = { showPicker = false },
+            onConfirm = { start, end -> onFromChange(start); onToChange(end); showPicker = false }
         )
-        AppDatePickerDialog(
-            onDismissRequest = { showFromPicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    dpState.selectedDateMillis?.let { ms ->
-                        onFromChange(Instant.ofEpochMilli(ms).atZone(ZoneOffset.UTC).toLocalDate().toString())
-                    }
-                    showFromPicker = false
-                }) { Text(s.ok) }
-            },
-            dismissButton = { TextButton(onClick = { showFromPicker = false }) { Text(s.cancel) } }
-        ) { DatePicker(state = dpState) }
-    }
-
-    if (showToPicker) {
-        val dpState = rememberDatePickerState(
-            initialSelectedDateMillis = toDate.takeIf { it.isNotBlank() }?.let {
-                runCatching { LocalDate.parse(it).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() }.getOrNull()
-            }
-        )
-        AppDatePickerDialog(
-            onDismissRequest = { showToPicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    dpState.selectedDateMillis?.let { ms ->
-                        onToChange(Instant.ofEpochMilli(ms).atZone(ZoneOffset.UTC).toLocalDate().toString())
-                    }
-                    showToPicker = false
-                }) { Text(s.ok) }
-            },
-            dismissButton = { TextButton(onClick = { showToPicker = false }) { Text(s.cancel) } }
-        ) { DatePicker(state = dpState) }
     }
 }

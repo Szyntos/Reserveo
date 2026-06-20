@@ -3982,8 +3982,7 @@ private fun BlockRoomDialog(
     var fromDate      by remember { mutableStateOf("") }
     var toDate        by remember { mutableStateOf("") }
     var reason        by remember { mutableStateOf("") }
-    var showFromPicker by remember { mutableStateOf(false) }
-    var showToPicker   by remember { mutableStateOf(false) }
+    var showRangePicker by remember { mutableStateOf(false) }
     val s = LocalStrings.current
 
     val conflictingRooms = remember(blockAllRooms, selectedRoom, fromDate, toDate, reservations) {
@@ -4051,7 +4050,7 @@ private fun BlockRoomDialog(
                         readOnly = true,
                         label = { Text(s.fromLabel) },
                         trailingIcon = {
-                            TextButton(onClick = { showFromPicker = true },
+                            TextButton(onClick = { showRangePicker = true },
                                 contentPadding = PaddingValues(horizontal = 4.dp)) { Text("📅") }
                         },
                         modifier = Modifier.weight(1f),
@@ -4063,7 +4062,7 @@ private fun BlockRoomDialog(
                         readOnly = true,
                         label = { Text(s.toLabel) },
                         trailingIcon = {
-                            TextButton(onClick = { showToPicker = true },
+                            TextButton(onClick = { showRangePicker = true },
                                 contentPadding = PaddingValues(horizontal = 4.dp)) { Text("📅") }
                         },
                         modifier = Modifier.weight(1f),
@@ -4116,44 +4115,13 @@ private fun BlockRoomDialog(
         dismissButton = { TextButton(onClick = onDismiss) { Text(s.cancel) } }
     )
 
-    if (showFromPicker) {
-        val dpState = rememberDatePickerState(
-            initialSelectedDateMillis = fromDate.takeIf { it.isNotBlank() }?.let {
-                runCatching { LocalDate.parse(it).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() }.getOrNull()
-            }
+    if (showRangePicker) {
+        AppRangePickerDialog(
+            startDate = fromDate,
+            endDate   = toDate,
+            onDismiss = { showRangePicker = false },
+            onConfirm = { start, end -> fromDate = start; toDate = end; showRangePicker = false }
         )
-        AppDatePickerDialog(
-            onDismissRequest = { showFromPicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    dpState.selectedDateMillis?.let { ms ->
-                        fromDate = Instant.ofEpochMilli(ms).atZone(ZoneOffset.UTC).toLocalDate().toString()
-                    }
-                    showFromPicker = false
-                }) { Text(s.ok) }
-            },
-            dismissButton = { TextButton(onClick = { showFromPicker = false }) { Text(s.cancel) } }
-        ) { DatePicker(state = dpState) }
-    }
-
-    if (showToPicker) {
-        val dpState = rememberDatePickerState(
-            initialSelectedDateMillis = toDate.takeIf { it.isNotBlank() }?.let {
-                runCatching { LocalDate.parse(it).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() }.getOrNull()
-            }
-        )
-        AppDatePickerDialog(
-            onDismissRequest = { showToPicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    dpState.selectedDateMillis?.let { ms ->
-                        toDate = Instant.ofEpochMilli(ms).atZone(ZoneOffset.UTC).toLocalDate().toString()
-                    }
-                    showToPicker = false
-                }) { Text(s.ok) }
-            },
-            dismissButton = { TextButton(onClick = { showToPicker = false }) { Text(s.cancel) } }
-        ) { DatePicker(state = dpState) }
     }
 }
 
@@ -4265,8 +4233,7 @@ private fun ResDateRangePickerFields(
     checkInLabel: String, checkIn: String, onCheckInChange: (String) -> Unit,
     checkOutLabel: String, checkOut: String, onCheckOutChange: (String) -> Unit
 ) {
-    var showCheckInPicker  by remember { mutableStateOf(false) }
-    var showCheckOutPicker by remember { mutableStateOf(false) }
+    var showPicker by remember { mutableStateOf(false) }
     val s = LocalStrings.current
 
     FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -4274,7 +4241,7 @@ private fun ResDateRangePickerFields(
             value = checkIn, onValueChange = {}, readOnly = true,
             label = { Text(checkInLabel) },
             trailingIcon = {
-                TextButton(onClick = { showCheckInPicker = true },
+                TextButton(onClick = { showPicker = true },
                     contentPadding = PaddingValues(horizontal = 4.dp)) { Text("📅") }
             },
             modifier = Modifier.weight(1f), singleLine = true
@@ -4283,50 +4250,19 @@ private fun ResDateRangePickerFields(
             value = checkOut, onValueChange = {}, readOnly = true,
             label = { Text(checkOutLabel) },
             trailingIcon = {
-                TextButton(onClick = { showCheckOutPicker = true },
+                TextButton(onClick = { showPicker = true },
                     contentPadding = PaddingValues(horizontal = 4.dp)) { Text("📅") }
             },
             modifier = Modifier.weight(1f), singleLine = true
         )
     }
 
-    if (showCheckInPicker) {
-        val dpState = rememberDatePickerState(
-            initialSelectedDateMillis = checkIn.takeIf { it.isNotBlank() }?.let {
-                runCatching { LocalDate.parse(it).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() }.getOrNull()
-            }
+    if (showPicker) {
+        AppRangePickerDialog(
+            startDate = checkIn,
+            endDate   = checkOut,
+            onDismiss = { showPicker = false },
+            onConfirm = { start, end -> onCheckInChange(start); onCheckOutChange(end); showPicker = false }
         )
-        AppDatePickerDialog(
-            onDismissRequest = { showCheckInPicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    dpState.selectedDateMillis?.let { ms ->
-                        onCheckInChange(Instant.ofEpochMilli(ms).atZone(ZoneOffset.UTC).toLocalDate().toString())
-                    }
-                    showCheckInPicker = false
-                }) { Text(s.ok) }
-            },
-            dismissButton = { TextButton(onClick = { showCheckInPicker = false }) { Text(s.cancel) } }
-        ) { DatePicker(state = dpState) }
-    }
-
-    if (showCheckOutPicker) {
-        val dpState = rememberDatePickerState(
-            initialSelectedDateMillis = checkOut.takeIf { it.isNotBlank() }?.let {
-                runCatching { LocalDate.parse(it).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() }.getOrNull()
-            }
-        )
-        AppDatePickerDialog(
-            onDismissRequest = { showCheckOutPicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    dpState.selectedDateMillis?.let { ms ->
-                        onCheckOutChange(Instant.ofEpochMilli(ms).atZone(ZoneOffset.UTC).toLocalDate().toString())
-                    }
-                    showCheckOutPicker = false
-                }) { Text(s.ok) }
-            },
-            dismissButton = { TextButton(onClick = { showCheckOutPicker = false }) { Text(s.cancel) } }
-        ) { DatePicker(state = dpState) }
     }
 }
