@@ -19,8 +19,9 @@ import org.slf4j.event.Level
 private val log = LoggerFactory.getLogger("org.julsz.smnt.Application")
 
 fun main() {
-    log.info("Starting Reserveo on port {}", SERVER_PORT)
-    embeddedServer(Netty, port = SERVER_PORT, host = "0.0.0.0", module = Application::module)
+    val port = System.getenv("PORT")?.toIntOrNull() ?: SERVER_PORT
+    log.info("Starting Reserveo on port {}", port)
+    embeddedServer(Netty, port = port, host = "0.0.0.0", module = Application::module)
         .start(wait = true)
 }
 
