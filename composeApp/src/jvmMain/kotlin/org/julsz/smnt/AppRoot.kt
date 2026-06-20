@@ -67,6 +67,66 @@ private fun saveSettings(s: AppSettings) {
     } catch (_: Exception) {}
 }
 
+private val ReserveoDarkColors = darkColorScheme(
+    primary              = Color(0xFF7B9EF0),
+    onPrimary            = Color(0xFF0A1B60),
+    primaryContainer     = Color(0xFF1A2D6E),
+    onPrimaryContainer   = Color(0xFFB8C8FF),
+    secondary            = Color(0xFF8DA3C2),
+    onSecondary          = Color(0xFF0D2040),
+    secondaryContainer   = Color(0xFF1A3058),
+    onSecondaryContainer = Color(0xFFCCDEFF),
+    tertiary             = Color(0xFF5EC8E8),
+    onTertiary           = Color(0xFF00374D),
+    tertiaryContainer    = Color(0xFF0A4A65),
+    onTertiaryContainer  = Color(0xFFAFE8FF),
+    error                = Color(0xFFFF8070),
+    onError              = Color(0xFF690005),
+    errorContainer       = Color(0xFF5C1010),
+    onErrorContainer     = Color(0xFFFFDAD6),
+    background           = Color(0xFF0D1117),
+    onBackground         = Color(0xFFCDD5E0),
+    surface              = Color(0xFF151C28),
+    onSurface            = Color(0xFFCDD5E0),
+    surfaceVariant       = Color(0xFF1B2438),
+    onSurfaceVariant     = Color(0xFF7A8BA8),
+    outline              = Color(0xFF2C3A52),
+    outlineVariant       = Color(0xFF1E2A40),
+    inverseSurface       = Color(0xFFCDD5E0),
+    inverseOnSurface     = Color(0xFF0D1117),
+    inversePrimary       = Color(0xFF2A4DC4),
+)
+
+private val ReserveoLightColors = lightColorScheme(
+    primary              = Color(0xFF2563EB),
+    onPrimary            = Color(0xFFFFFFFF),
+    primaryContainer     = Color(0xFFDBEAFE),
+    onPrimaryContainer   = Color(0xFF1E3A8A),
+    secondary            = Color(0xFF3B5280),
+    onSecondary          = Color(0xFFFFFFFF),
+    secondaryContainer   = Color(0xFFDCE8FF),
+    onSecondaryContainer = Color(0xFF0B1E4A),
+    tertiary             = Color(0xFF0284C7),
+    onTertiary           = Color(0xFFFFFFFF),
+    tertiaryContainer    = Color(0xFFE0F2FE),
+    onTertiaryContainer  = Color(0xFF00334F),
+    error                = Color(0xFFDC2626),
+    onError              = Color(0xFFFFFFFF),
+    errorContainer       = Color(0xFFFEE2E2),
+    onErrorContainer     = Color(0xFF7F1D1D),
+    background           = Color(0xFFF2F5FB),
+    onBackground         = Color(0xFF1A2036),
+    surface              = Color(0xFFFFFFFF),
+    onSurface            = Color(0xFF1A2036),
+    surfaceVariant       = Color(0xFFEBF0FA),
+    onSurfaceVariant     = Color(0xFF4B5A7A),
+    outline              = Color(0xFFC0CDE8),
+    outlineVariant       = Color(0xFFDDE5F5),
+    inverseSurface       = Color(0xFF1A2036),
+    inverseOnSurface     = Color(0xFFF2F5FB),
+    inversePrimary       = Color(0xFF7B9EF0),
+)
+
 @Composable
 fun AppRoot() {
     val client = remember { HttpClient(CIO) { install(ContentNegotiation) { json() } } }
@@ -91,7 +151,7 @@ fun AppRoot() {
 
     fun logout() { currentUser = null; selectedHotel = null }
 
-    val colorScheme = if (isDark) darkColorScheme() else lightColorScheme()
+    val colorScheme = if (isDark) ReserveoDarkColors else ReserveoLightColors
 
     MaterialTheme(colorScheme = colorScheme, typography = rememberSansSerifTypography()) {
         val baseDensity = LocalDensity.current
@@ -102,8 +162,8 @@ fun AppRoot() {
                 thickness           = 8.dp,
                 shape               = RoundedCornerShape(4.dp),
                 hoverDurationMillis = 300,
-                unhoverColor = if (isDark) Color.White.copy(alpha = 0.25f) else Color.Black.copy(alpha = 0.20f),
-                hoverColor   = if (isDark) Color.White.copy(alpha = 0.50f) else Color.Black.copy(alpha = 0.40f)
+                unhoverColor = if (isDark) Color(0xFF7B9EF0).copy(alpha = 0.25f) else Color(0xFF2563EB).copy(alpha = 0.20f),
+                hoverColor   = if (isDark) Color(0xFF7B9EF0).copy(alpha = 0.55f) else Color(0xFF2563EB).copy(alpha = 0.45f)
             ),
             LocalDensity provides Density(baseDensity.density, fontScale)
         ) {

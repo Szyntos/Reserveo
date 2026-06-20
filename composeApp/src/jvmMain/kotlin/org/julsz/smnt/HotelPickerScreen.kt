@@ -1,5 +1,6 @@
 package org.julsz.smnt
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -7,6 +8,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -41,55 +43,51 @@ fun HotelPickerScreen(
         }
     }
 
-    val s = LocalStrings.current
+    val s  = LocalStrings.current
+    val cs = MaterialTheme.colorScheme
     Column(Modifier.fillMaxSize()) {
         // Top bar
-        Surface(
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 2.dp
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(cs.surface)
+                .padding(horizontal = 24.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
+            Text(
+                s.appName,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = cs.primary
+            )
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 14.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    s.appName,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(cs.primaryContainer),
+                    contentAlignment = Alignment.Center
                 ) {
-                    // User avatar chip
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primaryContainer),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            currentUser.name.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
                     Text(
-                        currentUser.name,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        currentUser.name.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = cs.onPrimaryContainer
                     )
-                    TextButton(onClick = onLogout) { Text(s.logout) }
                 }
+                Text(
+                    currentUser.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = cs.onSurfaceVariant
+                )
+                TextButton(onClick = onLogout) { Text(s.logout) }
             }
         }
-        HorizontalDivider()
+        HorizontalDivider(color = cs.outlineVariant)
 
         // Content
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -140,33 +138,33 @@ fun HotelPickerScreen(
 
 @Composable
 private fun HotelCard(hotel: UserHotelRoleDto, onClick: () -> Unit) {
-    ElevatedCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp, hoveredElevation = 6.dp)
+    val cs = MaterialTheme.colorScheme
+    Card(
+        modifier  = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp, hoveredElevation = 0.dp),
+        border    = BorderStroke(1.dp, cs.outlineVariant),
+        colors    = CardDefaults.cardColors(containerColor = cs.surface),
+        shape     = RoundedCornerShape(12.dp)
     ) {
         Row(
             modifier = Modifier.padding(20.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Initial avatar
             Box(
                 modifier = Modifier
                     .size(48.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(cs.primaryContainer),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     hotel.hotelName.firstOrNull()?.uppercaseChar()?.toString() ?: "H",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                    color = cs.onPrimaryContainer
                 )
             }
-
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(6.dp)

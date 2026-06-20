@@ -1,5 +1,6 @@
 package org.julsz.smnt
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -8,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -127,37 +129,57 @@ private fun AppSidebar(
     isDark: Boolean,
     onThemeToggle: () -> Unit
 ) {
-    val s = LocalStrings.current
+    val s  = LocalStrings.current
+    val cs = MaterialTheme.colorScheme
     Column(
         modifier = Modifier
-            .width(220.dp)
+            .width(240.dp)
             .fillMaxHeight()
-            .background(MaterialTheme.colorScheme.surfaceVariant),
+            .background(cs.surfaceVariant),
         verticalArrangement = Arrangement.SpaceBetween
     ) {
         Column {
             // Hotel header
-            Column(
+            Row(
                 modifier = Modifier
+                    .fillMaxWidth()
                     .padding(horizontal = 16.dp)
-                    .padding(top = 20.dp, bottom = 4.dp)
+                    .padding(top = 20.dp, bottom = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    selectedHotel.hotelName,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(Modifier.height(4.dp))
-                AssistChip(
-                    onClick = {},
-                    label = { Text(selectedHotel.role, style = MaterialTheme.typography.labelSmall) },
-                    modifier = Modifier.height(24.dp)
-                )
+                Box(
+                    Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(cs.primaryContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        selectedHotel.hotelName.firstOrNull()?.uppercaseChar()?.toString() ?: "H",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = cs.onPrimaryContainer
+                    )
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        selectedHotel.hotelName,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        selectedHotel.role,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = cs.onSurfaceVariant
+                    )
+                }
             }
 
-            Spacer(Modifier.height(12.dp))
-            HorizontalDivider()
-            Spacer(Modifier.height(8.dp))
+            HorizontalDivider(color = cs.outline.copy(alpha = 0.5f))
+            Spacer(Modifier.height(6.dp))
 
             AppScreen.entries.forEach { screen ->
                 val label = when (screen) {
@@ -177,21 +199,47 @@ private fun AppSidebar(
         }
 
         Column {
-            HorizontalDivider()
-            // User info
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
-                Text(
-                    currentUser.name,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    currentUser.email,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                )
+            HorizontalDivider(color = cs.outline.copy(alpha = 0.5f))
+            // User info with avatar
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(cs.primaryContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        currentUser.name.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = cs.onPrimaryContainer
+                    )
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        currentUser.name,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        currentUser.email,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = cs.onSurfaceVariant.copy(alpha = 0.7f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
-            HorizontalDivider()
+            HorizontalDivider(color = cs.outline.copy(alpha = 0.5f))
             SidebarItem(label = s.switchHotel, selected = false, onClick = onSwitchHotel)
             SidebarItem(label = s.logout,      selected = false, onClick = onLogout)
             // Theme toggle pill
@@ -204,26 +252,26 @@ private fun AppSidebar(
                 Row(
                     Modifier
                         .clip(RoundedCornerShape(20.dp))
-                        .background(MaterialTheme.colorScheme.surface)
+                        .background(cs.surface)
+                        .padding(2.dp)
                 ) {
                     listOf(true to s.themeDark, false to s.themeLight).forEach { (dark, label) ->
                         val selected = isDark == dark
                         Box(
                             Modifier
-                                .clip(RoundedCornerShape(20.dp))
+                                .clip(RoundedCornerShape(18.dp))
                                 .background(
-                                    if (selected) MaterialTheme.colorScheme.primary
+                                    if (selected) cs.primary
                                     else Color.Transparent
                                 )
                                 .clickable(enabled = !selected, onClick = onThemeToggle)
-                                .padding(horizontal = 14.dp, vertical = 6.dp),
+                                .padding(horizontal = 16.dp, vertical = 6.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 label,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = if (selected) MaterialTheme.colorScheme.onPrimary
-                                        else MaterialTheme.colorScheme.onSurfaceVariant
+                                color = if (selected) cs.onPrimary else cs.onSurfaceVariant
                             )
                         }
                     }
@@ -236,18 +284,30 @@ private fun AppSidebar(
 
 @Composable
 private fun SidebarItem(label: String, selected: Boolean, onClick: () -> Unit) {
-    val bg        = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
-    val textColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
-                    else MaterialTheme.colorScheme.onSurfaceVariant
+    val cs = MaterialTheme.colorScheme
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(bg)
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 11.dp),
+            .background(if (selected) cs.primary.copy(alpha = 0.10f) else Color.Transparent),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = textColor)
+        Box(
+            Modifier
+                .width(3.dp)
+                .height(40.dp)
+                .background(
+                    if (selected) cs.primary else Color.Transparent,
+                    RoundedCornerShape(topEnd = 3.dp, bottomEnd = 3.dp)
+                )
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (selected) cs.primary else cs.onSurfaceVariant,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp)
+        )
     }
 }
 
@@ -485,18 +545,22 @@ private fun StatCard(
     modifier: Modifier = Modifier,
     valueColor: Color = Color.Unspecified
 ) {
+    val cs = MaterialTheme.colorScheme
     Card(
         modifier  = modifier,
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border    = BorderStroke(1.dp, cs.outlineVariant),
+        colors    = CardDefaults.cardColors(containerColor = cs.surface),
+        shape     = RoundedCornerShape(12.dp)
     ) {
         Column(
-            Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
+            Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(
                 title,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = cs.onSurfaceVariant
             )
             Text(
                 value,
@@ -507,7 +571,7 @@ private fun StatCard(
             Text(
                 subtitle,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = cs.onSurfaceVariant
             )
         }
     }
@@ -525,78 +589,80 @@ private fun DashboardTile(
     onAction: (ReservationDto) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val s = LocalStrings.current
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+    val s  = LocalStrings.current
+    val cs = MaterialTheme.colorScheme
+    Card(
+        modifier  = modifier,
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border    = BorderStroke(1.dp, cs.outlineVariant),
+        colors    = CardDefaults.cardColors(containerColor = cs.surface),
+        shape     = RoundedCornerShape(12.dp)
     ) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text(date, style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        HorizontalDivider()
+        Column(
+            Modifier.padding(16.dp).fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically) {
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(date, style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant)
+            }
+            HorizontalDivider(color = cs.outlineVariant)
 
-        if (pending.isEmpty() && done.isEmpty()) {
-            Text(emptyLabel,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
-            if (pending.isNotEmpty()) {
-                Text("$pendingLabel (${pending.size})",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                pending.forEach { res ->
-                    val noteSnippet = res.description?.takeIf { it.isNotBlank() }?.replace("\n", "; ")
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween) {
-                        Column(Modifier.weight(1f)) {
-                            Text(res.guestName, style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Medium)
-                            Text(s.roomShort(res.roomNumber), style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            if (noteSnippet != null) {
-                                Text(noteSnippet, style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (pending.isEmpty() && done.isEmpty()) {
+                Text(emptyLabel, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+            } else {
+                if (pending.isNotEmpty()) {
+                    Text("$pendingLabel (${pending.size})",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = cs.onSurfaceVariant)
+                    pending.forEach { res ->
+                        val noteSnippet = res.description?.takeIf { it.isNotBlank() }?.replace("\n", "; ")
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween) {
+                            Column(Modifier.weight(1f)) {
+                                Text(res.guestName, style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Medium)
+                                Text(s.roomShort(res.roomNumber), style = MaterialTheme.typography.labelSmall,
+                                    color = cs.onSurfaceVariant)
+                                if (noteSnippet != null) {
+                                    Text(noteSnippet, style = MaterialTheme.typography.labelSmall,
+                                        color = cs.onSurfaceVariant.copy(alpha = 0.7f),
+                                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
                             }
-                        }
-                        IconButton(onClick = { onAction(res) }, modifier = Modifier.size(36.dp)) {
-                            Text("✓", style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.primary)
+                            IconButton(onClick = { onAction(res) }, modifier = Modifier.size(36.dp)) {
+                                Text("✓", style = MaterialTheme.typography.titleSmall, color = cs.primary)
+                            }
                         }
                     }
                 }
-            }
-            if (done.isNotEmpty()) {
-                if (pending.isNotEmpty()) HorizontalDivider()
-                Text("$doneLabel (${done.size})",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                done.forEach { res ->
-                    val noteSnippetDone = res.description?.takeIf { it.isNotBlank() }?.replace("\n", "; ")
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween) {
-                        Column(Modifier.weight(1f)) {
-                            Text(res.guestName, style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(s.roomShort(res.roomNumber), style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
-                            if (noteSnippetDone != null) {
-                                Text(noteSnippetDone, style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (done.isNotEmpty()) {
+                    if (pending.isNotEmpty()) HorizontalDivider(color = cs.outlineVariant)
+                    Text("$doneLabel (${done.size})",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = cs.onSurfaceVariant)
+                    done.forEach { res ->
+                        val noteSnippetDone = res.description?.takeIf { it.isNotBlank() }?.replace("\n", "; ")
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween) {
+                            Column(Modifier.weight(1f)) {
+                                Text(res.guestName, style = MaterialTheme.typography.bodySmall,
+                                    color = cs.onSurfaceVariant)
+                                Text(s.roomShort(res.roomNumber), style = MaterialTheme.typography.labelSmall,
+                                    color = cs.onSurfaceVariant.copy(alpha = 0.6f))
+                                if (noteSnippetDone != null) {
+                                    Text(noteSnippetDone, style = MaterialTheme.typography.labelSmall,
+                                        color = cs.onSurfaceVariant.copy(alpha = 0.5f),
+                                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
                             }
+                            Text("✓", style = MaterialTheme.typography.bodyMedium,
+                                color = cs.primary.copy(alpha = 0.5f),
+                                modifier = Modifier.padding(end = 8.dp))
                         }
-                        Text("✓", style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
-                            modifier = Modifier.padding(end = 8.dp))
                     }
                 }
             }
@@ -610,78 +676,69 @@ private fun OverdueTile(
     onSetStatus: (ReservationDto, String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val s = LocalStrings.current
-    val errorBg = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
-    val normalBg = MaterialTheme.colorScheme.surfaceVariant
-    val bg = if (reservations.isNotEmpty()) errorBg else normalBg
+    val s        = LocalStrings.current
+    val cs       = MaterialTheme.colorScheme
+    val hasItems = reservations.isNotEmpty()
 
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(bg)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+    Card(
+        modifier  = modifier,
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border    = BorderStroke(1.dp, if (hasItems) cs.error.copy(alpha = 0.45f) else cs.outlineVariant),
+        colors    = CardDefaults.cardColors(
+            containerColor = if (hasItems) cs.errorContainer.copy(alpha = 0.12f) else cs.surface
+        ),
+        shape = RoundedCornerShape(12.dp)
     ) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            Modifier.padding(16.dp).fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                s.overdueCheckIns,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            if (reservations.isNotEmpty()) {
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.error
-                ) {
-                    Text(
-                        "${reservations.size}",
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onError,
-                        fontWeight = FontWeight.Bold
-                    )
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    s.overdueCheckIns,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                if (hasItems) {
+                    Surface(shape = RoundedCornerShape(10.dp), color = cs.error) {
+                        Text(
+                            "${reservations.size}",
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = cs.onError,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
-        }
-        HorizontalDivider()
+            HorizontalDivider(color = if (hasItems) cs.error.copy(alpha = 0.2f) else cs.outlineVariant)
 
-        if (reservations.isEmpty()) {
-            Text(
-                s.noOverdueCheckIns,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(reservations) { res ->
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            res.guestName,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Text(
-                            "${s.roomShort(res.roomNumber)} · ${res.checkInDate}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            listOf("checked_in", "no_show", "cancelled").forEach { code ->
-                                OutlinedButton(
-                                    onClick = { onSetStatus(res, code) },
-                                    modifier = Modifier.weight(1f).height(28.dp),
-                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
-                                    shape = RoundedCornerShape(6.dp)
-                                ) {
-                                    Text(
-                                        s.statusName(code),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        maxLines = 1
-                                    )
+            if (reservations.isEmpty()) {
+                Text(s.noOverdueCheckIns, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+            } else {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    items(reservations) { res ->
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(res.guestName, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+                            Text(
+                                "${s.roomShort(res.roomNumber)} · ${res.checkInDate}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = cs.onSurfaceVariant
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                listOf("checked_in", "no_show", "cancelled").forEach { code ->
+                                    OutlinedButton(
+                                        onClick = { onSetStatus(res, code) },
+                                        modifier = Modifier.weight(1f).height(28.dp),
+                                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                                        shape = RoundedCornerShape(6.dp)
+                                    ) {
+                                        Text(s.statusName(code), style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                                    }
                                 }
                             }
                         }
@@ -698,78 +755,69 @@ private fun OverdueCheckOutsTile(
     onSetStatus: (ReservationDto, String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val s = LocalStrings.current
-    val warnBg  = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.45f)
-    val normalBg = MaterialTheme.colorScheme.surfaceVariant
-    val bg = if (reservations.isNotEmpty()) warnBg else normalBg
+    val s        = LocalStrings.current
+    val cs       = MaterialTheme.colorScheme
+    val hasItems = reservations.isNotEmpty()
 
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(bg)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+    Card(
+        modifier  = modifier,
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border    = BorderStroke(1.dp, if (hasItems) cs.tertiary.copy(alpha = 0.45f) else cs.outlineVariant),
+        colors    = CardDefaults.cardColors(
+            containerColor = if (hasItems) cs.tertiaryContainer.copy(alpha = 0.12f) else cs.surface
+        ),
+        shape = RoundedCornerShape(12.dp)
     ) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            Modifier.padding(16.dp).fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                s.overdueCheckOuts,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            if (reservations.isNotEmpty()) {
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.tertiary
-                ) {
-                    Text(
-                        "${reservations.size}",
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onTertiary,
-                        fontWeight = FontWeight.Bold
-                    )
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    s.overdueCheckOuts,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                if (hasItems) {
+                    Surface(shape = RoundedCornerShape(10.dp), color = cs.tertiary) {
+                        Text(
+                            "${reservations.size}",
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = cs.onTertiary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
-        }
-        HorizontalDivider()
+            HorizontalDivider(color = if (hasItems) cs.tertiary.copy(alpha = 0.2f) else cs.outlineVariant)
 
-        if (reservations.isEmpty()) {
-            Text(
-                s.noOverdueCheckOuts,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(reservations) { res ->
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            res.guestName,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Text(
-                            "${s.roomShort(res.roomNumber)} · ${res.checkOutDate}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            listOf("checked_out", "cancelled").forEach { code ->
-                                OutlinedButton(
-                                    onClick = { onSetStatus(res, code) },
-                                    modifier = Modifier.weight(1f).height(28.dp),
-                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
-                                    shape = RoundedCornerShape(6.dp)
-                                ) {
-                                    Text(
-                                        s.statusName(code),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        maxLines = 1
-                                    )
+            if (reservations.isEmpty()) {
+                Text(s.noOverdueCheckOuts, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+            } else {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    items(reservations) { res ->
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(res.guestName, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+                            Text(
+                                "${s.roomShort(res.roomNumber)} · ${res.checkOutDate}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = cs.onSurfaceVariant
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                listOf("checked_out", "cancelled").forEach { code ->
+                                    OutlinedButton(
+                                        onClick = { onSetStatus(res, code) },
+                                        modifier = Modifier.weight(1f).height(28.dp),
+                                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                                        shape = RoundedCornerShape(6.dp)
+                                    ) {
+                                        Text(s.statusName(code), style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                                    }
                                 }
                             }
                         }
