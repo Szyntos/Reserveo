@@ -1,5 +1,4 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
-import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -18,29 +17,33 @@ kotlin {
         }
     }
     
-    listOf(
-        iosArm64(),
-        iosSimulatorArm64()
-    ).forEach { iosTarget ->
-        iosTarget.binaries.framework {
-            baseName = "ComposeApp"
-            isStatic = true
-        }
-    }
-    
+    // iOS and WasmJS targets are unused stubs (only desktop/JVM and Android are actively
+    // developed) and their absence of java.time.* support broke commonMain IDE resolution.
+    // Re-enable if those targets are picked back up.
+    // listOf(
+    //     iosArm64(),
+    //     iosSimulatorArm64()
+    // ).forEach { iosTarget ->
+    //     iosTarget.binaries.framework {
+    //         baseName = "ComposeApp"
+    //         isStatic = true
+    //     }
+    // }
+
     jvm()
-    
-    js {
-        browser()
-        binaries.executable()
-    }
-    
-    @OptIn(ExperimentalWasmDsl::class)
-    wasmJs {
-        browser()
-        binaries.executable()
-    }
-    
+
+    // js target is an unused stub (only desktop/JVM and Android are actively developed).
+    // js {
+    //     browser()
+    //     binaries.executable()
+    // }
+
+    // @OptIn(ExperimentalWasmDsl::class)
+    // wasmJs {
+    //     browser()
+    //     binaries.executable()
+    // }
+
     sourceSets {
         androidMain.dependencies {
             implementation(libs.compose.uiToolingPreview)
