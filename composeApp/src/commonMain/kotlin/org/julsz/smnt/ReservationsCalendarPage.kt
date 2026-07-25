@@ -111,7 +111,8 @@ fun ReservationsCalendarPage(
     onTimelineLabelWidthChange: (Float) -> Unit = {},
     timelineShowRoomType: Boolean = true,
     onCreateInvoice: ((ReservationDto) -> Unit)? = null,
-    onViewInvoice: ((InvoiceDto) -> Unit)? = null
+    onViewInvoice: ((InvoiceDto) -> Unit)? = null,
+    readOnly: Boolean = false
 ) {
     val scope = rememberCoroutineScope()
 
@@ -142,6 +143,8 @@ fun ReservationsCalendarPage(
     var prefillCheckOut   by remember { mutableStateOf("") }
     var hiddenStatuses    by remember { mutableStateOf<Set<String>>(emptySet()) }
     var editGuestRes      by remember { mutableStateOf<ReservationDto?>(null) }
+    var showBlockedDialog by remember { mutableStateOf(false) }
+    val blockAction: () -> Unit = { showBlockedDialog = true }
 
     suspend fun loadData(showLoading: Boolean = true) {
         if (showLoading) loading = true
@@ -313,25 +316,36 @@ fun ReservationsCalendarPage(
                     horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    if (readOnly) {
+                        Box(
+                            Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text(s.viewOnlyBadge, style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
                     Button(
-                        onClick = { showNewDialog = true },
-                        enabled = rooms.isNotEmpty(),
+                        onClick = { if (readOnly) blockAction() else showNewDialog = true },
+                        enabled = readOnly || rooms.isNotEmpty(),
                         contentPadding = if (isNarrow) PaddingValues(horizontal = 8.dp, vertical = 4.dp) else ButtonDefaults.ContentPadding
                     ) {
                         Text(s.newReservationBtn,
                             style = if (isNarrow) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelLarge)
                     }
                     OutlinedButton(
-                        onClick = { showNewExternalDialog = true },
-                        enabled = rooms.isNotEmpty(),
+                        onClick = { if (readOnly) blockAction() else showNewExternalDialog = true },
+                        enabled = readOnly || rooms.isNotEmpty(),
                         contentPadding = if (isNarrow) PaddingValues(horizontal = 8.dp, vertical = 4.dp) else ButtonDefaults.ContentPadding
                     ) {
                         Text(s.newExternalBtn,
                             style = if (isNarrow) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelLarge)
                     }
                     OutlinedButton(
-                        onClick = { showBlockDialog = true },
-                        enabled = rooms.isNotEmpty(),
+                        onClick = { if (readOnly) blockAction() else showBlockDialog = true },
+                        enabled = readOnly || rooms.isNotEmpty(),
                         contentPadding = if (isNarrow) PaddingValues(horizontal = 8.dp, vertical = 4.dp) else ButtonDefaults.ContentPadding
                     ) {
                         Text(s.blockRoomBtn,
@@ -379,7 +393,7 @@ fun ReservationsCalendarPage(
                     onScaleChange    = { timelineScale = it },
                     centerDays       = centerDays,
                     onEditRequest    = { optionRes = it },
-                    onBlockClick     = { editBlock = it },
+                    onBlockClick     = { if (!readOnly) editBlock = it else blockAction() },
                     dragMode         = dragMode,
                     onDragModeChange = { dragMode = it },
                     hiddenStatuses         = hiddenStatuses,
@@ -392,32 +406,38 @@ fun ReservationsCalendarPage(
                     onLabelWidthPxChange = onTimelineLabelWidthChange,
                     showRoomType        = timelineShowRoomType,
                     onBlockRequest   = { room, cin, cout ->
-                        scope.launch {
-                            try {
-                                client.post("$BASE_URL/api/room-blocks") {
-                                    contentType(ContentType.Application.Json)
-                                    setBody(CreateRoomBlockRequest(
-                                        roomId   = room.id,
-                                        fromDate = cin.toString(),
-                                        toDate   = cout.toString(),
-                                        reason   = null
-                                    ))
-                                }
-                                loadData(showLoading = false)
-                            } catch (e: Exception) { snackbar.showSnackbar(s.errorMsg(e.message ?: "?")) }
+                        if (readOnly) { blockAction() } else {
+                            scope.launch {
+                                try {
+                                    client.post("$BASE_URL/api/room-blocks") {
+                                        contentType(ContentType.Application.Json)
+                                        setBody(CreateRoomBlockRequest(
+                                            roomId   = room.id,
+                                            fromDate = cin.toString(),
+                                            toDate   = cout.toString(),
+                                            reason   = null
+                                        ))
+                                    }
+                                    loadData(showLoading = false)
+                                } catch (e: Exception) { snackbar.showSnackbar(s.errorMsg(e.message ?: "?")) }
+                            }
                         }
                     },
                     onCreateRequest  = { room, cin, cout ->
-                        prefillRoom     = room
-                        prefillCheckIn  = cin.toString()
-                        prefillCheckOut = cout.toString()
-                        showNewDialog   = true
+                        if (readOnly) { blockAction() } else {
+                            prefillRoom     = room
+                            prefillCheckIn  = cin.toString()
+                            prefillCheckOut = cout.toString()
+                            showNewDialog   = true
+                        }
                     },
                     onCreateExternalRequest = { room, cin, cout ->
-                        prefillRoom     = room
-                        prefillCheckIn  = cin.toString()
-                        prefillCheckOut = cout.toString()
-                        showNewExternalDialog = true
+                        if (readOnly) { blockAction() } else {
+                            prefillRoom     = room
+                            prefillCheckIn  = cin.toString()
+                            prefillCheckOut = cout.toString()
+                            showNewExternalDialog = true
+                        }
                     }
                 )
                 }
@@ -596,6 +616,18 @@ fun ReservationsCalendarPage(
         )
     }
 
+    // ── Blocked (view-only) action dialog ───────────────────────────────────────
+    if (showBlockedDialog) {
+        AppAlertDialog(
+            onDismissRequest = { showBlockedDialog = false },
+            title = { Text(s.blockedActionTitle) },
+            text  = { Text(s.blockedActionMsg) },
+            confirmButton = {
+                TextButton(onClick = { showBlockedDialog = false }) { Text(s.close) }
+            }
+        )
+    }
+
     // ── Reservation detail dialog ──────────────────────────────────────────────
     optionRes?.let { res ->
         ReservationDetailDialog(
@@ -603,6 +635,8 @@ fun ReservationsCalendarPage(
             rooms     = rooms,
             guests    = guests,
             client    = client,
+            readOnly  = readOnly,
+            onBlocked = blockAction,
             onDismiss = { optionRes = null },
             onEdit    = { editReservation = res; optionRes = null },
             onPayments = { paymentsRes = res; optionRes = null },
@@ -1007,6 +1041,8 @@ private fun ReservationDetailDialog(
     rooms: List<RoomDto>,
     guests: List<GuestDto>,
     client: HttpClient,
+    readOnly: Boolean = false,
+    onBlocked: () -> Unit = {},
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
     onPayments: () -> Unit,
@@ -1150,7 +1186,7 @@ private fun ReservationDetailDialog(
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (!editingNote) {
                         TextButton(
-                            onClick = { editingNote = true },
+                            onClick = { if (readOnly) onBlocked() else editingNote = true },
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                         ) {
                             Text(s.editNoteBtn, style = MaterialTheme.typography.labelSmall)
@@ -1246,16 +1282,17 @@ private fun ReservationDetailDialog(
                         modifier = Modifier.fillMaxWidth()
                     ) { Text(s.saveNotesBtn) }
                 }
-                OutlinedButton(onClick = onEdit, modifier = Modifier.fillMaxWidth()) { Text(s.editReservationBtn) }
-                OutlinedButton(onClick = onPayments, modifier = Modifier.fillMaxWidth()) { Text(s.managePaymentsBtn) }
-                OutlinedButton(onClick = onEditGuest, modifier = Modifier.fillMaxWidth()) { Text(s.editGuestBtn) }
+                OutlinedButton(onClick = { if (readOnly) onBlocked() else onEdit() }, modifier = Modifier.fillMaxWidth()) { Text(s.editReservationBtn) }
+                OutlinedButton(onClick = { if (readOnly) onBlocked() else onPayments() }, modifier = Modifier.fillMaxWidth()) { Text(s.managePaymentsBtn) }
+                OutlinedButton(onClick = { if (readOnly) onBlocked() else onEditGuest() }, modifier = Modifier.fillMaxWidth()) { Text(s.editGuestBtn) }
                 onInvoice?.let { createAction ->
                     val inv = reservationInvoice
-                    OutlinedButton(
-                        onClick  = { if (inv == null) createAction() },
-                        enabled  = inv == null,
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text(s.createInvoiceBtn) }
+                    if (inv == null) {
+                        OutlinedButton(
+                            onClick  = { if (readOnly) onBlocked() else createAction() },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text(s.createInvoiceBtn) }
+                    }
                     if (inv != null) {
                         OutlinedButton(
                             onClick  = { onOpenInvoice?.invoke(inv) },

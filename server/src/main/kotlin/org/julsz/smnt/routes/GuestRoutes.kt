@@ -13,17 +13,20 @@ import org.jetbrains.exposed.sql.update
 import org.julsz.smnt.CreateGuestRequest
 import org.julsz.smnt.GuestDto
 import org.julsz.smnt.UpdateGuestRequest
+import org.julsz.smnt.auth.requireAnyManagerRole
 import org.julsz.smnt.db.Guests
 
 fun Route.guestRoutes() {
     get("/guests") { call.respond(queryGuests()) }
 
     post("/guests") {
+        if (!call.requireAnyManagerRole()) return@post
         val req = call.receive<CreateGuestRequest>()
         call.respond(HttpStatusCode.Created, createGuest(req))
     }
 
     put("/guests/{id}") {
+        if (!call.requireAnyManagerRole()) return@put
         val id = call.parameters["id"]?.toIntOrNull()
             ?: return@put call.respond(HttpStatusCode.BadRequest, "Invalid id")
         val req = call.receive<UpdateGuestRequest>()

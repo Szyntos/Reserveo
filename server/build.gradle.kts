@@ -20,6 +20,7 @@ dependencies {
     implementation(libs.ktor.serverNetty)
     implementation(libs.ktor.server.content.negotiation)
     implementation(libs.ktor.server.call.logging)
+    implementation(libs.ktor.server.auth)
     implementation(libs.ktor.serialization.kotlinx.json)
     implementation(libs.exposed.core)
     implementation(libs.exposed.dao)
@@ -31,4 +32,9 @@ dependencies {
     implementation(libs.postgresql)
     testImplementation(libs.ktor.serverTestHost)
     testImplementation(libs.kotlin.testJunit)
+    testImplementation(libs.ktor.client.content.negotiation)
+    testImplementation(libs.ktor.serialization.kotlinx.json)
+    testImplementation(libs.ktor.client.auth)
+    testImplementation(libs.testcontainers.core)
+    testImplementation(libs.testcontainers.postgresql)
 }

@@ -56,6 +56,7 @@ object Users : Table("users") {
             PGobject().apply { type = "app_role"; this.value = value }
     })
     val createdAt = datetime("created_at")
+    val passwordHash = varchar("password_hash", 255).nullable()
     override val primaryKey = PrimaryKey(id)
 }
 

@@ -10,6 +10,7 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.julsz.smnt.CreateRoomRequest
 import org.julsz.smnt.RoomDto
 import org.julsz.smnt.UpdateRoomRequest
+import org.julsz.smnt.auth.requireHotelAdmin
 import org.julsz.smnt.db.Hotels
 import org.julsz.smnt.db.Reservations
 import org.julsz.smnt.db.RoomBlocks
@@ -28,12 +29,16 @@ fun Route.roomRoutes() {
 
     post("/rooms") {
         val req = call.receive<CreateRoomRequest>()
+        if (!call.requireHotelAdmin(req.hotelId)) return@post
         call.respond(HttpStatusCode.Created, createRoom(req))
     }
 
     put("/rooms/{id}") {
         val id = call.parameters["id"]?.toIntOrNull()
             ?: return@put call.respond(HttpStatusCode.BadRequest, "Invalid room id")
+        val hotelId = roomHotelId(id)
+            ?: return@put call.respond(HttpStatusCode.NotFound)
+        if (!call.requireHotelAdmin(hotelId)) return@put
         val req = call.receive<UpdateRoomRequest>()
         call.respond(updateRoom(id, req))
     }
@@ -41,14 +46,24 @@ fun Route.roomRoutes() {
     patch("/rooms/{id}/archive") {
         val id = call.parameters["id"]?.toIntOrNull()
             ?: return@patch call.respond(HttpStatusCode.BadRequest, "Invalid room id")
+        val hotelId = roomHotelId(id)
+            ?: return@patch call.respond(HttpStatusCode.NotFound)
+        if (!call.requireHotelAdmin(hotelId)) return@patch
         call.respond(setArchived(id, archived = true))
     }
 
     patch("/rooms/{id}/unarchive") {
         val id = call.parameters["id"]?.toIntOrNull()
             ?: return@patch call.respond(HttpStatusCode.BadRequest, "Invalid room id")
+        val hotelId = roomHotelId(id)
+            ?: return@patch call.respond(HttpStatusCode.NotFound)
+        if (!call.requireHotelAdmin(hotelId)) return@patch
         call.respond(setArchived(id, archived = false))
     }
+}
+
+private fun roomHotelId(roomId: Int): Int? = transaction {
+    Rooms.selectAll().where { Rooms.id eq roomId }.firstOrNull()?.get(Rooms.hotelId)
 }
 
 // ─── Queries ──────────────────────────────────────────────────────────────────

@@ -11,6 +11,7 @@ import org.julsz.smnt.CreateHolidayRequest
 import org.julsz.smnt.HolidayDto
 import org.julsz.smnt.ImportHolidaysRequest
 import org.julsz.smnt.ImportHolidaysResponse
+import org.julsz.smnt.auth.requireHotelAdmin
 import org.julsz.smnt.db.Holidays
 import java.time.LocalDate
 
@@ -22,11 +23,13 @@ fun Route.holidayRoutes() {
 
     post("/holidays") {
         val req = call.receive<CreateHolidayRequest>()
+        if (!call.requireHotelAdmin(req.hotelId)) return@post
         call.respond(HttpStatusCode.Created, createHoliday(req))
     }
 
     post("/holidays/import") {
         val req = call.receive<ImportHolidaysRequest>()
+        if (!call.requireHotelAdmin(req.hotelId)) return@post
         val created = importHolidaysFromCsv(req)
         call.respond(HttpStatusCode.Created, ImportHolidaysResponse(imported = created.size, holidays = created))
     }
@@ -34,6 +37,9 @@ fun Route.holidayRoutes() {
     delete("/holidays/{id}") {
         val id = call.parameters["id"]?.toIntOrNull()
             ?: return@delete call.respond(HttpStatusCode.BadRequest, "Invalid id")
+        val hotelId = transaction { Holidays.selectAll().where { Holidays.id eq id }.firstOrNull()?.get(Holidays.hotelId) }
+            ?: return@delete call.respond(HttpStatusCode.NotFound)
+        if (!call.requireHotelAdmin(hotelId)) return@delete
         transaction { Holidays.deleteWhere { Holidays.id eq id } }
         call.respond(HttpStatusCode.NoContent)
     }

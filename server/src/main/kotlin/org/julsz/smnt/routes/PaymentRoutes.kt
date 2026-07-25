@@ -9,7 +9,9 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.julsz.smnt.CreatePaymentRequest
 import org.julsz.smnt.PaymentDto
+import org.julsz.smnt.auth.requireHotelManager
 import org.julsz.smnt.db.Payments
+import org.julsz.smnt.db.Reservations
 import java.math.BigDecimal
 import java.time.LocalDate
 
@@ -23,6 +25,9 @@ fun Route.paymentRoutes() {
     post("/reservations/{id}/payments") {
         val resId = call.parameters["id"]?.toIntOrNull()
             ?: return@post call.respond(HttpStatusCode.BadRequest, "Invalid id")
+        val hotelId = reservationHotelId(resId)
+            ?: return@post call.respond(HttpStatusCode.NotFound)
+        if (!call.requireHotelManager(hotelId)) return@post
         val req = call.receive<CreatePaymentRequest>()
         call.respond(HttpStatusCode.Created, createPayment(resId, req))
     }
@@ -30,9 +35,22 @@ fun Route.paymentRoutes() {
     delete("/payments/{id}") {
         val id = call.parameters["id"]?.toIntOrNull()
             ?: return@delete call.respond(HttpStatusCode.BadRequest, "Invalid id")
+        val hotelId = paymentHotelId(id)
+            ?: return@delete call.respond(HttpStatusCode.NotFound)
+        if (!call.requireHotelManager(hotelId)) return@delete
         transaction { Payments.deleteWhere { Payments.id eq id } }
         call.respond(HttpStatusCode.NoContent)
     }
+}
+
+private fun reservationHotelId(reservationId: Int): Int? = transaction {
+    Reservations.selectAll().where { Reservations.id eq reservationId }.firstOrNull()?.get(Reservations.hotelId)
+}
+
+private fun paymentHotelId(paymentId: Int): Int? = transaction {
+    val resId = Payments.selectAll().where { Payments.id eq paymentId }.firstOrNull()?.get(Payments.reservationId)
+        ?: return@transaction null
+    Reservations.selectAll().where { Reservations.id eq resId }.firstOrNull()?.get(Reservations.hotelId)
 }
 
 private fun queryPayments(reservationId: Int): List<PaymentDto> = transaction {

@@ -8,6 +8,7 @@ import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.julsz.smnt.*
+import org.julsz.smnt.auth.requireHotelManager
 import org.julsz.smnt.db.InvoiceItems
 import org.julsz.smnt.db.Invoices
 import java.math.BigDecimal
@@ -30,6 +31,7 @@ fun Route.invoiceRoutes() {
 
     post("/invoices") {
         val req = call.receive<CreateInvoiceRequest>()
+        if (!call.requireHotelManager(req.hotelId)) return@post
         val duplicate = transaction {
             Invoices.selectAll()
                 .where { (Invoices.hotelId eq req.hotelId) and (Invoices.invoiceNumber eq req.invoiceNumber) }
@@ -42,6 +44,9 @@ fun Route.invoiceRoutes() {
     put("/invoices/{id}") {
         val id = call.parameters["id"]?.toIntOrNull()
             ?: return@put call.respond(HttpStatusCode.BadRequest, "Invalid id")
+        val hotelId = invoiceHotelId(id)
+            ?: return@put call.respond(HttpStatusCode.NotFound)
+        if (!call.requireHotelManager(hotelId)) return@put
         val req = call.receive<UpdateInvoiceRequest>()
         val duplicate = transaction {
             Invoices.selectAll()
@@ -56,12 +61,19 @@ fun Route.invoiceRoutes() {
     delete("/invoices/{id}") {
         val id = call.parameters["id"]?.toIntOrNull()
             ?: return@delete call.respond(HttpStatusCode.BadRequest, "Invalid id")
+        val hotelId = invoiceHotelId(id)
+            ?: return@delete call.respond(HttpStatusCode.NotFound)
+        if (!call.requireHotelManager(hotelId)) return@delete
         transaction {
             InvoiceItems.deleteWhere { InvoiceItems.invoiceId eq id }
             Invoices.deleteWhere { Invoices.id eq id }
         }
         call.respond(HttpStatusCode.NoContent)
     }
+}
+
+private fun invoiceHotelId(invoiceId: Int): Int? = transaction {
+    Invoices.selectAll().where { Invoices.id eq invoiceId }.firstOrNull()?.get(Invoices.hotelId)
 }
 
 private fun queryInvoices(hotelId: Int): List<InvoiceDto> = transaction {

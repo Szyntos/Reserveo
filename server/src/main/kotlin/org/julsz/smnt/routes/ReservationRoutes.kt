@@ -13,6 +13,7 @@ import org.julsz.smnt.ReservationDto
 import org.julsz.smnt.ReservationPriceAdjustmentDto
 import org.julsz.smnt.ReservationPriceSegmentDto
 import org.julsz.smnt.UpdateReservationRequest
+import org.julsz.smnt.auth.requireHotelManager
 import org.julsz.smnt.db.Guests
 import org.julsz.smnt.db.Hotels
 import org.julsz.smnt.db.Payments
@@ -33,6 +34,7 @@ fun Route.reservationRoutes() {
 
     post("/reservations") {
         val req = call.receive<CreateReservationRequest>()
+        if (!call.requireHotelManager(req.hotelId)) return@post
         if (hasOverlap(req.roomId, req.checkInDate, req.checkOutDate)) {
             return@post call.respond(HttpStatusCode.Conflict, "Room already booked for the selected dates")
         }
@@ -45,6 +47,9 @@ fun Route.reservationRoutes() {
     put("/reservations/{id}") {
         val id  = call.parameters["id"]?.toIntOrNull()
             ?: return@put call.respond(HttpStatusCode.BadRequest, "Invalid id")
+        val hotelId = reservationHotelId(id)
+            ?: return@put call.respond(HttpStatusCode.NotFound)
+        if (!call.requireHotelManager(hotelId)) return@put
         val req = call.receive<UpdateReservationRequest>()
         if (hasOverlap(req.roomId, req.checkInDate, req.checkOutDate, excludeId = id)) {
             return@put call.respond(HttpStatusCode.Conflict, "Room already booked for the selected dates")
@@ -58,6 +63,9 @@ fun Route.reservationRoutes() {
     delete("/reservations/{id}") {
         val id = call.parameters["id"]?.toIntOrNull()
             ?: return@delete call.respond(HttpStatusCode.BadRequest, "Invalid id")
+        val hotelId = reservationHotelId(id)
+            ?: return@delete call.respond(HttpStatusCode.NotFound)
+        if (!call.requireHotelManager(hotelId)) return@delete
         transaction {
             ReservationPriceAdjustments.deleteWhere { ReservationPriceAdjustments.reservationId eq id }
             ReservationPriceSegments.deleteWhere { ReservationPriceSegments.reservationId eq id }
@@ -72,6 +80,9 @@ fun Route.reservationRoutes() {
     post("/reservations/{id}/price-adjustments") {
         val id = call.parameters["id"]?.toIntOrNull()
             ?: return@post call.respond(HttpStatusCode.BadRequest, "Invalid id")
+        val hotelId = reservationHotelId(id)
+            ?: return@post call.respond(HttpStatusCode.NotFound)
+        if (!call.requireHotelManager(hotelId)) return@post
         val req = call.receive<CreatePriceAdjustmentRequest>()
         call.respond(HttpStatusCode.Created, createAdjustment(id, req))
     }
@@ -81,9 +92,16 @@ fun Route.reservationRoutes() {
             ?: return@delete call.respond(HttpStatusCode.BadRequest, "Invalid id")
         val adjId = call.parameters["adjId"]?.toIntOrNull()
             ?: return@delete call.respond(HttpStatusCode.BadRequest, "Invalid adjId")
+        val hotelId = reservationHotelId(id)
+            ?: return@delete call.respond(HttpStatusCode.NotFound)
+        if (!call.requireHotelManager(hotelId)) return@delete
         deleteAdjustment(id, adjId)
         call.respond(HttpStatusCode.NoContent)
     }
+}
+
+private fun reservationHotelId(reservationId: Int): Int? = transaction {
+    Reservations.selectAll().where { Reservations.id eq reservationId }.firstOrNull()?.get(Reservations.hotelId)
 }
 
 // ─── Overlap guards ───────────────────────────────────────────────────────────

@@ -9,12 +9,14 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.insert
 import org.julsz.smnt.CreateHotelRequest
 import org.julsz.smnt.HotelDto
+import org.julsz.smnt.auth.requireAdmin
 import org.julsz.smnt.db.Hotels
 
 fun Route.hotelRoutes() {
     get("/hotels") { call.respond(queryHotels()) }
 
     post("/hotels") {
+        if (!call.requireAdmin()) return@post
         val req = call.receive<CreateHotelRequest>()
         call.respond(HttpStatusCode.Created, createHotel(req))
     }

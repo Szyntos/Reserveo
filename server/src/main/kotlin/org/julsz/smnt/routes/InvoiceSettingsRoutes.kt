@@ -9,6 +9,7 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.julsz.smnt.InvoiceSettingsDto
 import org.julsz.smnt.SaveInvoiceSettingsRequest
+import org.julsz.smnt.auth.requireHotelAdmin
 import org.julsz.smnt.db.InvoiceSettings
 
 fun Route.invoiceSettingsRoutes() {
@@ -21,6 +22,7 @@ fun Route.invoiceSettingsRoutes() {
     put("/hotels/{id}/invoice-settings") {
         val hotelId = call.parameters["id"]?.toIntOrNull()
             ?: return@put call.respond(HttpStatusCode.BadRequest, "Invalid id")
+        if (!call.requireHotelAdmin(hotelId)) return@put
         val req = call.receive<SaveInvoiceSettingsRequest>()
         call.respond(upsert(hotelId, req))
     }

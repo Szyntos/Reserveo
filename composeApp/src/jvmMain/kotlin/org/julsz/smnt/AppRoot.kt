@@ -1,4 +1,4 @@
-package org.julsz.smnt
+﻿package org.julsz.smnt
 
 import androidx.compose.foundation.LocalScrollbarStyle
 import androidx.compose.foundation.ScrollbarStyle
@@ -21,7 +21,10 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
+import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.client.request.*
+import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import java.io.File
 import java.util.Properties
@@ -40,7 +43,8 @@ private data class AppSettings(
     val timelineLabelWidth: Float = 96f,
     val timelineShowRoomType: Boolean = true,
     val serverMode: String = "localhost",
-    val customServerUrl: String = ""
+    val customServerUrl: String = "",
+    val savedPasswords: Map<String, String> = emptyMap()
 )
 
 private val settingsFile = File(System.getProperty("user.home"), ".reserveo_settings.properties")
@@ -60,9 +64,23 @@ private fun loadSettings(): AppSettings {
         timelineLabelWidth    = props.getProperty("timelineLabelWidth", "96").toFloat(),
         timelineShowRoomType  = props.getProperty("timelineShowRoomType", "true").toBoolean(),
         serverMode            = props.getProperty("serverMode", "localhost"),
-        customServerUrl       = props.getProperty("customServerUrl", "")
+        customServerUrl       = props.getProperty("customServerUrl", ""),
+        savedPasswords        = decodeSavedPasswords(props.getProperty("savedPasswords", ""))
     )
 }
+
+private fun decodeSavedPasswords(encoded: String): Map<String, String> =
+    encoded.split(",").filter { it.isNotEmpty() }
+        .mapNotNull { entry ->
+            val decoded = String(java.util.Base64.getDecoder().decode(entry))
+            val parts = decoded.split(":", limit = 2)
+            if (parts.size == 2) parts[0] to parts[1] else null
+        }.toMap()
+
+private fun encodeSavedPasswords(passwords: Map<String, String>): String =
+    passwords.entries.joinToString(",") { (email, password) ->
+        java.util.Base64.getEncoder().encodeToString("$email:$password".toByteArray())
+    }
 
 private fun saveSettings(s: AppSettings) {
     try {
@@ -79,6 +97,7 @@ private fun saveSettings(s: AppSettings) {
         props["timelineShowRoomType"]  = s.timelineShowRoomType.toString()
         props["serverMode"]            = s.serverMode
         props["customServerUrl"]       = s.customServerUrl
+        props["savedPasswords"]        = encodeSavedPasswords(s.savedPasswords)
         settingsFile.outputStream().use { props.store(it, null) }
     } catch (_: Exception) {}
 }
@@ -145,7 +164,14 @@ private val ReserveoLightColors = lightColorScheme(
 
 @Composable
 fun AppRoot() {
-    val client = remember { HttpClient(CIO) { install(ContentNegotiation) { json() } } }
+    val client = remember {
+        HttpClient(CIO) {
+            install(ContentNegotiation) { json() }
+            install(DefaultRequest) {
+                AuthSession.basicAuthHeader?.let { header(HttpHeaders.Authorization, it) }
+            }
+        }
+    }
     DisposableEffect(Unit) { onDispose { client.close() } }
 
     var currentUser   by remember { mutableStateOf<UserDto?>(null) }
@@ -170,17 +196,18 @@ fun AppRoot() {
     var timelineShowRoomType  by remember { mutableStateOf(initial.timelineShowRoomType) }
     var serverMode            by remember { mutableStateOf(initial.serverMode) }
     var customServerUrl       by remember { mutableStateOf(initial.customServerUrl) }
+    var savedPasswords        by remember { mutableStateOf(initial.savedPasswords) }
 
     LaunchedEffect(isDark, fontScale, centerDays, noShowAfterDays, autoCheckOutAfterDays, language,
                    timelineDayWidth, timelineRowHeight, timelineLabelWidth, timelineShowRoomType,
-                   serverMode, customServerUrl) {
+                   serverMode, customServerUrl, savedPasswords) {
         BASE_URL = resolveServerUrl(serverMode, customServerUrl)
         saveSettings(AppSettings(isDark, fontScale, centerDays, noShowAfterDays, autoCheckOutAfterDays, language.name,
                                  timelineDayWidth, timelineRowHeight, timelineLabelWidth, timelineShowRoomType,
-                                 serverMode, customServerUrl))
+                                 serverMode, customServerUrl, savedPasswords))
     }
 
-    fun logout() { currentUser = null; selectedHotel = null }
+    fun logout() { AuthSession.clear(); currentUser = null; selectedHotel = null }
 
     val colorScheme = if (isDark) ReserveoDarkColors else ReserveoLightColors
 
@@ -208,7 +235,9 @@ fun AppRoot() {
                             serverMode             = serverMode,
                             onServerModeChange     = { serverMode = it },
                             customServerUrl        = customServerUrl,
-                            onCustomServerUrlChange = { customServerUrl = it }
+                            onCustomServerUrlChange = { customServerUrl = it },
+                            savedPasswords         = savedPasswords,
+                            onPasswordSaved        = { email, password -> savedPasswords = savedPasswords + (email to password) }
                         )
                     currentUser!!.appRole == "admin" ->
                         DbViewerApp(client, onLogout = ::logout)

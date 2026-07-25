@@ -90,6 +90,15 @@ fun MainApp(
     val snackbarState = remember { SnackbarHostState() }
     var sidebarOpen            by remember { mutableStateOf(false) }
 
+    // Hotel-scoped role gates — mirrors the server's per-hotel authorization
+    // (admin: full access, manager: reservations only, viewer: read-only).
+    val isHotelAdmin           = selectedHotel.role == "admin"
+    val canManageReservations  = selectedHotel.role == "admin" || selectedHotel.role == "manager"
+
+    LaunchedEffect(isHotelAdmin, currentScreen) {
+        if (currentScreen == AppScreen.Config && !isHotelAdmin) currentScreen = AppScreen.Dashboard
+    }
+
     CompositionLocalProvider(LocalSnackbar provides snackbarState) {
         Box(Modifier.fillMaxSize()) {
             // Main content column (full width, behind the overlay)
@@ -113,11 +122,27 @@ fun MainApp(
                     ) {
                         HamburgerIcon(tint = MaterialTheme.colorScheme.onSurface)
                     }
+                    if (!canManageReservations) {
+                        val s = LocalStrings.current
+                        Box(
+                            Modifier
+                                .padding(start = 8.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                s.viewOnlyBadge,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
                 HorizontalDivider()
                 Box(Modifier.fillMaxSize().padding(28.dp)) {
                     when (currentScreen) {
-                        AppScreen.Dashboard    -> DashboardPage(client = client, hotel = selectedHotel, noShowAfterDays = noShowAfterDays, autoCheckOutAfterDays = autoCheckOutAfterDays)
+                        AppScreen.Dashboard    -> DashboardPage(client = client, hotel = selectedHotel, noShowAfterDays = noShowAfterDays, autoCheckOutAfterDays = autoCheckOutAfterDays, canEdit = canManageReservations)
                         AppScreen.Reservations -> ReservationsCalendarPage(
                             client, selectedHotel, centerDays, noShowAfterDays, autoCheckOutAfterDays,
                             timelineDayWidth          = timelineDayWidth,
@@ -128,10 +153,11 @@ fun MainApp(
                             onTimelineLabelWidthChange = onTimelineLabelWidthChange,
                             timelineShowRoomType      = timelineShowRoomType,
                             onCreateInvoice = { res -> invoiceForReservation = res; currentScreen = AppScreen.Invoices },
-                            onViewInvoice   = { currentScreen = AppScreen.Invoices }
+                            onViewInvoice   = { currentScreen = AppScreen.Invoices },
+                            readOnly        = !canManageReservations
                         )
                         AppScreen.Statistics   -> StatisticsPage(client = client, hotel = selectedHotel)
-                        AppScreen.Config       -> ConfigPage(client, selectedHotel)
+                        AppScreen.Config       -> if (isHotelAdmin) ConfigPage(client, selectedHotel)
                         AppScreen.Invoices     -> InvoicePage(
                             client             = client,
                             hotel              = selectedHotel,
@@ -179,6 +205,7 @@ fun MainApp(
                 AppSidebar(
                     currentUser    = currentUser,
                     selectedHotel  = selectedHotel,
+                    showConfig     = isHotelAdmin,
                     currentScreen  = currentScreen,
                     onScreenChange = { screen -> currentScreen = screen; sidebarOpen = false },
                     onSwitchHotel  = { sidebarOpen = false; onSwitchHotel() },
@@ -203,6 +230,7 @@ fun MainApp(
 private fun AppSidebar(
     currentUser: UserDto,
     selectedHotel: UserHotelRoleDto,
+    showConfig: Boolean,
     currentScreen: AppScreen,
     onScreenChange: (AppScreen) -> Unit,
     onSwitchHotel: () -> Unit,
@@ -263,7 +291,7 @@ private fun AppSidebar(
             HorizontalDivider(color = cs.outline.copy(alpha = 0.5f))
             Spacer(Modifier.height(6.dp))
 
-            AppScreen.entries.forEach { screen ->
+            AppScreen.entries.filter { it != AppScreen.Config || showConfig }.forEach { screen ->
                 val label = when (screen) {
                     AppScreen.Dashboard    -> s.navDashboard
                     AppScreen.Reservations -> s.navReservations
@@ -409,7 +437,7 @@ private fun HamburgerIcon(tint: Color, modifier: Modifier = Modifier) {
 // ─── Pages ────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun DashboardPage(client: HttpClient, hotel: UserHotelRoleDto, noShowAfterDays: Int = 14, autoCheckOutAfterDays: Int = 3) {
+private fun DashboardPage(client: HttpClient, hotel: UserHotelRoleDto, noShowAfterDays: Int = 14, autoCheckOutAfterDays: Int = 3, canEdit: Boolean = true) {
     val scope    = rememberCoroutineScope()
     val s        = LocalStrings.current
     val snackbar = LocalSnackbar.current
@@ -536,6 +564,7 @@ private fun DashboardPage(client: HttpClient, hotel: UserHotelRoleDto, noShowAft
     }
 
     fun updateStatus(res: ReservationDto, newStatus: String) {
+        if (!canEdit) return
         scope.launch {
             try {
                 client.put("$BASE_URL/api/reservations/${res.id}") {
@@ -602,6 +631,7 @@ private fun DashboardPage(client: HttpClient, hotel: UserHotelRoleDto, noShowAft
                         doneLabel    = s.arrived,
                         emptyLabel   = s.noArrivalsToday,
                         onAction     = { updateStatus(it, "checked_in") },
+                        canEdit      = canEdit,
                         modifier     = Modifier.weight(1f)
                     )
                     DashboardTile(
@@ -613,17 +643,20 @@ private fun DashboardPage(client: HttpClient, hotel: UserHotelRoleDto, noShowAft
                         doneLabel    = s.departed,
                         emptyLabel   = s.noDeparturesToday,
                         onAction     = { updateStatus(it, "checked_out") },
+                        canEdit      = canEdit,
                         modifier     = Modifier.weight(1f)
                     )
                     OverdueTile(
                         reservations = overdue,
                         onSetStatus  = { res, newStatus -> updateStatus(res, newStatus) },
-                        modifier     = Modifier.weight(1f)
+                        modifier     = Modifier.weight(1f),
+                        canEdit      = canEdit
                     )
                     OverdueCheckOutsTile(
                         reservations = overdueCheckOuts,
                         onSetStatus  = { res, newStatus -> updateStatus(res, newStatus) },
-                        modifier     = Modifier.weight(1f)
+                        modifier     = Modifier.weight(1f),
+                        canEdit      = canEdit
                     )
                 }
             }
@@ -681,6 +714,7 @@ private fun DashboardPage(client: HttpClient, hotel: UserHotelRoleDto, noShowAft
                         doneLabel    = s.arrived,
                         emptyLabel   = s.noArrivalsToday,
                         onAction     = { updateStatus(it, "checked_in") },
+                        canEdit      = canEdit,
                         modifier     = Modifier.fillMaxWidth()
                     )
                 }
@@ -694,6 +728,7 @@ private fun DashboardPage(client: HttpClient, hotel: UserHotelRoleDto, noShowAft
                         doneLabel    = s.departed,
                         emptyLabel   = s.noDeparturesToday,
                         onAction     = { updateStatus(it, "checked_out") },
+                        canEdit      = canEdit,
                         modifier     = Modifier.fillMaxWidth()
                     )
                 }
@@ -702,7 +737,8 @@ private fun DashboardPage(client: HttpClient, hotel: UserHotelRoleDto, noShowAft
                         reservations = overdue,
                         onSetStatus  = { res, newStatus -> updateStatus(res, newStatus) },
                         modifier     = Modifier.fillMaxWidth(),
-                        scrollable   = false
+                        scrollable   = false,
+                        canEdit      = canEdit
                     )
                 }
                 item {
@@ -710,7 +746,8 @@ private fun DashboardPage(client: HttpClient, hotel: UserHotelRoleDto, noShowAft
                         reservations = overdueCheckOuts,
                         onSetStatus  = { res, newStatus -> updateStatus(res, newStatus) },
                         modifier     = Modifier.fillMaxWidth(),
-                        scrollable   = false
+                        scrollable   = false,
+                        canEdit      = canEdit
                     )
                 }
             }
@@ -768,7 +805,8 @@ private fun DashboardTile(
     doneLabel: String,
     emptyLabel: String,
     onAction: (ReservationDto) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    canEdit: Boolean = true
 ) {
     val s  = LocalStrings.current
     val cs = MaterialTheme.colorScheme
@@ -813,8 +851,10 @@ private fun DashboardTile(
                                         maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
                             }
-                            IconButton(onClick = { onAction(res) }, modifier = Modifier.size(36.dp)) {
-                                Text("✓", style = MaterialTheme.typography.titleSmall, color = cs.primary)
+                            if (canEdit) {
+                                IconButton(onClick = { onAction(res) }, modifier = Modifier.size(36.dp)) {
+                                    Text("✓", style = MaterialTheme.typography.titleSmall, color = cs.primary)
+                                }
                             }
                         }
                     }
@@ -856,7 +896,8 @@ private fun OverdueTile(
     reservations: List<ReservationDto>,
     onSetStatus: (ReservationDto, String) -> Unit,
     modifier: Modifier = Modifier,
-    scrollable: Boolean = true
+    scrollable: Boolean = true,
+    canEdit: Boolean = true
 ) {
     val s        = LocalStrings.current
     val cs       = MaterialTheme.colorScheme
@@ -914,15 +955,17 @@ private fun OverdueTile(
                                 style = MaterialTheme.typography.labelSmall,
                                 color = cs.onSurfaceVariant
                             )
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                listOf("checked_in", "no_show", "cancelled").forEach { code ->
-                                    OutlinedButton(
-                                        onClick = { onSetStatus(res, code) },
-                                        modifier = Modifier.weight(1f).height(28.dp),
-                                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
-                                        shape = RoundedCornerShape(6.dp)
-                                    ) {
-                                        Text(s.statusName(code), style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                            if (canEdit) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    listOf("checked_in", "no_show", "cancelled").forEach { code ->
+                                        OutlinedButton(
+                                            onClick = { onSetStatus(res, code) },
+                                            modifier = Modifier.weight(1f).height(28.dp),
+                                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                                            shape = RoundedCornerShape(6.dp)
+                                        ) {
+                                            Text(s.statusName(code), style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                                        }
                                     }
                                 }
                             }
@@ -939,7 +982,8 @@ private fun OverdueCheckOutsTile(
     reservations: List<ReservationDto>,
     onSetStatus: (ReservationDto, String) -> Unit,
     modifier: Modifier = Modifier,
-    scrollable: Boolean = true
+    scrollable: Boolean = true,
+    canEdit: Boolean = true
 ) {
     val s        = LocalStrings.current
     val cs       = MaterialTheme.colorScheme
@@ -997,15 +1041,17 @@ private fun OverdueCheckOutsTile(
                                 style = MaterialTheme.typography.labelSmall,
                                 color = cs.onSurfaceVariant
                             )
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                listOf("checked_out", "cancelled").forEach { code ->
-                                    OutlinedButton(
-                                        onClick = { onSetStatus(res, code) },
-                                        modifier = Modifier.weight(1f).height(28.dp),
-                                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
-                                        shape = RoundedCornerShape(6.dp)
-                                    ) {
-                                        Text(s.statusName(code), style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                            if (canEdit) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    listOf("checked_out", "cancelled").forEach { code ->
+                                        OutlinedButton(
+                                            onClick = { onSetStatus(res, code) },
+                                            modifier = Modifier.weight(1f).height(28.dp),
+                                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                                            shape = RoundedCornerShape(6.dp)
+                                        ) {
+                                            Text(s.statusName(code), style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                                        }
                                     }
                                 }
                             }

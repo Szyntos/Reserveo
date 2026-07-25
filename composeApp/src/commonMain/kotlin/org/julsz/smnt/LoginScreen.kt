@@ -2,6 +2,7 @@ package org.julsz.smnt
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -12,10 +13,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.request.*
+import io.ktor.client.statement.*
+import io.ktor.http.*
+import io.ktor.util.*
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -25,12 +31,16 @@ fun LoginScreen(
     serverMode: String = "localhost",
     onServerModeChange: (String) -> Unit = {},
     customServerUrl: String = "",
-    onCustomServerUrlChange: (String) -> Unit = {}
+    onCustomServerUrlChange: (String) -> Unit = {},
+    savedPasswords: Map<String, String> = emptyMap(),
+    onPasswordSaved: (email: String, password: String) -> Unit = { _, _ -> }
 ) {
     var users           by remember { mutableStateOf<List<UserDto>>(emptyList()) }
     var selected        by remember { mutableStateOf<UserDto?>(null) }
     var expanded        by remember { mutableStateOf(false) }
     var loadingUsers    by remember { mutableStateOf(true) }
+    var password        by remember { mutableStateOf("") }
+    var loggingIn       by remember { mutableStateOf(false) }
     var error           by remember { mutableStateOf<String?>(null) }
     var showSettings    by remember { mutableStateOf(false) }
 
@@ -45,8 +55,38 @@ fun LoginScreen(
         }
     }
 
+    LaunchedEffect(selected) {
+        password = selected?.let { savedPasswords[it.email] } ?: ""
+    }
+
     val s  = LocalStrings.current
     val cs = MaterialTheme.colorScheme
+    val scope = rememberCoroutineScope()
+
+    fun attemptLogin() {
+        val user = selected ?: return
+        error = null
+        loggingIn = true
+        scope.launch {
+            try {
+                val header = "Basic " + "${user.email}:$password".encodeBase64()
+                val response = client.get("$BASE_URL/api/users/me") {
+                    header(HttpHeaders.Authorization, header)
+                }
+                if (response.status == HttpStatusCode.OK) {
+                    AuthSession.set(user.email, password)
+                    onPasswordSaved(user.email, password)
+                    onLogin(response.body<UserDto>())
+                } else {
+                    error = s.loginInvalidCredentials
+                }
+            } catch (e: Exception) {
+                error = "Could not reach server: ${e.message}"
+            } finally {
+                loggingIn = false
+            }
+        }
+    }
 
     if (showSettings) {
         AlertDialog(
@@ -145,48 +185,72 @@ fun LoginScreen(
                             CircularProgressIndicator(Modifier.size(24.dp))
                         }
                     } else {
-                        ExposedDropdownMenuBox(
-                            expanded = expanded,
-                            onExpandedChange = { if (users.isNotEmpty()) expanded = it }
-                        ) {
-                            OutlinedTextField(
-                                value = selected?.let { "${it.name} (${it.appRole})" } ?: s.loginNoUsers,
-                                onValueChange = {},
-                                readOnly = true,
-                                label = { Text(s.loginUserLabel) },
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-                                modifier = Modifier
-                                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
-                                    .fillMaxWidth(),
-                                singleLine = true
+                        Column {
+                            Text(
+                                s.loginUserLabel,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = cs.onSurfaceVariant,
+                                modifier = Modifier.padding(bottom = 6.dp)
                             )
-                            ExposedDropdownMenu(
-                                expanded = expanded,
-                                onDismissRequest = { expanded = false }
-                            ) {
-                                users.forEach { user ->
-                                    DropdownMenuItem(
-                                        text = {
-                                            Column {
-                                                Text(user.name, style = MaterialTheme.typography.bodyMedium)
-                                                Text(
-                                                    user.email,
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = cs.onSurfaceVariant
+                            Box {
+                                Box(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .border(1.dp, cs.outline, RoundedCornerShape(8.dp))
+                                        .clickable(enabled = users.isNotEmpty() && !loggingIn) { expanded = true }
+                                        .padding(horizontal = 16.dp, vertical = 14.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            selected?.let { "${it.name} (${it.appRole})" } ?: s.loginNoUsers,
+                                            style = MaterialTheme.typography.bodyLarge
+                                        )
+                                        Text("▾", color = cs.onSurfaceVariant)
+                                    }
+                                }
+                                DropdownMenu(
+                                    expanded = expanded,
+                                    onDismissRequest = { expanded = false },
+                                    modifier = Modifier.fillMaxWidth(0.9f)
+                                ) {
+                                    users.forEach { user ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Column {
+                                                    Text(user.name, style = MaterialTheme.typography.bodyMedium)
+                                                    Text(
+                                                        user.email,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = cs.onSurfaceVariant
+                                                    )
+                                                }
+                                            },
+                                            trailingIcon = {
+                                                AssistChip(
+                                                    onClick = {},
+                                                    label = { Text(user.appRole, style = MaterialTheme.typography.labelSmall) }
                                                 )
-                                            }
-                                        },
-                                        trailingIcon = {
-                                            AssistChip(
-                                                onClick = {},
-                                                label = { Text(user.appRole, style = MaterialTheme.typography.labelSmall) }
-                                            )
-                                        },
-                                        onClick = { selected = user; expanded = false }
-                                    )
+                                            },
+                                            onClick = { selected = user; expanded = false; error = null }
+                                        )
+                                    }
                                 }
                             }
                         }
+                        OutlinedTextField(
+                            value = password,
+                            onValueChange = { password = it; error = null },
+                            label = { Text(s.loginPasswordLabel) },
+                            singleLine = true,
+                            enabled = !loggingIn,
+                            visualTransformation = PasswordVisualTransformation(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
 
                     error?.let {
@@ -194,12 +258,16 @@ fun LoginScreen(
                     }
 
                     Button(
-                        onClick = { selected?.let(onLogin) },
-                        enabled = selected != null && !loadingUsers,
+                        onClick = ::attemptLogin,
+                        enabled = selected != null && password.isNotBlank() && !loggingIn,
                         modifier = Modifier.fillMaxWidth().height(48.dp),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text(s.loginEnter, style = MaterialTheme.typography.labelLarge)
+                        if (loggingIn) {
+                            CircularProgressIndicator(Modifier.size(20.dp), color = cs.onPrimary, strokeWidth = 2.dp)
+                        } else {
+                            Text(s.loginEnter, style = MaterialTheme.typography.labelLarge)
+                        }
                     }
                 }
             }

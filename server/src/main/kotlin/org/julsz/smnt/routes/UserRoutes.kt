@@ -1,6 +1,7 @@
 package org.julsz.smnt.routes
 
 import io.ktor.http.*
+import io.ktor.server.auth.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
@@ -12,6 +13,8 @@ import org.jetbrains.exposed.sql.JoinType
 import org.julsz.smnt.CreateUserRequest
 import org.julsz.smnt.UserDto
 import org.julsz.smnt.UserHotelRoleDto
+import org.julsz.smnt.auth.AuthPrincipal
+import org.julsz.smnt.auth.requireAdmin
 import org.julsz.smnt.db.Hotels
 import org.julsz.smnt.db.UserHotelRoles
 import org.julsz.smnt.db.Users
@@ -19,8 +22,19 @@ import java.time.format.DateTimeFormatter
 
 private val dtFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 
-fun Route.userRoutes() {
+/** Unauthenticated: powers the login screen's user picker. Returns no sensitive data (no password hashes). */
+fun Route.publicUserRoutes() {
     get("/users") { call.respond(queryUsers()) }
+}
+
+fun Route.userRoutes() {
+    get("/users/me") {
+        val principal = call.principal<AuthPrincipal>()
+            ?: return@get call.respond(HttpStatusCode.Unauthorized)
+        val user = queryUsers().firstOrNull { it.id == principal.userId }
+            ?: return@get call.respond(HttpStatusCode.NotFound)
+        call.respond(user)
+    }
 
     get("/users/{id}/hotels") {
         val userId = call.parameters["id"]?.toIntOrNull()
@@ -29,6 +43,7 @@ fun Route.userRoutes() {
     }
 
     post("/users") {
+        if (!call.requireAdmin()) return@post
         val req = call.receive<CreateUserRequest>()
         call.respond(HttpStatusCode.Created, createUser(req))
     }

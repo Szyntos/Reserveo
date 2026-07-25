@@ -10,6 +10,7 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.neq
 import org.julsz.smnt.CreateRoomBlockRequest
 import org.julsz.smnt.RoomBlockDto
+import org.julsz.smnt.auth.requireHotelManager
 import org.julsz.smnt.db.Reservations
 import org.julsz.smnt.db.RoomBlocks
 import org.julsz.smnt.db.Rooms
@@ -23,6 +24,9 @@ fun Route.roomBlockRoutes() {
 
     post("/room-blocks") {
         val req = call.receive<CreateRoomBlockRequest>()
+        val hotelId = roomHotelId(req.roomId)
+            ?: return@post call.respond(HttpStatusCode.BadRequest, "Invalid room id")
+        if (!call.requireHotelManager(hotelId)) return@post
         if (hasReservationOverlap(req.roomId, req.fromDate, req.toDate)) {
             return@post call.respond(HttpStatusCode.Conflict, "Room has active reservations in the selected dates")
         }
@@ -35,9 +39,22 @@ fun Route.roomBlockRoutes() {
     delete("/room-blocks/{id}") {
         val id = call.parameters["id"]?.toIntOrNull()
             ?: return@delete call.respond(HttpStatusCode.BadRequest, "Invalid id")
+        val hotelId = roomBlockHotelId(id)
+            ?: return@delete call.respond(HttpStatusCode.NotFound)
+        if (!call.requireHotelManager(hotelId)) return@delete
         transaction { RoomBlocks.deleteWhere { RoomBlocks.id eq id } }
         call.respond(HttpStatusCode.NoContent)
     }
+}
+
+private fun roomHotelId(roomId: Int): Int? = transaction {
+    Rooms.selectAll().where { Rooms.id eq roomId }.firstOrNull()?.get(Rooms.hotelId)
+}
+
+private fun roomBlockHotelId(roomBlockId: Int): Int? = transaction {
+    val roomId = RoomBlocks.selectAll().where { RoomBlocks.id eq roomBlockId }.firstOrNull()?.get(RoomBlocks.roomId)
+        ?: return@transaction null
+    Rooms.selectAll().where { Rooms.id eq roomId }.firstOrNull()?.get(Rooms.hotelId)
 }
 
 // ─── Overlap guards ───────────────────────────────────────────────────────────

@@ -10,6 +10,7 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.julsz.smnt.CreatePriceRuleRequest
 import org.julsz.smnt.PriceRuleDto
 import org.julsz.smnt.UpdatePriceRuleRequest
+import org.julsz.smnt.auth.requireHotelAdmin
 import org.julsz.smnt.db.PriceRules
 import org.julsz.smnt.db.Rooms
 import java.math.BigDecimal
@@ -24,12 +25,18 @@ fun Route.priceRoutes() {
 
     post("/price-rules") {
         val req = call.receive<CreatePriceRuleRequest>()
+        val hotelId = roomHotelId(req.roomId)
+            ?: return@post call.respond(HttpStatusCode.BadRequest, "Invalid room id")
+        if (!call.requireHotelAdmin(hotelId)) return@post
         call.respond(HttpStatusCode.Created, createPriceRule(req))
     }
 
     put("/price-rules/{id}") {
         val id = call.parameters["id"]?.toIntOrNull()
             ?: return@put call.respond(HttpStatusCode.BadRequest, "Invalid id")
+        val hotelId = priceRuleHotelId(id)
+            ?: return@put call.respond(HttpStatusCode.NotFound)
+        if (!call.requireHotelAdmin(hotelId)) return@put
         val req = call.receive<UpdatePriceRuleRequest>()
         call.respond(updatePriceRule(id, req))
     }
@@ -37,9 +44,22 @@ fun Route.priceRoutes() {
     delete("/price-rules/{id}") {
         val id = call.parameters["id"]?.toIntOrNull()
             ?: return@delete call.respond(HttpStatusCode.BadRequest, "Invalid id")
+        val hotelId = priceRuleHotelId(id)
+            ?: return@delete call.respond(HttpStatusCode.NotFound)
+        if (!call.requireHotelAdmin(hotelId)) return@delete
         deletePriceRule(id)
         call.respond(HttpStatusCode.NoContent)
     }
+}
+
+private fun roomHotelId(roomId: Int): Int? = transaction {
+    Rooms.selectAll().where { Rooms.id eq roomId }.firstOrNull()?.get(Rooms.hotelId)
+}
+
+private fun priceRuleHotelId(priceRuleId: Int): Int? = transaction {
+    val roomId = PriceRules.selectAll().where { PriceRules.id eq priceRuleId }.firstOrNull()?.get(PriceRules.roomId)
+        ?: return@transaction null
+    Rooms.selectAll().where { Rooms.id eq roomId }.firstOrNull()?.get(Rooms.hotelId)
 }
 
 // ─── Queries ──────────────────────────────────────────────────────────────────

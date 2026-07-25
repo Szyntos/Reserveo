@@ -72,6 +72,9 @@ kotlin {
             implementation(libs.ktor.client.cio)
             implementation(libs.openpdf)
         }
+        jvmTest.dependencies {
+            implementation(libs.kotlin.test)
+        }
     }
 }
 
@@ -94,6 +97,10 @@ android {
     buildTypes {
         getByName("release") {
             isMinifyEnabled = false
+            // Personal/family use only — signed with the auto-generated debug
+            // keystore so the APK installs without extra keystore setup.
+            // Not suitable for Play Store distribution.
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
     compileOptions {

@@ -43,6 +43,8 @@ interface AppStrings {
     val loginUserLabel: String
     val loginNoUsers: String
     val loginEnter: String
+    val loginPasswordLabel: String
+    val loginInvalidCredentials: String
 
     // Hotel picker
     fun welcomeBack(name: String): String
@@ -169,6 +171,9 @@ interface AppStrings {
     val bookingTotalLabel: String
     val dowLabels: List<String>
     val conflictError: String
+    val viewOnlyBadge: String
+    val blockedActionTitle: String
+    val blockedActionMsg: String
     fun serverError(status: Any): String
 
     // Reservation detail dialog
@@ -400,10 +405,12 @@ object EnglishStrings : AppStrings {
     override val themeLight = "Light"
     override val switchHotel = "Switch Hotel"
     override val logout = "Logout"
-    override val loginSubtitle = "Select your account to continue"
-    override val loginUserLabel = "User"
+    override val loginSubtitle = "Sign in to continue"
+    override val loginUserLabel = "Email"
     override val loginNoUsers = "No users found"
     override val loginEnter = "Enter"
+    override val loginPasswordLabel = "Password"
+    override val loginInvalidCredentials = "Invalid email or password"
     override fun welcomeBack(name: String) = "Welcome back, $name"
     override val selectHotelToManage = "Select a hotel to manage"
     override val noHotelsAssigned = "No hotels assigned to your account."
@@ -512,6 +519,9 @@ object EnglishStrings : AppStrings {
     override val bookingTotalLabel = "Total (Booking)"
     override val dowLabels = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
     override val conflictError = "Double booking: room already reserved for these dates"
+    override val viewOnlyBadge = "View only"
+    override val blockedActionTitle = "View-only access"
+    override val blockedActionMsg = "Your role for this hotel only allows viewing. You can't make changes here."
     override fun serverError(status: Any) = "Server error: $status"
     override fun reservationDetailTitle(id: Int) = "Reservation #$id"
     override val checkIn = "Check-in"
@@ -729,10 +739,12 @@ object PolishStrings : AppStrings {
     override val themeLight = "Jasny"
     override val switchHotel = "Zmień hotel"
     override val logout = "Wyloguj"
-    override val loginSubtitle = "Wybierz konto, aby kontynuować"
-    override val loginUserLabel = "Użytkownik"
+    override val loginSubtitle = "Zaloguj się, aby kontynuować"
+    override val loginUserLabel = "Email"
     override val loginNoUsers = "Brak użytkowników"
     override val loginEnter = "Zaloguj"
+    override val loginPasswordLabel = "Hasło"
+    override val loginInvalidCredentials = "Nieprawidłowy email lub hasło"
     override fun welcomeBack(name: String) = "Witaj, $name"
     override val selectHotelToManage = "Wybierz hotel do zarządzania"
     override val noHotelsAssigned = "Brak hoteli przypisanych do Twojego konta."
@@ -853,6 +865,9 @@ object PolishStrings : AppStrings {
     override val bookingTotalLabel = "Kwota (Booking)"
     override val dowLabels = listOf("Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd")
     override val conflictError = "Podwójna rezerwacja: pokój jest już zajęty w tych datach"
+    override val viewOnlyBadge = "Tylko podgląd"
+    override val blockedActionTitle = "Dostęp tylko do podglądu"
+    override val blockedActionMsg = "Twoja rola w tym hotelu pozwala jedynie na podgląd. Nie możesz tu wprowadzać zmian."
     override fun serverError(status: Any) = "Błąd serwera: $status"
     override fun reservationDetailTitle(id: Int) = "Rezerwacja #$id"
     override val checkIn = "Zameldowanie"

@@ -3,6 +3,7 @@ package org.julsz.smnt
 import com.typesafe.config.ConfigFactory
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
+import io.ktor.server.auth.*
 import io.ktor.server.config.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
@@ -11,6 +12,7 @@ import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import org.julsz.smnt.auth.authenticateUser
 import org.julsz.smnt.db.DatabaseFactory
 import org.julsz.smnt.routes.*
 import org.slf4j.LoggerFactory
@@ -25,9 +27,13 @@ fun main() {
         .start(wait = true)
 }
 
-fun Application.module() {
-    DatabaseFactory.init(HoconApplicationConfig(ConfigFactory.load()))
+fun Application.module(dbConfig: ApplicationConfig? = null) {
+    DatabaseFactory.init(dbConfig ?: HoconApplicationConfig(ConfigFactory.load()))
+    configureApp()
+}
 
+/** Route/plugin wiring, separate from DB initialization so tests can reuse a single DB connection pool. */
+fun Application.configureApp() {
     install(ContentNegotiation) { json() }
 
     install(CallLogging) {
@@ -40,21 +46,33 @@ fun Application.module() {
         }
     }
 
+    install(Authentication) {
+        basic("auth-basic") {
+            realm = "Reserveo"
+            validate { credentials -> authenticateUser(credentials.name, credentials.password) }
+        }
+    }
+
     routing {
         get("/") { call.respondText("Ktor: ${Greeting().greet()}") }
         route("/api") {
-            hotelRoutes()
-            roomRoutes()
-            guestRoutes()
-            reservationRoutes()
-            userRoutes()
-            priceRoutes()
-            roomBlockRoutes()
-            paymentRoutes()
-            holidayRoutes()
-            tagRoutes()
-            invoiceRoutes()
-            invoiceSettingsRoutes()
+            publicUserRoutes()
+        }
+        authenticate("auth-basic") {
+            route("/api") {
+                hotelRoutes()
+                roomRoutes()
+                guestRoutes()
+                reservationRoutes()
+                userRoutes()
+                priceRoutes()
+                roomBlockRoutes()
+                paymentRoutes()
+                holidayRoutes()
+                tagRoutes()
+                invoiceRoutes()
+                invoiceSettingsRoutes()
+            }
         }
     }
 }
