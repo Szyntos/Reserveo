@@ -1121,6 +1121,25 @@ private fun StatisticsSection(reservations: List<ReservationDto>, rooms: List<Ro
         reservations.filter { it.status !in setOf("cancelled", "no_show") }
     }
 
+    val kpis = remember(reservations, active, rooms, months) {
+        computeStatsKpis(reservations, active, rooms, months)
+    }
+
+    val sourceBreakdown = remember(active, months) {
+        if (months.isEmpty()) emptyList()
+        else {
+            val spanStart = LocalDate.of(months.first().year, months.first().month, 1)
+            val spanEnd   = LocalDate.of(months.last().year, months.last().month, 1).plusMonths(1)
+            active.filter {
+                val ci = LocalDate.parse(it.checkInDate)
+                !ci.isBefore(spanStart) && ci.isBefore(spanEnd)
+            }.groupingBy { it.sourceName?.takeIf { n -> n.isNotBlank() } ?: it.source }
+                .eachCount()
+                .toList()
+                .sortedByDescending { it.second }
+        }
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(s.statsTitle, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
 
@@ -1163,11 +1182,22 @@ private fun StatisticsSection(reservations: List<ReservationDto>, rooms: List<Ro
             }
         }
 
+        KpiTilesRow(kpis)
+
+        Spacer(Modifier.height(4.dp))
+
         Text(s.statsNightsTable, style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
         NightsTable(rooms = sortedRooms, months = months, reservations = active)
 
         Spacer(Modifier.height(4.dp))
+
+        if (sourceBreakdown.isNotEmpty()) {
+            Text(s.statsBySource, style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            SourceBreakdownBars(sourceBreakdown)
+            Spacer(Modifier.height(4.dp))
+        }
 
         // histogram controls
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1222,6 +1252,142 @@ private fun StatisticsSection(reservations: List<ReservationDto>, rooms: List<Ro
             selectedRoom = if (histGroup == HistGroup.OneRoom) selectedRoom else null
         )
         Spacer(Modifier.height(8.dp))
+    }
+}
+
+private data class StatsKpis(
+    val occupancyRate: Double,
+    val revenue: Double,
+    val adr: Double,
+    val revPar: Double,
+    val avgStayNights: Double,
+    val cancelRate: Double
+)
+
+private fun computeStatsKpis(
+    all: List<ReservationDto>,
+    active: List<ReservationDto>,
+    rooms: List<RoomDto>,
+    months: List<StatYM>
+): StatsKpis {
+    if (months.isEmpty() || rooms.isEmpty()) {
+        return StatsKpis(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+    }
+    val spanStart = LocalDate.of(months.first().year, months.first().month, 1)
+    val spanEnd   = LocalDate.of(months.last().year, months.last().month, 1).plusMonths(1)
+    val spanDays  = (spanEnd.toEpochDay() - spanStart.toEpochDay()).coerceAtLeast(1)
+
+    var nightsInSpan = 0L
+    var revenue = 0.0
+    var checkInsInSpan = 0
+    var nightsSumForCheckIns = 0L
+
+    active.forEach { res ->
+        val ci = LocalDate.parse(res.checkInDate)
+        val co = LocalDate.parse(res.checkOutDate)
+        val totalNights = (co.toEpochDay() - ci.toEpochDay()).coerceAtLeast(1)
+        val overlapNights = (minOf(co, spanEnd).toEpochDay() - maxOf(ci, spanStart).toEpochDay()).coerceAtLeast(0)
+        if (overlapNights > 0) {
+            nightsInSpan += overlapNights
+            val total = res.totalAmount ?: 0.0
+            revenue += total * overlapNights.toDouble() / totalNights.toDouble()
+        }
+        if (!ci.isBefore(spanStart) && ci.isBefore(spanEnd)) {
+            checkInsInSpan += 1
+            nightsSumForCheckIns += totalNights
+        }
+    }
+
+    val availableRoomNights = rooms.size.toLong() * spanDays
+    val occupancyRate = if (availableRoomNights > 0) nightsInSpan.toDouble() / availableRoomNights else 0.0
+    val adr    = if (nightsInSpan > 0) revenue / nightsInSpan else 0.0
+    val revPar = if (availableRoomNights > 0) revenue / availableRoomNights else 0.0
+    val avgStay = if (checkInsInSpan > 0) nightsSumForCheckIns.toDouble() / checkInsInSpan else 0.0
+
+    val allCheckInsInSpan = all.count {
+        val ci = LocalDate.parse(it.checkInDate)
+        !ci.isBefore(spanStart) && ci.isBefore(spanEnd)
+    }
+    val cancelledInSpan = all.count {
+        it.status in setOf("cancelled", "no_show") &&
+            LocalDate.parse(it.checkInDate).let { ci -> !ci.isBefore(spanStart) && ci.isBefore(spanEnd) }
+    }
+    val cancelRate = if (allCheckInsInSpan > 0) cancelledInSpan.toDouble() / allCheckInsInSpan else 0.0
+
+    return StatsKpis(occupancyRate, revenue, adr, revPar, avgStay, cancelRate)
+}
+
+@Composable
+private fun KpiTilesRow(kpis: StatsKpis) {
+    val s = LocalStrings.current
+    val tiles = listOf(
+        s.statsKpiOccupancy   to "${(kpis.occupancyRate * 100).roundToInt()}%",
+        s.statsKpiRevenue     to "${"%.0f".format(kpis.revenue)} PLN",
+        s.statsKpiAdr         to "${"%.0f".format(kpis.adr)} PLN",
+        s.statsKpiRevpar      to "${"%.0f".format(kpis.revPar)} PLN",
+        s.statsKpiAvgStay     to "${"%.1f".format(kpis.avgStayNights)}",
+        s.statsKpiCancelRate  to "${(kpis.cancelRate * 100).roundToInt()}%"
+    )
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        tiles.forEach { (label, value) ->
+            Column(
+                Modifier.widthIn(min = 120.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(label, style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SourceBreakdownBars(breakdown: List<Pair<String, Int>>) {
+    val primary = MaterialTheme.colorScheme.primary
+    val total = breakdown.sumOf { it.second }
+    if (total == 0) return
+    Column(
+        Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        breakdown.forEach { (name, count) ->
+            val frac = count.toFloat() / total
+            Row(
+                Modifier.fillMaxWidth().height(20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Box(Modifier.width(90.dp)) {
+                    Text(name, style = MaterialTheme.typography.labelSmall, maxLines = 1,
+                        overflow = TextOverflow.Ellipsis)
+                }
+                Box(
+                    Modifier.weight(1f).fillMaxHeight()
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
+                ) {
+                    Box(
+                        Modifier.fillMaxHeight().fillMaxWidth(frac)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(primary)
+                    )
+                }
+                Box(Modifier.width(30.dp)) {
+                    Text("$count", style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
     }
 }
 

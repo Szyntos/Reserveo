@@ -319,6 +319,13 @@ interface AppStrings {
     val statsNoData: String
     val statsNightsAxisLabel: String
     fun statsMonthsLabel(n: Int): String
+    val statsKpiOccupancy: String
+    val statsKpiRevenue: String
+    val statsKpiAdr: String
+    val statsKpiRevpar: String
+    val statsKpiAvgStay: String
+    val statsKpiCancelRate: String
+    val statsBySource: String
 
     // Dashboard — overdue panes
     val overdueCheckIns: String
@@ -651,6 +658,13 @@ object EnglishStrings : AppStrings {
     override val statsNoData            = "No data"
     override val statsNightsAxisLabel   = "nights"
     override fun statsMonthsLabel(n: Int) = "${n}M"
+    override val statsKpiOccupancy      = "Occupancy"
+    override val statsKpiRevenue        = "Revenue"
+    override val statsKpiAdr            = "ADR"
+    override val statsKpiRevpar         = "RevPAR"
+    override val statsKpiAvgStay        = "Avg. stay"
+    override val statsKpiCancelRate     = "Cancel/no-show rate"
+    override val statsBySource          = "Bookings by source"
     override val overdueCheckIns   = "Overdue Check-ins"
     override val noOverdueCheckIns = "No overdue check-ins"
     override val overdueCheckOuts   = "Overdue Check-outs"
@@ -1004,6 +1018,13 @@ object PolishStrings : AppStrings {
     override val statsNoData            = "Brak danych"
     override val statsNightsAxisLabel   = "nocy"
     override fun statsMonthsLabel(n: Int) = "${n}M"
+    override val statsKpiOccupancy      = "Obłożenie"
+    override val statsKpiRevenue        = "Przychód"
+    override val statsKpiAdr            = "ADR"
+    override val statsKpiRevpar         = "RevPAR"
+    override val statsKpiAvgStay        = "Śr. długość pobytu"
+    override val statsKpiCancelRate     = "Odwołania/no-show"
+    override val statsBySource          = "Rezerwacje wg źródła"
     override val overdueCheckIns   = "Zaległe zameldowania"
     override val noOverdueCheckIns = "Brak zaległych zameldowań"
     override val overdueCheckOuts   = "Zaległe wymeldowania"
