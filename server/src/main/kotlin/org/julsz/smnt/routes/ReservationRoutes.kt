@@ -20,8 +20,9 @@ import org.julsz.smnt.db.Payments
 import org.julsz.smnt.db.ReservationPriceAdjustments
 import org.julsz.smnt.db.ReservationPriceSegments
 import org.julsz.smnt.db.Reservations
-import org.julsz.smnt.db.RoomBlocks
 import org.julsz.smnt.db.Rooms
+import org.julsz.smnt.db.hasBlockOverlap
+import org.julsz.smnt.db.hasReservationOverlap
 import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -35,7 +36,7 @@ fun Route.reservationRoutes() {
     post("/reservations") {
         val req = call.receive<CreateReservationRequest>()
         if (!call.requireHotelManager(req.hotelId)) return@post
-        if (hasOverlap(req.roomId, req.checkInDate, req.checkOutDate)) {
+        if (hasReservationOverlap(req.roomId, req.checkInDate, req.checkOutDate)) {
             return@post call.respond(HttpStatusCode.Conflict, "Room already booked for the selected dates")
         }
         if (hasBlockOverlap(req.roomId, req.checkInDate, req.checkOutDate)) {
@@ -51,7 +52,7 @@ fun Route.reservationRoutes() {
             ?: return@put call.respond(HttpStatusCode.NotFound)
         if (!call.requireHotelManager(hotelId)) return@put
         val req = call.receive<UpdateReservationRequest>()
-        if (hasOverlap(req.roomId, req.checkInDate, req.checkOutDate, excludeId = id)) {
+        if (hasReservationOverlap(req.roomId, req.checkInDate, req.checkOutDate, excludeId = id)) {
             return@put call.respond(HttpStatusCode.Conflict, "Room already booked for the selected dates")
         }
         if (hasBlockOverlap(req.roomId, req.checkInDate, req.checkOutDate)) {
@@ -103,33 +104,6 @@ fun Route.reservationRoutes() {
 private fun reservationHotelId(reservationId: Int): Int? = transaction {
     Reservations.selectAll().where { Reservations.id eq reservationId }.firstOrNull()?.get(Reservations.hotelId)
 }
-
-// ─── Overlap guards ───────────────────────────────────────────────────────────
-
-private fun hasBlockOverlap(roomId: Int, checkIn: String, checkOut: String): Boolean =
-    transaction {
-        val cin  = LocalDate.parse(checkIn)
-        val cout = LocalDate.parse(checkOut)
-        RoomBlocks.selectAll().where {
-            (RoomBlocks.roomId eq roomId) and
-            (RoomBlocks.fromDate less cout) and
-            (RoomBlocks.toDate greater cin)
-        }.count() > 0
-    }
-
-private fun hasOverlap(roomId: Int, checkIn: String, checkOut: String, excludeId: Int? = null): Boolean =
-    transaction {
-        val cin  = LocalDate.parse(checkIn)
-        val cout = LocalDate.parse(checkOut)
-        val nonBlocking = setOf("cancelled", "no_show")
-        var query = Reservations.selectAll().where {
-            (Reservations.roomId eq roomId) and
-            (Reservations.checkInDate less cout) and
-            (Reservations.checkOutDate greater cin)
-        }
-        if (excludeId != null) query = query.andWhere { Reservations.id neq excludeId }
-        query.any { it[Reservations.status] !in nonBlocking }
-    }
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
 

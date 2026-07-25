@@ -4028,12 +4028,7 @@ private fun BlockRoomDialog(
         if (!cout.isAfter(cin)) return@remember emptyList()
         val toCheck = if (blockAllRooms) rooms else listOfNotNull(selectedRoom)
         toCheck.filter { room ->
-            reservations.any { r ->
-                r.roomId == room.id &&
-                r.status !in listOf("cancelled", "no_show") &&
-                LocalDate.parse(r.checkInDate).isBefore(cout) &&
-                LocalDate.parse(r.checkOutDate).isAfter(cin)
-            }
+            hasReservationConflict(reservations, room.id, fromDate, toDate)
         }
     }
     val hasConflict = conflictingRooms.isNotEmpty()
