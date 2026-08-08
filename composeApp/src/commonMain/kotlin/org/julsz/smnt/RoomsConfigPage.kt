@@ -25,6 +25,7 @@ import kotlinx.coroutines.launch
 
 private val ROOM_STATUSES = listOf("free", "occupied", "out_of_order")
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun RoomsConfigPage(client: HttpClient, hotel: UserHotelRoleDto, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
@@ -71,10 +72,10 @@ fun RoomsConfigPage(client: HttpClient, hotel: UserHotelRoleDto, onBack: () -> U
         }
 
         // ── Header ────────────────────────────────────────────────────────────
-        Row(
+        FlowRow(
             modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Column {
                 Text(s.roomsTitle, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)

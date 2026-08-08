@@ -128,6 +128,7 @@ fun BasePriceConfigPage(client: HttpClient, hotel: UserHotelRoleDto, onBack: () 
 
 // ─── Level 1: Room tile grid ──────────────────────────────────────────────────
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun RoomTileGrid(
     rooms: List<RoomDto>,
@@ -146,10 +147,10 @@ private fun RoomTileGrid(
             modifier = Modifier.padding(bottom = 4.dp)
         ) { Text(s.breadcrumbConfig, style = MaterialTheme.typography.labelMedium) }
 
-        Row(
+        FlowRow(
             Modifier.fillMaxWidth().padding(bottom = 20.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Column {
                 Text(s.basePriceTitle, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -221,6 +222,7 @@ private fun RoomPriceTile(room: RoomDto, ruleCount: Int, onClick: () -> Unit) {
 
 // ─── Level 2: Calendar view ───────────────────────────────────────────────────
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun RoomCalendarView(
     client: HttpClient,
@@ -255,10 +257,10 @@ private fun RoomCalendarView(
         ) { Text(s.breadcrumbBasePrice, style = MaterialTheme.typography.labelMedium) }
 
         // Header row
-        Row(
+        FlowRow(
             Modifier.fillMaxWidth().padding(bottom = 16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Column {
                 Text(s.roomLabel(room.number), style = MaterialTheme.typography.headlineSmall,
