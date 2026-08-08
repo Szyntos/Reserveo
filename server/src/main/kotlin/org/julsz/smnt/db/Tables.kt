@@ -36,7 +36,7 @@ object Rooms : Table("rooms") {
 
 object Guests : Table("guests") {
     val id          = integer("id").autoIncrement()
-    val firstName   = varchar("first_name", 100)
+    val firstName   = varchar("first_name", 100).nullable()
     val lastName    = varchar("last_name", 100)
     val countryCode = varchar("country_code", 10).nullable()
     val phoneNumber = varchar("phone_number", 50).nullable()

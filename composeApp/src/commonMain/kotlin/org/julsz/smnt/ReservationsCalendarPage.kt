@@ -73,6 +73,9 @@ private enum class ResView { Calendar, Timeline }
 private enum class TimelineScale { Center, Month, Year }
 private enum class DragMode { Reservation, External, Block }
 
+private fun GuestDto.fullName(): String =
+    listOfNotNull(firstName?.takeIf { it.isNotBlank() }, lastName).joinToString(" ")
+
 // ─── Calendar helpers (same pattern as price rules) ───────────────────────────
 
 private data class RCalDay(val date: LocalDate, val inMonth: Boolean)
@@ -1836,7 +1839,7 @@ private fun NewReservationDialog(
         .takeIf { it.size == segments.size && segments.isNotEmpty() }
         ?.sum()
     val adjustmentsSum = pendingAdjustments.sumOf { it.amount }
-    val guestReady = selectedGuest != null || (guestFirstName.isNotBlank() && guestLastName.isNotBlank())
+    val guestReady = selectedGuest != null || guestLastName.isNotBlank()
     val conflict = remember(selectedRoom?.id, checkIn, checkOut, reservations, blocks) {
         selectedRoom != null && checkIn.isNotBlank() && checkOut.isNotBlank() &&
         (hasReservationConflict(reservations, selectedRoom!!.id, checkIn, checkOut) ||
@@ -2017,7 +2020,7 @@ private fun NewReservationDialog(
                     scope.launch {
                         val guestId = selectedGuest?.id ?: run {
                             onCreateGuest(CreateGuestRequest(
-                                firstName   = guestFirstName.trim(),
+                                firstName   = guestFirstName.trim().ifBlank { null },
                                 lastName    = guestLastName.trim(),
                                 countryCode = guestCountryCode.trim().ifBlank { null },
                                 phoneNumber = guestPhoneNumber.trim().ifBlank { null }
@@ -2100,7 +2103,7 @@ private fun NewExternalReservationDialog(
         (hasReservationConflict(reservations, selectedRoom!!.id, checkIn, checkOut) ||
          hasBlockConflict(blocks, selectedRoom!!.id, checkIn, checkOut))
     }
-    val guestReady = selectedGuest != null || (guestFirstName.isNotBlank() && guestLastName.isNotBlank())
+    val guestReady = selectedGuest != null || guestLastName.isNotBlank()
     val valid = selectedRoom != null && guestReady &&
         checkIn.isNotBlank() && checkOut.isNotBlank() && adults.toDoubleOrNull() != null && !conflict
 
@@ -2209,7 +2212,7 @@ private fun NewExternalReservationDialog(
                     scope.launch {
                         val guestId = selectedGuest?.id ?: run {
                             onCreateGuest(CreateGuestRequest(
-                                firstName   = guestFirstName.trim(),
+                                firstName   = guestFirstName.trim().ifBlank { null },
                                 lastName    = guestLastName.trim(),
                                 countryCode = guestCountryCode.trim().ifBlank { null },
                                 phoneNumber = guestPhoneNumber.trim().ifBlank { null }
@@ -2325,7 +2328,7 @@ private fun ReservationEditDialog(
         (hasReservationConflict(reservations, selectedRoom!!.id, checkIn, checkOut, excludeId = existing.id) ||
          hasBlockConflict(blocks, selectedRoom!!.id, checkIn, checkOut))
     }
-    val guestReady = selectedGuest != null || (guestFirstName.isNotBlank() && guestLastName.isNotBlank())
+    val guestReady = selectedGuest != null || guestLastName.isNotBlank()
     val valid = selectedRoom != null && guestReady &&
         checkIn.isNotBlank() && checkOut.isNotBlank() && adults.toDoubleOrNull() != null && !conflict
 
@@ -2570,7 +2573,7 @@ private fun ReservationEditDialog(
                     scope.launch {
                         val guestId = selectedGuest?.id ?: run {
                             onCreateGuest(CreateGuestRequest(
-                                firstName   = guestFirstName.trim(),
+                                firstName   = guestFirstName.trim().ifBlank { null },
                                 lastName    = guestLastName.trim(),
                                 countryCode = guestCountryCode.trim().ifBlank { null },
                                 phoneNumber = guestPhoneNumber.trim().ifBlank { null }
@@ -3822,7 +3825,7 @@ private fun GuestInputSection(
         val ln = lastName.trim().lowercase()
         if (fn.isBlank() && ln.isBlank()) emptyList()
         else guests.filter { g ->
-            (fn.isEmpty() || g.firstName.lowercase().contains(fn)) &&
+            (fn.isEmpty() || g.firstName.orEmpty().lowercase().contains(fn)) &&
             (ln.isEmpty() || g.lastName.lowercase().contains(ln))
         }.take(3)
     }
@@ -3853,7 +3856,7 @@ private fun GuestInputSection(
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text(
-                                "${selectedGuest.firstName} ${selectedGuest.lastName}",
+                                selectedGuest.fullName(),
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -3955,7 +3958,7 @@ private fun GuestInputSection(
                                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
                                     Text(
-                                        "${guest.firstName} ${guest.lastName}",
+                                        guest.fullName(),
                                         style = MaterialTheme.typography.bodySmall,
                                         fontWeight = FontWeight.SemiBold,
                                         color = if (guest.blacklisted) MaterialTheme.colorScheme.onErrorContainer
@@ -4166,7 +4169,7 @@ private fun EditGuestDialog(
     onConfirm: (UpdateGuestRequest) -> Unit
 ) {
     val s = LocalStrings.current
-    var firstName   by remember(guest.id) { mutableStateOf(guest.firstName) }
+    var firstName   by remember(guest.id) { mutableStateOf(guest.firstName ?: "") }
     var lastName    by remember(guest.id) { mutableStateOf(guest.lastName) }
     var countryCode by remember(guest.id) { mutableStateOf(guest.countryCode ?: "") }
     var phoneNumber by remember(guest.id) { mutableStateOf(guest.phoneNumber ?: "") }
@@ -4176,7 +4179,7 @@ private fun EditGuestDialog(
 
     AppAlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("${guest.firstName} ${guest.lastName}") },
+        title = { Text(guest.fullName()) },
         text = {
             Column(
                 Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
@@ -4218,7 +4221,7 @@ private fun EditGuestDialog(
                 Button(
                     onClick = {
                         onConfirm(UpdateGuestRequest(
-                            firstName   = firstName.trim(),
+                            firstName   = firstName.trim().ifBlank { null },
                             lastName    = lastName.trim(),
                             countryCode = countryCode.trim().ifBlank { null },
                             phoneNumber = phoneNumber.trim().ifBlank { null },
@@ -4227,7 +4230,7 @@ private fun EditGuestDialog(
                             notes       = notes.trim().ifBlank { null }
                         ))
                     },
-                    enabled = firstName.isNotBlank() && lastName.isNotBlank(),
+                    enabled = lastName.isNotBlank(),
                     modifier = Modifier.fillMaxWidth()
                 ) { Text(s.saveGuestBtn) }
                 TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text(s.cancel) }

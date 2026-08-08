@@ -46,6 +46,21 @@ class GuestRoutesTest {
     }
 
     @Test
+    fun `create guest allows a null first name`() = testApplication {
+        application { configureApp() }
+        insertUser("user@test.local")
+        val client = jsonClient("user@test.local")
+
+        val created = client.post("/api/guests") {
+            contentType(ContentType.Application.Json)
+            setBody(CreateGuestRequest(firstName = null, lastName = "Kowalska"))
+        }.body<GuestDto>()
+
+        assertEquals(null, created.firstName)
+        assertEquals("Kowalska", created.lastName)
+    }
+
+    @Test
     fun `list guests is ordered by last name`() = testApplication {
         application { configureApp() }
         insertUser("user@test.local")

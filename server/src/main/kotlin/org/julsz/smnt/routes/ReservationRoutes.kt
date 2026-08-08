@@ -111,7 +111,7 @@ private fun queryReservations(hotelId: Int?): List<ReservationDto> = transaction
     val hotelNames  = Hotels.selectAll().associate { it[Hotels.id] to it[Hotels.name] }
     val roomNumbers = Rooms.selectAll().associate { it[Rooms.id] to it[Rooms.number] }
     val guestNames  = Guests.selectAll().associate {
-        it[Guests.id] to "${it[Guests.firstName]} ${it[Guests.lastName]}"
+        it[Guests.id] to listOfNotNull(it[Guests.firstName], it[Guests.lastName]).joinToString(" ")
     }
     val paidAmounts = Payments
         .select(Payments.reservationId, Payments.amount.sum())
@@ -164,7 +164,7 @@ private fun createReservation(req: CreateReservationRequest): ReservationDto = t
     val hotelName  = Hotels.selectAll().where { Hotels.id eq req.hotelId }.first()[Hotels.name]
     val roomNumber = Rooms.selectAll().where { Rooms.id eq req.roomId }.first()[Rooms.number]
     val guest      = Guests.selectAll().where { Guests.id eq req.guestId }.first()
-    val guestName  = "${guest[Guests.firstName]} ${guest[Guests.lastName]}"
+    val guestName  = listOfNotNull(guest[Guests.firstName], guest[Guests.lastName]).joinToString(" ")
 
     val segmentsTotal = req.priceSegments.takeIf { it.isNotEmpty() }
         ?.sumOf { seg ->
@@ -279,7 +279,7 @@ private fun updateReservation(id: Int, req: UpdateReservationRequest): Reservati
     val hotelNames  = Hotels.selectAll().associate { it[Hotels.id] to it[Hotels.name] }
     val roomNumbers = Rooms.selectAll().associate { it[Rooms.id] to it[Rooms.number] }
     val guestNames  = Guests.selectAll().associate {
-        it[Guests.id] to "${it[Guests.firstName]} ${it[Guests.lastName]}"
+        it[Guests.id] to listOfNotNull(it[Guests.firstName], it[Guests.lastName]).joinToString(" ")
     }
     val segments = ReservationPriceSegments.selectAll()
         .where { ReservationPriceSegments.reservationId eq id }

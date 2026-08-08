@@ -1,0 +1,1 @@
+ALTER TABLE guests ALTER COLUMN first_name DROP NOT NULL;

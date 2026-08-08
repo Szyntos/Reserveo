@@ -32,7 +32,7 @@ data class RoomDto(
 @Serializable
 data class GuestDto(
     val id: Int,
-    val firstName: String,
+    val firstName: String?,
     val lastName: String,
     val countryCode: String?,
     val phoneNumber: String?,
@@ -185,7 +185,7 @@ data class UpdateReservationRequest(
 
 @Serializable
 data class CreateGuestRequest(
-    val firstName: String,
+    val firstName: String? = null,
     val lastName: String,
     val countryCode: String? = null,
     val phoneNumber: String? = null,
@@ -195,7 +195,7 @@ data class CreateGuestRequest(
 
 @Serializable
 data class UpdateGuestRequest(
-    val firstName: String,
+    val firstName: String? = null,
     val lastName: String,
     val countryCode: String? = null,
     val phoneNumber: String? = null,

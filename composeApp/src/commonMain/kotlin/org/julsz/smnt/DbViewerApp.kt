@@ -254,7 +254,7 @@ private fun GuestsTab(rows: List<GuestDto>) = DataTable(
                      "Code" to 60.dp, "Phone" to 130.dp,
                      "Nationality" to 95.dp, "Blacklisted" to 85.dp),
     rows = rows
-) { g -> listOf(g.id.toString(), g.firstName, g.lastName,
+) { g -> listOf(g.id.toString(), g.firstName.d(), g.lastName,
                 g.countryCode?.let { "+$it" }.d(), g.phoneNumber.d(),
                 g.nationality.d(), if (g.blacklisted) "YES" else "no") }
 
