@@ -1867,6 +1867,7 @@ private fun NewReservationDialog(
     var adjDescInput     by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
     val s = LocalStrings.current
+    var guestCountry by remember { mutableStateOf(s.defaultCountryName) }
 
     LaunchedEffect(selectedRoom?.id) {
         selectedRoom?.let { adults = it.maxGuests.toString() }
@@ -1925,7 +1926,10 @@ private fun NewReservationDialog(
                     countryCode = guestCountryCode,
                     onCountryCodeChange = { guestCountryCode = it },
                     phoneNumber = guestPhoneNumber,
-                    onPhoneNumberChange = { guestPhoneNumber = it }
+                    onPhoneNumberChange = { guestPhoneNumber = it },
+                    country = guestCountry,
+                    onCountryChange = { guestCountry = it },
+                    countryOptions = s.countryNames
                 )
                 HorizontalDivider()
                 ResDateRangePickerFields(
@@ -2068,7 +2072,8 @@ private fun NewReservationDialog(
                                 firstName   = guestFirstName.trim().ifBlank { null },
                                 lastName    = guestLastName.trim(),
                                 countryCode = guestCountryCode.trim().ifBlank { null },
-                                phoneNumber = guestPhoneNumber.trim().ifBlank { null }
+                                phoneNumber = guestPhoneNumber.trim().ifBlank { null },
+                                nationality = guestCountry.trim().ifBlank { null }
                             ))?.id
                         } ?: return@launch
                         val builtSegments = if (segments.size == segmentPpns.size && segments.isNotEmpty()) {
@@ -2138,6 +2143,7 @@ private fun NewExternalReservationDialog(
     var selectedGuest    by remember { mutableStateOf<GuestDto?>(null) }
     val scope = rememberCoroutineScope()
     val s = LocalStrings.current
+    var guestCountry by remember { mutableStateOf(s.defaultCountryName) }
 
     LaunchedEffect(selectedRoom?.id) {
         selectedRoom?.let { adults = it.maxGuests.toString() }
@@ -2195,7 +2201,9 @@ private fun NewExternalReservationDialog(
                     firstName = guestFirstName, onFirstNameChange = { guestFirstName = it; selectedGuest = null },
                     lastName = guestLastName, onLastNameChange = { guestLastName = it; selectedGuest = null },
                     countryCode = guestCountryCode, onCountryCodeChange = { guestCountryCode = it },
-                    phoneNumber = guestPhoneNumber, onPhoneNumberChange = { guestPhoneNumber = it }
+                    phoneNumber = guestPhoneNumber, onPhoneNumberChange = { guestPhoneNumber = it },
+                    country = guestCountry, onCountryChange = { guestCountry = it },
+                    countryOptions = s.countryNames
                 )
                 HorizontalDivider()
                 ResDateRangePickerFields(
@@ -2260,7 +2268,8 @@ private fun NewExternalReservationDialog(
                                 firstName   = guestFirstName.trim().ifBlank { null },
                                 lastName    = guestLastName.trim(),
                                 countryCode = guestCountryCode.trim().ifBlank { null },
-                                phoneNumber = guestPhoneNumber.trim().ifBlank { null }
+                                phoneNumber = guestPhoneNumber.trim().ifBlank { null },
+                                nationality = guestCountry.trim().ifBlank { null }
                             ))?.id
                         } ?: return@launch
                         onConfirm(CreateReservationRequest(
@@ -2311,6 +2320,7 @@ private fun ReservationEditDialog(
     var guestLastName    by remember { mutableStateOf("") }
     var guestCountryCode by remember { mutableStateOf("") }
     var guestPhoneNumber by remember { mutableStateOf("") }
+    var guestCountry     by remember { mutableStateOf(s.defaultCountryName) }
     var roomExpanded   by remember { mutableStateOf(false) }
     var statusExpanded by remember { mutableStateOf(false) }
     var checkIn  by remember { mutableStateOf(existing.checkInDate) }
@@ -2418,7 +2428,9 @@ private fun ReservationEditDialog(
                     firstName = guestFirstName, onFirstNameChange = { guestFirstName = it; selectedGuest = null },
                     lastName = guestLastName, onLastNameChange = { guestLastName = it; selectedGuest = null },
                     countryCode = guestCountryCode, onCountryCodeChange = { guestCountryCode = it },
-                    phoneNumber = guestPhoneNumber, onPhoneNumberChange = { guestPhoneNumber = it }
+                    phoneNumber = guestPhoneNumber, onPhoneNumberChange = { guestPhoneNumber = it },
+                    country = guestCountry, onCountryChange = { guestCountry = it },
+                    countryOptions = s.countryNames
                 )
                 HorizontalDivider()
                 ReservationFormFields(
@@ -2621,7 +2633,8 @@ private fun ReservationEditDialog(
                                 firstName   = guestFirstName.trim().ifBlank { null },
                                 lastName    = guestLastName.trim(),
                                 countryCode = guestCountryCode.trim().ifBlank { null },
-                                phoneNumber = guestPhoneNumber.trim().ifBlank { null }
+                                phoneNumber = guestPhoneNumber.trim().ifBlank { null },
+                                nationality = guestCountry.trim().ifBlank { null }
                             ))?.id
                         } ?: return@launch
                         val builtSegments = if (!isExternal && segments.size == segmentPpns.size && segments.isNotEmpty()) {
@@ -3239,6 +3252,7 @@ private fun ReservationsTimelineView(
                                     }
                                 }
                             ) {
+                                val todayLineColor = MaterialTheme.colorScheme.primary
                                 Column(
                                     Modifier.width(DAY_W).fillMaxHeight()
                                         .background(when {
@@ -3248,7 +3262,12 @@ private fun ReservationsTimelineView(
                                             else      -> Color.Transparent
                                         })
                                         .drawBehind {
-                                            drawLine(divColor, Offset(size.width - 0.5f, 0f), Offset(size.width - 0.5f, size.height), strokeWidth = 1f)
+                                            if (isToday) {
+                                                drawLine(todayLineColor, Offset(0f, 0f), Offset(0f, size.height), strokeWidth = 2f)
+                                                drawLine(todayLineColor, Offset(size.width, 0f), Offset(size.width, size.height), strokeWidth = 2f)
+                                            } else {
+                                                drawLine(divColor, Offset(size.width - 0.5f, 0f), Offset(size.width - 0.5f, size.height), strokeWidth = 1f)
+                                            }
                                         }
                                         .padding(top = 5.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally
@@ -3492,15 +3511,21 @@ private fun ReservationsTimelineView(
                                         val isWeekend = day.dayOfWeek == DayOfWeek.SATURDAY || day.dayOfWeek == DayOfWeek.SUNDAY
                                         val isToday   = day == today
                                         val isHoliday = day in holidayMap
+                                        val todayLineColor = MaterialTheme.colorScheme.primary
                                         Box(Modifier.width(DAY_W).fillMaxHeight()
                                             .background(when {
-                                                isToday   -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
+                                                isToday   -> MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
                                                 isHoliday -> HOLIDAY_COLOR.copy(alpha = 0.35f)
                                                 isWeekend -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                                                 else      -> Color.Transparent
                                             })
                                             .drawBehind {
-                                                drawLine(divColor, Offset(size.width - 0.5f, 0f), Offset(size.width - 0.5f, size.height), strokeWidth = 1f)
+                                                if (isToday) {
+                                                    drawLine(todayLineColor, Offset(0f, 0f), Offset(0f, size.height), strokeWidth = 2f)
+                                                    drawLine(todayLineColor, Offset(size.width, 0f), Offset(size.width, size.height), strokeWidth = 2f)
+                                                } else {
+                                                    drawLine(divColor, Offset(size.width - 0.5f, 0f), Offset(size.width - 0.5f, size.height), strokeWidth = 1f)
+                                                }
                                             })
                                     }
                                 }
@@ -3853,6 +3878,38 @@ private fun ReservationsTimelineView(
 }
 
 
+// ─── Searchable country dropdown ──────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CountryDropdownField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    options: List<String>,
+    label: String,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val filtered = remember(value, options) {
+        if (value.isBlank()) options
+        else options.filter { it.contains(value, ignoreCase = true) }
+    }
+    ExposedDropdownMenuBox(expanded = expanded && filtered.isNotEmpty(), onExpandedChange = { expanded = it }, modifier = modifier) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = { onValueChange(it); expanded = true },
+            label = { Text(label) },
+            singleLine = true,
+            modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryEditable).fillMaxWidth()
+        )
+        ExposedDropdownMenu(expanded = expanded && filtered.isNotEmpty(), onDismissRequest = { expanded = false }) {
+            filtered.forEach { country ->
+                DropdownMenuItem(text = { Text(country) }, onClick = { onValueChange(country); expanded = false })
+            }
+        }
+    }
+}
+
 // ─── Guest input section (search existing or fill in new) ────────────────────
 
 @Composable
@@ -3863,7 +3920,9 @@ private fun GuestInputSection(
     firstName: String,    onFirstNameChange: (String) -> Unit,
     lastName: String,     onLastNameChange: (String) -> Unit,
     countryCode: String,  onCountryCodeChange: (String) -> Unit,
-    phoneNumber: String,  onPhoneNumberChange: (String) -> Unit
+    phoneNumber: String,  onPhoneNumberChange: (String) -> Unit,
+    country: String,      onCountryChange: (String) -> Unit,
+    countryOptions: List<String>
 ) {
     val suggestions = remember(firstName, lastName, guests) {
         val fn = firstName.trim().lowercase()
@@ -3968,6 +4027,11 @@ private fun GuestInputSection(
                 )
                 OutlinedTextField(phoneNumber, onPhoneNumberChange, label = { Text(s.phoneNumberLabel) }, singleLine = true, modifier = Modifier.weight(1f))
             }
+            CountryDropdownField(
+                value = country, onValueChange = onCountryChange,
+                options = countryOptions, label = s.countryLabel,
+                modifier = Modifier.fillMaxWidth()
+            )
             // Suggestions
             if (suggestions.isNotEmpty()) {
                 Text(
@@ -4242,7 +4306,11 @@ private fun EditGuestDialog(
                     )
                     OutlinedTextField(phoneNumber, { phoneNumber = it }, label = { Text(s.phoneNumberLabel) }, singleLine = true, modifier = Modifier.weight(1f))
                 }
-                OutlinedTextField(nationality, { nationality = it }, label = { Text(s.nationalityLabel) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                CountryDropdownField(
+                    value = nationality, onValueChange = { nationality = it },
+                    options = s.countryNames, label = s.countryLabel,
+                    modifier = Modifier.fillMaxWidth()
+                )
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),

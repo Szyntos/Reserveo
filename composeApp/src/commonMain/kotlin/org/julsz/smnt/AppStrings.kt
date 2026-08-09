@@ -249,8 +249,10 @@ interface AppStrings {
     val lastNameLabel: String
     val codeLabel: String
     val phoneNumberLabel: String
-    val nationalityLabel: String
+    val countryLabel: String
     val didYouMean: String
+    val countryNames: List<String>
+    val defaultCountryName: String
 
     // Timeline controls
     val scaleCenter: String
@@ -646,8 +648,10 @@ object EnglishStrings : AppStrings {
     override val lastNameLabel = "Last name *"
     override val codeLabel = "Code"
     override val phoneNumberLabel = "Phone number"
-    override val nationalityLabel = "Nationality"
+    override val countryLabel = "Country"
     override val didYouMean = "Did you mean?"
+    override val countryNames = COUNTRY_NAMES_EN
+    override val defaultCountryName = "Poland"
     override val scaleCenter = "Center"
     override val scaleMonth = "Month"
     override val scaleYear = "Year"
@@ -1049,8 +1053,10 @@ object PolishStrings : AppStrings {
     override val lastNameLabel = "Nazwisko *"
     override val codeLabel = "Kod"
     override val phoneNumberLabel = "Numer telefonu"
-    override val nationalityLabel = "Narodowość"
+    override val countryLabel = "Kraj"
     override val didYouMean = "Czy chodziło o?"
+    override val countryNames = COUNTRY_NAMES_PL
+    override val defaultCountryName = "Polska"
     override val scaleCenter = "Środek"
     override val scaleMonth = "Miesiąc"
     override val scaleYear = "Rok"

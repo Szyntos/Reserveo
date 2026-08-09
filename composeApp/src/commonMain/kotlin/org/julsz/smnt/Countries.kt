@@ -1,0 +1,68 @@
+package org.julsz.smnt
+
+// Country name lists for the searchable guest "Country" dropdown.
+// Not indexed against each other — each is independently alphabetized in its own language.
+
+val COUNTRY_NAMES_EN: List<String> = listOf(
+    "Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Argentina", "Armenia",
+    "Australia", "Austria", "Azerbaijan", "Bahamas", "Bahrain", "Bangladesh", "Barbados",
+    "Belarus", "Belgium", "Belize", "Benin", "Bhutan", "Bolivia", "Bosnia and Herzegovina",
+    "Botswana", "Brazil", "Brunei", "Bulgaria", "Burkina Faso", "Burundi", "Cambodia",
+    "Cameroon", "Canada", "Cape Verde", "Central African Republic", "Chad", "Chile", "China",
+    "Colombia", "Comoros", "Congo", "Costa Rica", "Croatia", "Cuba", "Cyprus", "Czechia",
+    "Democratic Republic of the Congo", "Denmark", "Djibouti", "Dominica", "Dominican Republic",
+    "East Timor", "Ecuador", "Egypt", "El Salvador", "Equatorial Guinea", "Eritrea", "Estonia",
+    "Eswatini", "Ethiopia", "Fiji", "Finland", "France", "Gabon", "Gambia", "Georgia",
+    "Germany", "Ghana", "Greece", "Grenada", "Guatemala", "Guinea", "Guinea-Bissau", "Guyana",
+    "Haiti", "Honduras", "Hungary", "Iceland", "India", "Indonesia", "Iran", "Iraq", "Ireland",
+    "Israel", "Italy", "Ivory Coast", "Jamaica", "Japan", "Jordan", "Kazakhstan", "Kenya",
+    "Kiribati", "Kosovo", "Kuwait", "Kyrgyzstan", "Laos", "Latvia", "Lebanon", "Lesotho",
+    "Liberia", "Libya", "Liechtenstein", "Lithuania", "Luxembourg", "Madagascar", "Malawi",
+    "Malaysia", "Maldives", "Mali", "Malta", "Marshall Islands", "Mauritania", "Mauritius",
+    "Mexico", "Micronesia", "Moldova", "Monaco", "Mongolia", "Montenegro", "Morocco",
+    "Mozambique", "Myanmar", "Namibia", "Nauru", "Nepal", "Netherlands", "New Zealand",
+    "Nicaragua", "Niger", "Nigeria", "North Korea", "North Macedonia", "Norway", "Oman",
+    "Pakistan", "Palau", "Palestine", "Panama", "Papua New Guinea", "Paraguay", "Peru",
+    "Philippines", "Poland", "Portugal", "Qatar", "Romania", "Russia", "Rwanda",
+    "Saint Kitts and Nevis", "Saint Lucia", "Saint Vincent and the Grenadines", "Samoa",
+    "San Marino", "Sao Tome and Principe", "Saudi Arabia", "Senegal", "Serbia", "Seychelles",
+    "Sierra Leone", "Singapore", "Slovakia", "Slovenia", "Solomon Islands", "Somalia",
+    "South Africa", "South Korea", "South Sudan", "Spain", "Sri Lanka", "Sudan", "Suriname",
+    "Sweden", "Switzerland", "Syria", "Taiwan", "Tajikistan", "Tanzania", "Thailand", "Togo",
+    "Tonga", "Trinidad and Tobago", "Tunisia", "Turkey", "Turkmenistan", "Tuvalu", "Uganda",
+    "Ukraine", "United Arab Emirates", "United Kingdom", "United States", "Uruguay",
+    "Uzbekistan", "Vanuatu", "Vatican City", "Venezuela", "Vietnam", "Yemen", "Zambia",
+    "Zimbabwe"
+)
+
+val COUNTRY_NAMES_PL: List<String> = listOf(
+    "Afganistan", "Albania", "Algieria", "Andora", "Angola", "Argentyna", "Armenia",
+    "Australia", "Austria", "Azerbejdżan", "Bahamy", "Bahrajn", "Bangladesz", "Barbados",
+    "Belgia", "Belize", "Benin", "Białoruś", "Boliwia", "Bośnia i Hercegowina", "Botswana",
+    "Brazylia", "Brunei", "Bułgaria", "Burkina Faso", "Burundi", "Chile", "Chiny",
+    "Chorwacja", "Cypr", "Czad", "Czarnogóra", "Czechy", "Dania", "Demokratyczna Republika Konga",
+    "Dominika", "Dominikana", "Dżibuti", "Egipt", "Ekwador", "Erytrea", "Estonia", "Eswatini",
+    "Etiopia", "Fidżi", "Filipiny", "Finlandia", "Francja", "Gabon", "Gambia", "Ghana",
+    "Grecja", "Grenada", "Gruzja", "Gujana", "Gwatemala", "Gwinea", "Gwinea Bissau",
+    "Gwinea Równikowa", "Haiti", "Hiszpania", "Holandia", "Honduras", "Indie", "Indonezja",
+    "Irak", "Iran", "Irlandia", "Islandia", "Izrael", "Jamajka", "Japonia", "Jemen",
+    "Jordania", "Kambodża", "Kamerun", "Kanada", "Katar", "Kazachstan", "Kenia", "Kirgistan",
+    "Kiribati", "Kolumbia", "Komory", "Kongo", "Korea Południowa", "Korea Północna", "Kosowo",
+    "Kostaryka", "Kuba", "Kuwejt", "Laos", "Lesotho", "Liban", "Liberia", "Libia",
+    "Liechtenstein", "Litwa", "Luksemburg", "Łotwa", "Macedonia Północna", "Madagaskar",
+    "Malawi", "Malediwy", "Malezja", "Mali", "Malta", "Maroko", "Wyspy Marshalla",
+    "Mauretania", "Mauritius", "Meksyk", "Mikronezja", "Mołdawia", "Monako", "Mongolia",
+    "Mozambik", "Mjanma", "Namibia", "Nauru", "Nepal", "Niemcy", "Niger", "Nigeria",
+    "Nikaragua", "Norwegia", "Nowa Zelandia", "Oman", "Pakistan", "Palau", "Palestyna",
+    "Panama", "Papua-Nowa Gwinea", "Paragwaj", "Peru", "Polska", "Portugalia",
+    "Republika Południowej Afryki", "Republika Środkowoafrykańska", "Rosja", "Rumunia",
+    "Rwanda", "Saint Kitts i Nevis", "Saint Lucia", "Saint Vincent i Grenadyny", "Salwador",
+    "Samoa", "San Marino", "Arabia Saudyjska", "Senegal", "Serbia", "Seszele",
+    "Sierra Leone", "Singapur", "Słowacja", "Słowenia", "Somalia", "Sri Lanka",
+    "Sudan", "Sudan Południowy", "Surinam", "Syria", "Szwajcaria", "Szwecja",
+    "Tadżykistan", "Tajlandia", "Tajwan", "Tanzania", "Timor Wschodni", "Togo", "Tonga",
+    "Trynidad i Tobago", "Tunezja", "Turcja", "Turkmenistan", "Tuvalu", "Uganda",
+    "Ukraina", "Urugwaj", "Uzbekistan", "Vanuatu", "Watykan", "Wenezuela", "Węgry",
+    "Wielka Brytania", "Wietnam", "Włochy", "Wybrzeże Kości Słoniowej", "Wyspy Salomona",
+    "Zambia", "Zimbabwe", "Zjednoczone Emiraty Arabskie", "Stany Zjednoczone"
+)
