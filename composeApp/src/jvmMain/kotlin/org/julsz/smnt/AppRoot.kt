@@ -44,7 +44,8 @@ private data class AppSettings(
     val timelineShowRoomType: Boolean = true,
     val serverMode: String = "localhost",
     val customServerUrl: String = "",
-    val savedPasswords: Map<String, String> = emptyMap()
+    val savedPasswords: Map<String, String> = emptyMap(),
+    val lastEmail: String = ""
 )
 
 private val settingsFile = File(System.getProperty("user.home"), ".reserveo_settings.properties")
@@ -65,7 +66,8 @@ private fun loadSettings(): AppSettings {
         timelineShowRoomType  = props.getProperty("timelineShowRoomType", "true").toBoolean(),
         serverMode            = props.getProperty("serverMode", "localhost"),
         customServerUrl       = props.getProperty("customServerUrl", ""),
-        savedPasswords        = decodeSavedPasswords(props.getProperty("savedPasswords", ""))
+        savedPasswords        = decodeSavedPasswords(props.getProperty("savedPasswords", "")),
+        lastEmail             = props.getProperty("lastEmail", "")
     )
 }
 
@@ -98,6 +100,7 @@ private fun saveSettings(s: AppSettings) {
         props["serverMode"]            = s.serverMode
         props["customServerUrl"]       = s.customServerUrl
         props["savedPasswords"]        = encodeSavedPasswords(s.savedPasswords)
+        props["lastEmail"]             = s.lastEmail
         settingsFile.outputStream().use { props.store(it, null) }
     } catch (_: Exception) {}
 }
@@ -197,14 +200,15 @@ fun AppRoot() {
     var serverMode            by remember { mutableStateOf(initial.serverMode) }
     var customServerUrl       by remember { mutableStateOf(initial.customServerUrl) }
     var savedPasswords        by remember { mutableStateOf(initial.savedPasswords) }
+    var lastEmail             by remember { mutableStateOf(initial.lastEmail) }
 
     LaunchedEffect(isDark, fontScale, centerDays, noShowAfterDays, autoCheckOutAfterDays, language,
                    timelineDayWidth, timelineRowHeight, timelineLabelWidth, timelineShowRoomType,
-                   serverMode, customServerUrl, savedPasswords) {
+                   serverMode, customServerUrl, savedPasswords, lastEmail) {
         BASE_URL = resolveServerUrl(serverMode, customServerUrl)
         saveSettings(AppSettings(isDark, fontScale, centerDays, noShowAfterDays, autoCheckOutAfterDays, language.name,
                                  timelineDayWidth, timelineRowHeight, timelineLabelWidth, timelineShowRoomType,
-                                 serverMode, customServerUrl, savedPasswords))
+                                 serverMode, customServerUrl, savedPasswords, lastEmail))
     }
 
     fun logout() { AuthSession.clear(); currentUser = null; selectedHotel = null }
@@ -237,7 +241,8 @@ fun AppRoot() {
                             customServerUrl        = customServerUrl,
                             onCustomServerUrlChange = { customServerUrl = it },
                             savedPasswords         = savedPasswords,
-                            onPasswordSaved        = { email, password -> savedPasswords = savedPasswords + (email to password) }
+                            onPasswordSaved        = { email, password -> savedPasswords = savedPasswords + (email to password); lastEmail = email },
+                            lastEmail              = lastEmail
                         )
                     currentUser!!.appRole == "admin" ->
                         DbViewerApp(client, onLogout = ::logout)

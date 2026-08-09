@@ -33,7 +33,8 @@ fun LoginScreen(
     customServerUrl: String = "",
     onCustomServerUrlChange: (String) -> Unit = {},
     savedPasswords: Map<String, String> = emptyMap(),
-    onPasswordSaved: (email: String, password: String) -> Unit = { _, _ -> }
+    onPasswordSaved: (email: String, password: String) -> Unit = { _, _ -> },
+    lastEmail: String = ""
 ) {
     var users           by remember { mutableStateOf<List<UserDto>>(emptyList()) }
     var selected        by remember { mutableStateOf<UserDto?>(null) }
@@ -47,7 +48,7 @@ fun LoginScreen(
     LaunchedEffect(Unit) {
         try {
             users = client.get("$BASE_URL/api/users").body()
-            selected = users.firstOrNull()
+            selected = users.firstOrNull { it.email == lastEmail } ?: users.firstOrNull()
         } catch (e: Exception) {
             error = "Could not reach server: ${e.message}"
         } finally {

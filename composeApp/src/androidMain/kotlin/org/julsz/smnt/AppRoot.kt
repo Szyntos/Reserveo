@@ -3,6 +3,7 @@ package org.julsz.smnt
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Typography
@@ -39,7 +40,8 @@ private data class AppSettings(
     val timelineShowRoomType: Boolean = true,
     val serverMode: String = "deployment",
     val customServerUrl: String = "",
-    val savedPasswords: Map<String, String> = emptyMap()
+    val savedPasswords: Map<String, String> = emptyMap(),
+    val lastEmail: String = ""
 )
 
 private fun decodeSavedPasswords(encoded: String): Map<String, String> =
@@ -73,7 +75,8 @@ private fun loadSettings(context: Context): AppSettings {
         timelineShowRoomType  = p.getBoolean("timelineShowRoomType", true),
         serverMode            = p.getString("serverMode", "deployment") ?: "deployment",
         customServerUrl       = p.getString("customServerUrl", "") ?: "",
-        savedPasswords        = decodeSavedPasswords(p.getString("savedPasswords", "") ?: "")
+        savedPasswords        = decodeSavedPasswords(p.getString("savedPasswords", "") ?: ""),
+        lastEmail             = p.getString("lastEmail", "") ?: ""
     )
 }
 
@@ -92,6 +95,7 @@ private fun saveSettings(context: Context, s: AppSettings) {
         .putString("serverMode", s.serverMode)
         .putString("customServerUrl", s.customServerUrl)
         .putString("savedPasswords", encodeSavedPasswords(s.savedPasswords))
+        .putString("lastEmail", s.lastEmail)
         .apply()
 }
 
@@ -191,14 +195,15 @@ fun AppRoot() {
     var serverMode            by remember { mutableStateOf(initial.serverMode) }
     var customServerUrl       by remember { mutableStateOf(initial.customServerUrl) }
     var savedPasswords        by remember { mutableStateOf(initial.savedPasswords) }
+    var lastEmail             by remember { mutableStateOf(initial.lastEmail) }
 
     LaunchedEffect(isDark, fontScale, centerDays, noShowAfterDays, autoCheckOutAfterDays, language,
                    timelineDayWidth, timelineRowHeight, timelineLabelWidth, timelineShowRoomType,
-                   serverMode, customServerUrl, savedPasswords) {
+                   serverMode, customServerUrl, savedPasswords, lastEmail) {
         BASE_URL = resolveServerUrl(serverMode, customServerUrl)
         saveSettings(context, AppSettings(isDark, fontScale, centerDays, noShowAfterDays, autoCheckOutAfterDays,
                                           language.name, timelineDayWidth, timelineRowHeight, timelineLabelWidth,
-                                          timelineShowRoomType, serverMode, customServerUrl, savedPasswords))
+                                          timelineShowRoomType, serverMode, customServerUrl, savedPasswords, lastEmail))
     }
 
     fun logout() { AuthSession.clear(); currentUser = null; selectedHotel = null }
@@ -212,7 +217,7 @@ fun AppRoot() {
             LocalFontScale provides fontScale,
             LocalDensity provides Density(baseDensity.density, fontScale)
         ) {
-            Surface(Modifier.fillMaxSize()) {
+            Surface(Modifier.fillMaxSize().navigationBarsPadding()) {
                 when {
                     currentUser == null ->
                         LoginScreen(
@@ -223,7 +228,8 @@ fun AppRoot() {
                             customServerUrl         = customServerUrl,
                             onCustomServerUrlChange = { customServerUrl = it },
                             savedPasswords          = savedPasswords,
-                            onPasswordSaved         = { email, password -> savedPasswords = savedPasswords + (email to password) }
+                            onPasswordSaved         = { email, password -> savedPasswords = savedPasswords + (email to password); lastEmail = email },
+                            lastEmail               = lastEmail
                         )
                     currentUser!!.appRole == "admin" ->
                         DbViewerApp(client, onLogout = ::logout)

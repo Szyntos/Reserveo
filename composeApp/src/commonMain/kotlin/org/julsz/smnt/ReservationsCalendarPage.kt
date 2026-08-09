@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalLayoutApi::class)
+@file:OptIn(ExperimentalLayoutApi::class, androidx.compose.ui.ExperimentalComposeUiApi::class)
 
 package org.julsz.smnt
 
@@ -23,6 +23,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -2866,6 +2867,8 @@ private fun ReservationsTimelineView(
     val s             = LocalStrings.current
     val scope         = rememberCoroutineScope()
     var dragState     by remember { mutableStateOf<TimelineDragState?>(null) }
+    var hoveredRoomId by remember { mutableStateOf<Int?>(null) }
+    var hoveredDayIdx by remember { mutableStateOf<Int?>(null) }
     var showOptions   by remember { mutableStateOf(false) }
     var viewportWidthPx by remember { mutableStateOf(0) }
     var halfShift     by remember { mutableStateOf(false) }
@@ -3299,6 +3302,16 @@ private fun ReservationsTimelineView(
                         }
                     }
                 }
+                // Column highlight overlay — single box, doesn't touch per-cell tooltips
+                hoveredDayIdx?.let { idx ->
+                    Box(
+                        Modifier
+                            .offset(x = DAY_W * idx)
+                            .width(DAY_W)
+                            .height(HEAD_H)
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f))
+                    )
+                }
             }
         }
         HorizontalDivider()
@@ -3323,6 +3336,10 @@ private fun ReservationsTimelineView(
                         Modifier
                             .height(rowH)
                             .fillMaxWidth()
+                            .background(
+                                if (hoveredRoomId == room.id) MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
+                                else Color.Transparent
+                            )
                             .clickable { expandedRoomId = if (expandedRoomId == room.id) null else room.id },
                         contentAlignment = Alignment.TopStart
                     ) {
@@ -3439,6 +3456,32 @@ private fun ReservationsTimelineView(
                                 Modifier
                                     .fillMaxWidth()
                                     .height(rowH)
+                                    .pointerInput(room.id, DAY_W, days.size, halfShift) {
+                                        if (IS_ANDROID) return@pointerInput
+                                        awaitPointerEventScope {
+                                            while (true) {
+                                                val event = awaitPointerEvent()
+                                                when (event.type) {
+                                                    PointerEventType.Move -> {
+                                                        val x = event.changes.first().position.x
+                                                        val raw = if (halfShift)
+                                                            ((x / DAY_W.toPx()) - 0.5f).toInt()
+                                                        else
+                                                            (x / DAY_W.toPx()).toInt()
+                                                        hoveredRoomId = room.id
+                                                        hoveredDayIdx = raw.coerceIn(0, days.size - 1)
+                                                    }
+                                                    PointerEventType.Exit -> {
+                                                        if (hoveredRoomId == room.id) {
+                                                            hoveredRoomId = null
+                                                            hoveredDayIdx = null
+                                                        }
+                                                    }
+                                                    else -> {}
+                                                }
+                                            }
+                                        }
+                                    }
                                     .pointerInput(room.id, DAY_W, days.size, halfShift, dragMode) {
                                         if (IS_ANDROID) return@pointerInput
                                         fun toIdx(x: Float): Int {
@@ -3528,6 +3571,22 @@ private fun ReservationsTimelineView(
                                                 }
                                             })
                                     }
+                                }
+                                // Column highlight overlay (hovered day, any row)
+                                if (hoveredDayIdx != null) {
+                                    Box(
+                                        Modifier
+                                            .offset(x = DAY_W * hoveredDayIdx!!)
+                                            .width(DAY_W).height(rowH)
+                                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f))
+                                    )
+                                }
+                                // Row highlight overlay
+                                if (hoveredRoomId == room.id) {
+                                    Box(
+                                        Modifier.fillMaxWidth().height(rowH)
+                                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.05f))
+                                    )
                                 }
                                 // Lane divider line when split
                                 if (showCancelled && !isExpanded) {

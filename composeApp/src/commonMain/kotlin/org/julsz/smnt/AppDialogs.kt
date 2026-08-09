@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -219,6 +220,17 @@ private fun RangeCalendarBody(
             .padding(horizontal = 24.dp, vertical = 16.dp)
             .widthIn(min = 280.dp)
     ) {
+        // Year header
+        Text(
+            text      = "${displayMonth.year}",
+            style     = MaterialTheme.typography.labelLarge,
+            modifier  = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center,
+            color     = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(Modifier.height(2.dp))
+
         // Month navigation header
         Row(
             Modifier.fillMaxWidth(),
@@ -229,8 +241,12 @@ private fun RangeCalendarBody(
                 Text("‹", style = MaterialTheme.typography.titleLarge)
             }
             Text(
-                text  = "${displayMonth.month.getDisplayName(JTextStyle.FULL, Locale.getDefault())} ${displayMonth.year}",
-                style = MaterialTheme.typography.titleMedium
+                text      = displayMonth.month.getDisplayName(JTextStyle.FULL, Locale.getDefault()),
+                style     = MaterialTheme.typography.titleMedium,
+                modifier  = Modifier.weight(1f),
+                textAlign = TextAlign.Center,
+                maxLines  = 1,
+                overflow  = TextOverflow.Ellipsis
             )
             TextButton(onClick = { onMonthChange(displayMonth.plusMonths(1)) }) {
                 Text("›", style = MaterialTheme.typography.titleLarge)
