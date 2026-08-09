@@ -68,6 +68,7 @@ fun Application.configureApp() {
                 priceRoutes()
                 roomBlockRoutes()
                 paymentRoutes()
+                channelPayoutRoutes()
                 holidayRoutes()
                 tagRoutes()
                 invoiceRoutes()

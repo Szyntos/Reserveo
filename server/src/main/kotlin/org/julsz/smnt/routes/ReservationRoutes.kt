@@ -14,6 +14,7 @@ import org.julsz.smnt.ReservationPriceAdjustmentDto
 import org.julsz.smnt.ReservationPriceSegmentDto
 import org.julsz.smnt.UpdateReservationRequest
 import org.julsz.smnt.auth.requireHotelManager
+import org.julsz.smnt.db.ChannelPayoutOverrides
 import org.julsz.smnt.db.Guests
 import org.julsz.smnt.db.Hotels
 import org.julsz.smnt.db.Payments
@@ -71,6 +72,7 @@ fun Route.reservationRoutes() {
             ReservationPriceAdjustments.deleteWhere { ReservationPriceAdjustments.reservationId eq id }
             ReservationPriceSegments.deleteWhere { ReservationPriceSegments.reservationId eq id }
             Payments.deleteWhere { Payments.reservationId eq id }
+            ChannelPayoutOverrides.deleteWhere { ChannelPayoutOverrides.reservationId eq id }
             Reservations.deleteWhere { Reservations.id eq id }
         }
         call.respond(HttpStatusCode.NoContent)

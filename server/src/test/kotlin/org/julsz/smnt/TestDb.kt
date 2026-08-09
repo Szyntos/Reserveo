@@ -37,7 +37,9 @@ object TestDb {
         truncateAll(
             InvoiceItems, Invoices, InvoiceSettings,
             Holidays,
-            ReservationPriceAdjustments, ReservationPriceSegments, Payments, Reservations,
+            ReservationPriceAdjustments, ReservationPriceSegments, Payments,
+            ChannelPayoutOverrides, Reservations,
+            ChannelPayouts,
             RoomBlocks, PriceRules,
             RoomTags, Tags, Rooms, RoomTypes,
             UserHotelRoles, Users,

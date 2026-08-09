@@ -1062,6 +1062,8 @@ private fun ReservationDetailDialog(
     var description       by remember(res.id) { mutableStateOf(res.description ?: "") }
     var editingNote       by remember(res.id) { mutableStateOf(false) }
     var reservationInvoice by remember(res.id) { mutableStateOf<InvoiceDto?>(null) }
+    var channelPayouts    by remember(res.id) { mutableStateOf<List<ChannelPayoutDto>>(emptyList()) }
+    var payoutOverrides   by remember(res.id) { mutableStateOf(PayoutOverrides.EMPTY) }
     val s = LocalStrings.current
 
     LaunchedEffect(res.id) {
@@ -1069,6 +1071,14 @@ private fun ReservationDetailDialog(
             val invoices = client.get("$BASE_URL/api/invoices?hotelId=${res.hotelId}").body<List<InvoiceDto>>()
             reservationInvoice = invoices.firstOrNull { it.reservationId == res.id }
         } catch (_: Exception) {}
+        if (PayoutAttribution.isChannelReservation(res)) {
+            try {
+                channelPayouts = client.get("$BASE_URL/api/channel-payouts?hotelId=${res.hotelId}").body()
+                payoutOverrides = PayoutOverrides.from(
+                    client.get("$BASE_URL/api/channel-payout-overrides?hotelId=${res.hotelId}").body()
+                )
+            } catch (_: Exception) {}
+        }
     }
 
     AppAlertDialog(
@@ -1154,6 +1164,74 @@ private fun ReservationDetailDialog(
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.SemiBold,
                             color = if (remaining <= 0) Color(0xFF4CAF50) else Color(0xFFF44336)
+                        )
+                    }
+                }
+
+                // Channel reservations are settled by a monthly payout, not by the guest paying
+                // us directly — the payments above are what Booking said the guest was charged.
+                if (PayoutAttribution.isChannelReservation(res)) {
+                    // Respects a manual override, so this agrees with the payouts page rather
+                    // than showing the derived month the override was created to correct.
+                    val payoutMonth = remember(res.checkOutDate, payoutOverrides) {
+                        runCatching { payoutOverrides.effectiveMonth(res) }.getOrNull()
+                    }
+                    val isExcluded = payoutOverrides.isExcluded(res)
+                    if (isExcluded) {
+                        HorizontalDivider(Modifier.padding(vertical = 2.dp))
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Text(s.payoutSettledByMonth, style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.width(72.dp))
+                            Text(
+                                s.payoutExcludedSection,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        payoutOverrides.forReservation(res)?.reason?.takeIf { it.isNotBlank() }?.let {
+                            Text(it, style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                        }
+                    } else if (payoutMonth != null) {
+                        val payout = channelPayouts.firstOrNull {
+                            it.year == payoutMonth.year && it.month == payoutMonth.monthValue
+                        }
+                        val monthLabel = remember(payoutMonth, s.locale) {
+                            java.time.Month.of(payoutMonth.monthValue)
+                                .getDisplayName(java.time.format.TextStyle.FULL, s.locale)
+                                .replaceFirstChar { it.uppercase(s.locale) } + " ${payoutMonth.year}"
+                        }
+                        HorizontalDivider(Modifier.padding(vertical = 2.dp))
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Text(s.payoutSettledByMonth, style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.width(72.dp))
+                            Text(
+                                monthLabel,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                if (payout != null) "· ${s.payoutSettled}" else "· ${s.payoutNotSettled}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (payout != null) Color(0xFF4CAF50)
+                                        else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        // The derived Thursday date only explains the month when the month is
+                        // actually derived — showing it for a manual override would contradict
+                        // the month above it.
+                        Text(
+                            if (payoutOverrides.isOverridden(res)) s.payoutOverridden
+                            else s.payoutPaidOn(
+                                PayoutAttribution.payoutDate(LocalDate.parse(res.checkOutDate)).toString()
+                            ),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )
                     }
                 }

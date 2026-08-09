@@ -127,8 +127,23 @@ compose.desktop {
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "org.julsz.smnt"
+            packageName = "Reserveo"
             packageVersion = "1.0.0"
+            description = "Reserveo — hotel management system"
+            vendor = "julsz"
+
+            windows {
+                menuGroup = "Reserveo"
+                shortcut = true
+                // Fixed identity so future versions upgrade the same install
+                upgradeUuid = "0f3d8a5e-9c41-4a2b-b7e6-5d1c8a0b3f74"
+            }
+            linux {
+                packageName = "reserveo"
+            }
+            macOS {
+                bundleID = "org.julsz.smnt"
+            }
         }
     }
 }

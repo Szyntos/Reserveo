@@ -277,6 +277,59 @@ data class CreatePaymentRequest(
     val receiptNumber: String? = null
 )
 
+// ─── Channel payouts (Booking.com monthly transfers) ──────────────────────────
+
+@Serializable
+data class ChannelPayoutDto(
+    val id: Int,
+    val hotelId: Int,
+    val year: Int,
+    val month: Int,
+    val amount: Double,
+    val currency: String,
+    val notes: String? = null,
+    val createdAt: String
+)
+
+@Serializable
+data class CreateChannelPayoutRequest(
+    val hotelId: Int,
+    val year: Int,
+    val month: Int,
+    val amount: Double,
+    val currency: String = "PLN",
+    val notes: String? = null
+)
+
+@Serializable
+data class UpdateChannelPayoutRequest(
+    val amount: Double,
+    val currency: String = "PLN",
+    val notes: String? = null
+)
+
+/**
+ * A manual correction to derived payout attribution. [excluded] reservations belong to no
+ * month at all; otherwise [year]/[month] name the month that settles the reservation.
+ */
+@Serializable
+data class ChannelPayoutOverrideDto(
+    val reservationId: Int,
+    val year: Int?,
+    val month: Int?,
+    val excluded: Boolean,
+    val reason: String? = null,
+    val createdAt: String
+)
+
+@Serializable
+data class SetChannelPayoutOverrideRequest(
+    val year: Int? = null,
+    val month: Int? = null,
+    val excluded: Boolean = false,
+    val reason: String? = null
+)
+
 @Serializable
 data class UpdatePriceRuleRequest(
     val fromDate: String,

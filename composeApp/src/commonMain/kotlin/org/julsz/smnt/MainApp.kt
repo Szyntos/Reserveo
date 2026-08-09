@@ -32,7 +32,7 @@ import java.time.Month
 import java.time.format.TextStyle
 import kotlin.math.roundToInt
 
-private enum class AppScreen { Dashboard, Reservations, Statistics, Config, Invoices, Settings }
+private enum class AppScreen { Dashboard, Reservations, Statistics, Payouts, Config, Invoices, Settings }
 
 private data class StatYM(val year: Int, val month: Int) : Comparable<StatYM> {
     override fun compareTo(other: StatYM) = compareValuesBy(this, other, StatYM::year, StatYM::month)
@@ -157,6 +157,7 @@ fun MainApp(
                             readOnly        = !canManageReservations
                         )
                         AppScreen.Statistics   -> StatisticsPage(client = client, hotel = selectedHotel)
+                        AppScreen.Payouts      -> ChannelPayoutsPage(client = client, hotel = selectedHotel, canEdit = canManageReservations)
                         AppScreen.Config       -> if (isHotelAdmin) ConfigPage(client, selectedHotel)
                         AppScreen.Invoices     -> InvoicePage(
                             client             = client,
@@ -296,6 +297,7 @@ private fun AppSidebar(
                     AppScreen.Dashboard    -> s.navDashboard
                     AppScreen.Reservations -> s.navReservations
                     AppScreen.Statistics   -> s.statsTitle
+                    AppScreen.Payouts      -> s.navPayouts
                     AppScreen.Config       -> s.navConfig
                     AppScreen.Invoices     -> s.navInvoices
                     AppScreen.Settings     -> s.navSettings

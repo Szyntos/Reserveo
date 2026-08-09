@@ -217,6 +217,37 @@ CREATE TABLE payments (
     notes          TEXT
 );
 
+-- Money actually received from a booking channel, one row per hotel per month.
+-- Which reservations a payout covers is derived from check-out dates, not stored:
+-- Booking pays every Thursday, so a stay is settled by the first Thursday after
+-- check-out (28.06 → 02.07 → belongs to July). See PayoutAttribution.kt.
+CREATE TABLE channel_payouts (
+    id         SERIAL PRIMARY KEY,
+    hotel_id   INTEGER       NOT NULL REFERENCES hotels(id),
+    year       INTEGER       NOT NULL,
+    month      INTEGER       NOT NULL CHECK (month BETWEEN 1 AND 12),
+    amount     DECIMAL(10,2) NOT NULL,
+    currency   VARCHAR(10)   NOT NULL DEFAULT 'PLN',
+    notes      TEXT,
+    created_at TIMESTAMP     NOT NULL DEFAULT NOW(),
+    CONSTRAINT channel_payouts_unique_month UNIQUE (hotel_id, year, month)
+);
+
+-- Manual corrections to derived payout attribution. Sparse — only exceptions get a row.
+-- Stores a reassignment, never an add/remove pair, so a reservation cannot fall out of
+-- every month by accident; `excluded` is the one deliberate escape hatch.
+CREATE TABLE channel_payout_overrides (
+    reservation_id INTEGER   PRIMARY KEY REFERENCES reservations(id),
+    year           INTEGER,
+    month          INTEGER   CHECK (month IS NULL OR month BETWEEN 1 AND 12),
+    excluded       BOOLEAN   NOT NULL DEFAULT FALSE,
+    reason         TEXT,
+    created_at     TIMESTAMP NOT NULL DEFAULT NOW(),
+    CONSTRAINT channel_payout_overrides_target CHECK (
+        excluded OR (year IS NOT NULL AND month IS NOT NULL)
+    )
+);
+
 -- ─── Operations ───────────────────────────────────────────────────────────────
 
 CREATE TABLE room_blocks (

@@ -118,6 +118,40 @@ object Payments : Table("payments") {
     override val primaryKey = PrimaryKey(id)
 }
 
+/**
+ * Money actually received from a booking channel, one row per hotel per calendar month.
+ * Deliberately holds no link to reservations — attribution is derived from check-out
+ * dates (see `PayoutAttribution.kt` in commonMain), so it stays correct when a
+ * reservation's dates change after the payout was recorded.
+ */
+object ChannelPayouts : Table("channel_payouts") {
+    val id        = integer("id").autoIncrement()
+    val hotelId   = integer("hotel_id")
+    val year      = integer("year")
+    val month     = integer("month")
+    val amount    = decimal("amount", 10, 2)
+    val currency  = varchar("currency", 10)
+    val notes     = text("notes").nullable()
+    val createdAt = datetime("created_at")
+    override val primaryKey = PrimaryKey(id)
+}
+
+/**
+ * Manual corrections to derived payout attribution — sparse, one row per exception only.
+ *
+ * Stores a reassignment rather than an add/remove pair, so a reservation can never fall out
+ * of every month by accident. [excluded] is the single deliberate escape hatch.
+ */
+object ChannelPayoutOverrides : Table("channel_payout_overrides") {
+    val reservationId = integer("reservation_id")
+    val year          = integer("year").nullable()
+    val month         = integer("month").nullable()
+    val excluded      = bool("excluded")
+    val reason        = text("reason").nullable()
+    val createdAt     = datetime("created_at")
+    override val primaryKey = PrimaryKey(reservationId)
+}
+
 object Reservations : Table("reservations") {
     val id                  = integer("id").autoIncrement()
     val hotelId             = integer("hotel_id")

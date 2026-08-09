@@ -252,6 +252,38 @@ Table payments {
   notes          text
 }
 
+// Money actually received from a booking channel (Booking.com), one row per hotel
+// per month. Reservation membership is derived from check-out dates rather than
+// stored — Booking transfers every Thursday, so a stay is settled by the first
+// Thursday strictly after check-out. See PayoutAttribution.kt.
+Table channel_payouts {
+  id         integer       [pk, increment]
+  hotel_id   integer       [ref: > hotels.id]
+  year       integer
+  month      integer
+  amount     decimal
+  currency   varchar       [default: "PLN"]
+  notes      text
+  created_at timestamp
+
+  indexes {
+    (hotel_id, year, month) [unique]
+  }
+}
+
+// Manual corrections to derived payout attribution. Sparse — only exceptions get a row,
+// so untouched reservations stay derived and re-attribute themselves on date changes.
+// Holds a reassignment, never an add/remove pair; `excluded` is the one way out of the
+// partition and is always a deliberate, auditable choice.
+Table channel_payout_overrides {
+  reservation_id integer   [pk, ref: > reservations.id]
+  year           integer   [null]
+  month          integer   [null]
+  excluded       boolean   [default: false]
+  reason         text
+  created_at     timestamp
+}
+
 // ─── Operations ───────────────────────────────────────────
 
 Table room_blocks {

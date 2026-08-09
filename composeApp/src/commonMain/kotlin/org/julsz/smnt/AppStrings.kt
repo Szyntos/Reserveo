@@ -342,6 +342,52 @@ interface AppStrings {
     val defaultDueDaysLabel: String
     val savedLabel: String
 
+    // Channel payouts
+    val navPayouts: String
+    val payoutsTitle: String
+    val payoutsSubtitle: String
+    val payoutsEmpty: String
+    val payoutBooked: String
+    val payoutReceived: String
+    val payoutCommission: String
+    val payoutCommissionEst: String
+    val payoutNotSettled: String
+    val payoutSettled: String
+    val payoutRecordBtn: String
+    val payoutEditBtn: String
+    val payoutAddTitle: String
+    val payoutEditTitle: String
+    val payoutAmountLabel: String
+    val payoutNotesLabel: String
+    val payoutMonthLabel: String
+    val payoutYearLabel: String
+    val payoutNoReservations: String
+    val payoutEstimateDisclaimer: String
+    val payoutAnomalyWarning: String
+    val payoutAttributionNote: String
+    val payoutSettledByMonth: String
+    val payoutDeleteConfirm: String
+    val payoutOverallRate: String
+    fun payoutReservationCount(n: Int): String
+    fun payoutPaidOn(date: String): String
+    fun payoutSettledIn(month: String): String
+
+    // Attribution overrides
+    val payoutMoveTo: String
+    val payoutOverridden: String
+    val payoutDerived: String
+    val payoutResetToDerived: String
+    val payoutExcludeBtn: String
+    val payoutExcludedSection: String
+    val payoutExcludeTitle: String
+    val payoutExcludeReasonLabel: String
+    val payoutExcludeExplain: String
+    val payoutRestoreBtn: String
+    val payoutIntegrityLabel: String
+    val payoutIntegrityBroken: String
+    fun payoutIntegrityLine(total: Int, assigned: Int, excluded: Int, unaccounted: Int): String
+    fun payoutMovedFrom(month: String): String
+
     val navInvoices: String
     val invoicesTitle: String
     val newInvoiceBtn: String
@@ -675,6 +721,56 @@ object EnglishStrings : AppStrings {
     override val invoiceConfigSubtitle    = "Default seller data used when creating invoices"
     override val defaultDueDaysLabel      = "Default due days"
     override val savedLabel               = "Saved"
+    override val navPayouts               = "Payouts"
+    override val payoutsTitle             = "Channel payouts"
+    override val payoutsSubtitle          = "Money actually received from Booking.com, month by month"
+    override val payoutsEmpty             = "No channel reservations yet."
+    override val payoutBooked             = "Booked"
+    override val payoutReceived           = "Received"
+    override val payoutCommission         = "Commission"
+    override val payoutCommissionEst      = "Est. commission"
+    override val payoutNotSettled         = "Awaiting payout"
+    override val payoutSettled            = "Settled"
+    override val payoutRecordBtn          = "Record payout"
+    override val payoutEditBtn            = "Edit payout"
+    override val payoutAddTitle           = "Record monthly payout"
+    override val payoutEditTitle          = "Edit monthly payout"
+    override val payoutAmountLabel        = "Amount received"
+    override val payoutNotesLabel         = "Notes"
+    override val payoutMonthLabel         = "Month"
+    override val payoutYearLabel          = "Year"
+    override val payoutNoReservations     = "No reservations settled in this month."
+    override val payoutEstimateDisclaimer =
+        "Booking reports only a monthly total, so per-reservation commission is the month's blended rate applied pro-rata — an estimate, not a per-booking figure."
+    override val payoutAnomalyWarning     =
+        "This rate is outside the usual range — check the amount, or whether a reservation total is missing."
+    override val payoutAttributionNote    =
+        "Booking pays every Thursday, so a stay is settled by the first Thursday after check-out. A stay ending 28.06 is paid on 02.07 and counts toward July."
+    override val payoutSettledByMonth     = "Settled by"
+    override val payoutDeleteConfirm      = "Delete this payout?"
+    override val payoutOverallRate        = "Overall commission"
+    override fun payoutReservationCount(n: Int) = if (n == 1) "1 reservation" else "$n reservations"
+    override fun payoutPaidOn(date: String) = "Paid out $date"
+    override fun payoutSettledIn(month: String) = "Settled in $month"
+
+    override val payoutMoveTo              = "Move to"
+    override val payoutOverridden          = "Manually assigned"
+    override val payoutDerived             = "Auto"
+    override val payoutResetToDerived      = "Reset to automatic"
+    override val payoutExcludeBtn          = "Exclude"
+    override val payoutExcludedSection     = "Excluded from all payouts"
+    override val payoutExcludeTitle        = "Exclude from payouts"
+    override val payoutExcludeReasonLabel  = "Reason"
+    override val payoutExcludeExplain      =
+        "This reservation will count toward no month at all. Use it only when the channel genuinely never paid for it."
+    override val payoutRestoreBtn          = "Restore"
+    override val payoutIntegrityLabel      = "Accounted for"
+    override val payoutIntegrityBroken     =
+        "Some channel reservations belong to no month — this is a bug, please report it."
+    override fun payoutIntegrityLine(total: Int, assigned: Int, excluded: Int, unaccounted: Int) =
+        "$total channel reservations · $assigned assigned · $excluded excluded · $unaccounted unaccounted"
+    override fun payoutMovedFrom(month: String) = "moved from $month"
+
     override val navInvoices              = "Invoices"
     override val invoicesTitle            = "Invoices"
     override val newInvoiceBtn            = "New Invoice"
@@ -1035,6 +1131,60 @@ object PolishStrings : AppStrings {
     override val invoiceConfigSubtitle    = "Domyślne dane sprzedawcy używane przy wystawianiu faktur"
     override val defaultDueDaysLabel      = "Domyślny termin płatności (dni)"
     override val savedLabel               = "Zapisano"
+    override val navPayouts               = "Wypłaty"
+    override val payoutsTitle             = "Wypłaty z kanałów"
+    override val payoutsSubtitle          = "Pieniądze faktycznie otrzymane z Booking.com, miesiąc po miesiącu"
+    override val payoutsEmpty             = "Brak rezerwacji z kanałów."
+    override val payoutBooked             = "Zarezerwowano"
+    override val payoutReceived           = "Otrzymano"
+    override val payoutCommission         = "Prowizja"
+    override val payoutCommissionEst      = "Szac. prowizja"
+    override val payoutNotSettled         = "Oczekuje na wypłatę"
+    override val payoutSettled            = "Rozliczone"
+    override val payoutRecordBtn          = "Zapisz wypłatę"
+    override val payoutEditBtn            = "Edytuj wypłatę"
+    override val payoutAddTitle           = "Zapisz miesięczną wypłatę"
+    override val payoutEditTitle          = "Edytuj miesięczną wypłatę"
+    override val payoutAmountLabel        = "Otrzymana kwota"
+    override val payoutNotesLabel         = "Notatki"
+    override val payoutMonthLabel         = "Miesiąc"
+    override val payoutYearLabel          = "Rok"
+    override val payoutNoReservations     = "Brak rezerwacji rozliczanych w tym miesiącu."
+    override val payoutEstimateDisclaimer =
+        "Booking podaje tylko sumę miesięczną, więc prowizja na rezerwację to uśredniona stawka miesiąca rozłożona proporcjonalnie — szacunek, a nie kwota z pojedynczej rezerwacji."
+    override val payoutAnomalyWarning     =
+        "Ta stawka odbiega od normy — sprawdź kwotę albo czy w którejś rezerwacji nie brakuje ceny."
+    override val payoutAttributionNote    =
+        "Booking wypłaca w każdy czwartek, więc pobyt rozlicza pierwszy czwartek po wymeldowaniu. Pobyt kończący się 28.06 jest wypłacany 02.07 i liczy się do lipca."
+    override val payoutSettledByMonth     = "Rozliczane przez"
+    override val payoutDeleteConfirm      = "Usunąć tę wypłatę?"
+    override val payoutOverallRate        = "Prowizja łącznie"
+    override fun payoutReservationCount(n: Int) = when {
+        n == 1 -> "1 rezerwacja"
+        n % 10 in 2..4 && n % 100 !in 12..14 -> "$n rezerwacje"
+        else -> "$n rezerwacji"
+    }
+    override fun payoutPaidOn(date: String) = "Wypłacono $date"
+    override fun payoutSettledIn(month: String) = "Rozliczane w: $month"
+
+    override val payoutMoveTo              = "Przenieś do"
+    override val payoutOverridden          = "Przypisane ręcznie"
+    override val payoutDerived             = "Auto"
+    override val payoutResetToDerived      = "Przywróć automatyczne"
+    override val payoutExcludeBtn          = "Wyklucz"
+    override val payoutExcludedSection     = "Wykluczone ze wszystkich wypłat"
+    override val payoutExcludeTitle        = "Wyklucz z wypłat"
+    override val payoutExcludeReasonLabel  = "Powód"
+    override val payoutExcludeExplain      =
+        "Ta rezerwacja nie będzie liczona do żadnego miesiąca. Używaj tylko wtedy, gdy kanał faktycznie nigdy za nią nie zapłacił."
+    override val payoutRestoreBtn          = "Przywróć"
+    override val payoutIntegrityLabel      = "Rozliczenie kompletne"
+    override val payoutIntegrityBroken     =
+        "Część rezerwacji z kanałów nie należy do żadnego miesiąca — to błąd, zgłoś go."
+    override fun payoutIntegrityLine(total: Int, assigned: Int, excluded: Int, unaccounted: Int) =
+        "$total z kanałów · $assigned przypisane · $excluded wykluczone · $unaccounted nierozliczone"
+    override fun payoutMovedFrom(month: String) = "przeniesione z: $month"
+
     override val navInvoices              = "Faktury"
     override val invoicesTitle            = "Faktury"
     override val newInvoiceBtn            = "Nowa faktura"
