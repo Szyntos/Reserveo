@@ -46,13 +46,22 @@ import io.ktor.client.request.*
 import io.ktor.http.*
 import kotlinx.coroutines.launch
 import java.time.DayOfWeek
-import java.time.Instant
 import java.time.LocalDate
 import java.time.Month
-import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
 import java.time.temporal.TemporalAdjusters
 import java.util.Locale
+
+// Accepts both "150.00" and locale-formatted "150,00" (e.g. Polish keyboards/locale
+// produce a comma decimal separator, but the display defaults are formatted with it too).
+private fun String.toAmountOrNull(): Double? = trim().replace(',', '.').toDoubleOrNull()
+
+// Groups the raw digits into 3s for readability, e.g. "+48 123 456 789" instead of "+48123456789".
+private fun formatPhone(countryCode: String?, number: String?): String? {
+    val digits = number?.filter { it.isDigit() }?.ifBlank { null } ?: return null
+    val grouped = digits.chunked(3).joinToString(" ")
+    return listOfNotNull(countryCode?.let { "+$it" }, grouped).joinToString(" ")
+}
 
 // ─── Status colors ────────────────────────────────────────────────────────────
 
@@ -68,6 +77,9 @@ private val STATUS_PALETTE: Map<String, Pair<Color, Color>> = mapOf(
 private val RESERVATION_STATUSES = listOf(
     "pending", "confirmed", "checked_in", "checked_out", "cancelled", "no_show"
 )
+
+// Teal, distinct from the pale-yellow "pending" status highlight it sits next to.
+private val HOLIDAY_COLOR = Color(0xFF80CBC4)
 
 private enum class ResView { Calendar, Timeline }
 private enum class TimelineScale { Center, Month, Year }
@@ -831,7 +843,7 @@ private fun ResWeekRow(
                 val isHoliday = cal.inMonth && cal.date in holidayMap
                 Box(
                     Modifier.width(dayW).height(CELL_H)
-                        .background(if (isHoliday) Color(0xFFFFF176).copy(alpha = 0.50f) else Color.Transparent),
+                        .background(if (isHoliday) HOLIDAY_COLOR.copy(alpha = 0.50f) else Color.Transparent),
                     contentAlignment = Alignment.Center
                 ) {
                     if (isToday) {
@@ -1093,7 +1105,7 @@ private fun ReservationDetailDialog(
                 Text(res.guestName, style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold)
                 guest?.let { g ->
-                    val phone = listOfNotNull(g.countryCode?.let { "+$it" }, g.phoneNumber).joinToString(" ").ifBlank { null }
+                    val phone = formatPhone(g.countryCode, g.phoneNumber)
                     val contact = listOfNotNull(phone, g.nationality).joinToString(" · ")
                     if (contact.isNotBlank())
                         Text(contact, style = MaterialTheme.typography.bodySmall,
@@ -1560,26 +1572,7 @@ private fun ManagePaymentsDialog(
                                             try {
                                                 client.delete("$BASE_URL/api/payments/${p.id}")
                                                 reload()
-                                                // Revert to pending if down payment is no longer covered
-                                                if (res.status == "confirmed" && res.requiresDownPayment) {
-                                                    val required = res.downPaymentAmount
-                                                    val newTotalPaid = payments.sumOf { it.amount }
-                                                    if (required != null && newTotalPaid < required) {
-                                                        try {
-                                                            client.put("$BASE_URL/api/reservations/${res.id}") {
-                                                                contentType(ContentType.Application.Json)
-                                                                setBody(UpdateReservationRequest(
-                                                                    roomId = res.roomId, guestId = res.guestId,
-                                                                    checkInDate = res.checkInDate, checkOutDate = res.checkOutDate,
-                                                                    status = "pending", adults = res.adults,
-                                                                    totalAmount = res.totalAmount, description = res.description,
-                                                                    requiresDownPayment = res.requiresDownPayment,
-                                                                    downPaymentAmount = res.downPaymentAmount
-                                                                ))
-                                                            }
-                                                        } catch (_: Exception) {}
-                                                    }
-                                                }
+                                                // Server reverts to pending if down payment coverage drops below the required amount.
                                                 onPaymentsChanged()
                                             } catch (e: Exception) { snackbar.showSnackbar(s.errorMsg(e.message ?: "?")) }
                                         }
@@ -1678,24 +1671,17 @@ private fun ManagePaymentsDialog(
                 }
 
                 if (showDatePicker) {
-                    val initMillis = remember(paidAtInput) {
-                        runCatching { LocalDate.parse(paidAtInput).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() }
-                            .getOrElse { LocalDate.now().atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() }
+                    val initDate = remember(paidAtInput) {
+                        runCatching { LocalDate.parse(paidAtInput) }.getOrElse { LocalDate.now() }
                     }
-                    val dpState = rememberDatePickerState(initialSelectedDateMillis = initMillis)
-                    AppDatePickerDialog(
-                        onDismissRequest = { showDatePicker = false },
-                        confirmButton = {
-                            TextButton(onClick = {
-                                dpState.selectedDateMillis?.let { millis ->
-                                    paidAtInput = Instant.ofEpochMilli(millis)
-                                        .atZone(ZoneOffset.UTC).toLocalDate().toString()
-                                }
-                                showDatePicker = false
-                            }) { Text(s.ok) }
-                        },
-                        dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text(s.cancel) } }
-                    ) { DatePicker(state = dpState) }
+                    AppSingleDatePickerDialog(
+                        initialDate = initDate,
+                        onDismiss = { showDatePicker = false },
+                        onConfirm = { date ->
+                            paidAtInput = date.toString()
+                            showDatePicker = false
+                        }
+                    )
                 }
                 OutlinedTextField(
                     value = notesInput,
@@ -1798,7 +1784,7 @@ private fun ManagePaymentsDialog(
                     }
                 }
 
-                val canAdd = amountInput.toDoubleOrNull() != null && amountInput.toDouble() > 0
+                val canAdd = (amountInput.toAmountOrNull() ?: -1.0) > 0
                 Button(
                     onClick = {
                         scope.launch {
@@ -1807,7 +1793,7 @@ private fun ManagePaymentsDialog(
                                     contentType(ContentType.Application.Json)
                                     setBody(CreatePaymentRequest(
                                         isDeposit     = isDeposit,
-                                        amount        = amountInput.toDouble(),
+                                        amount        = amountInput.toAmountOrNull() ?: 0.0,
                                         paidAt        = paidAtInput.trim().ifBlank { null },
                                         notes         = notesInput.trim().ifBlank { null },
                                         receiptType   = receiptType.ifBlank { null },
@@ -1821,26 +1807,7 @@ private fun ManagePaymentsDialog(
                                 receiptType        = ""
                                 receiptNumberInput = ""
                                 reload()
-                                // Auto-confirm if pending down payment is now covered
-                                if (res.status == "pending" && res.requiresDownPayment) {
-                                    val required = res.downPaymentAmount
-                                    val newTotalPaid = payments.sumOf { it.amount }
-                                    if (required != null && newTotalPaid >= required) {
-                                        try {
-                                            client.put("$BASE_URL/api/reservations/${res.id}") {
-                                                contentType(ContentType.Application.Json)
-                                                setBody(UpdateReservationRequest(
-                                                    roomId = res.roomId, guestId = res.guestId,
-                                                    checkInDate = res.checkInDate, checkOutDate = res.checkOutDate,
-                                                    status = "confirmed", adults = res.adults,
-                                                    totalAmount = res.totalAmount, description = res.description,
-                                                    requiresDownPayment = res.requiresDownPayment,
-                                                    downPaymentAmount = res.downPaymentAmount
-                                                ))
-                                            }
-                                        } catch (_: Exception) {}
-                                    }
-                                }
+                                // Server auto-confirms a pending down-payment reservation once paid covers it.
                                 onPaymentsChanged()
                             } catch (e: Exception) { snackbar.showSnackbar(s.errorMsg(e.message ?: "?")) }
                         }
@@ -1913,7 +1880,7 @@ private fun NewReservationDialog(
     }
     val totalGuests = adults.toDoubleOrNull() ?: 1.0
     val computedTotal = segments.indices
-        .mapNotNull { i -> segmentPpns.getOrNull(i)?.toDoubleOrNull()?.let { it * segments[i].nights * totalGuests } }
+        .mapNotNull { i -> segmentPpns.getOrNull(i)?.toAmountOrNull()?.let { it * segments[i].nights * totalGuests } }
         .takeIf { it.size == segments.size && segments.isNotEmpty() }
         ?.sum()
     val adjustmentsSum = pendingAdjustments.sumOf { it.amount }
@@ -2040,14 +2007,14 @@ private fun NewReservationDialog(
                             )
                             Button(
                                 onClick = {
-                                    val amount = adjAmountInput.toDoubleOrNull() ?: return@Button
+                                    val amount = adjAmountInput.toAmountOrNull() ?: return@Button
                                     pendingAdjustments = pendingAdjustments + CreatePriceAdjustmentRequest(
                                         amount = amount,
                                         description = adjDescInput.trim().ifBlank { null }
                                     )
                                     adjAmountInput = ""; adjDescInput = ""
                                 },
-                                enabled = adjAmountInput.toDoubleOrNull() != null
+                                enabled = adjAmountInput.toAmountOrNull() != null
                             ) { Text(s.add) }
                         }
                         if (pendingAdjustments.isNotEmpty() && computedTotal != null) {
@@ -2106,7 +2073,7 @@ private fun NewReservationDialog(
                         } ?: return@launch
                         val builtSegments = if (segments.size == segmentPpns.size && segments.isNotEmpty()) {
                             segments.indices.mapNotNull { i ->
-                                val ppn = segmentPpns.getOrNull(i)?.toDoubleOrNull() ?: return@mapNotNull null
+                                val ppn = segmentPpns.getOrNull(i)?.toAmountOrNull() ?: return@mapNotNull null
                                 CreatePriceSegmentRequest(
                                     fromDate               = segments[i].fromDate.toString(),
                                     toDate                 = segments[i].toDate.toString(),
@@ -2125,7 +2092,7 @@ private fun NewReservationDialog(
                                 adults = adults.trim().toDoubleOrNull() ?: 1.0,
                                 totalAmount = computedTotal?.let { it + adjustmentsSum } ?: computedTotal,
                                 requiresDownPayment = requiresDownPayment,
-                                downPaymentAmount   = if (requiresDownPayment) downPaymentAmountInput.toDoubleOrNull() else null,
+                                downPaymentAmount   = if (requiresDownPayment) downPaymentAmountInput.toAmountOrNull() else null,
                                 priceSegments       = builtSegments ?: emptyList()
                             ),
                             pendingAdjustments
@@ -2258,7 +2225,7 @@ private fun NewExternalReservationDialog(
                     ExposedDropdownMenuBox(expanded = statusExpanded, onExpandedChange = { statusExpanded = it },
                         modifier = Modifier.weight(1f)) {
                         OutlinedTextField(
-                            value = status.replace('_', ' '), onValueChange = {}, readOnly = true,
+                            value = s.statusName(status), onValueChange = {}, readOnly = true,
                             label = { Text(s.statusLabel) },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(statusExpanded) },
                             modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(), singleLine = true
@@ -2304,7 +2271,7 @@ private fun NewExternalReservationDialog(
                             checkOutDate = checkOut.trim(),
                             status       = status,
                             adults       = adults.trim().toDoubleOrNull() ?: 1.0,
-                            totalAmount  = totalAmountInput.toDoubleOrNull(),
+                            totalAmount  = totalAmountInput.toAmountOrNull(),
                             source       = "external",
                             sourceName   = "Booking.com",
                             externalRef  = externalRefInput.trim().ifBlank { null }
@@ -2393,7 +2360,7 @@ private fun ReservationEditDialog(
     else
         emptyList()
     val computedTotal = segments.indices
-        .mapNotNull { i -> segmentPpns.getOrNull(i)?.toDoubleOrNull()?.let { it * segments[i].nights * totalGuests } }
+        .mapNotNull { i -> segmentPpns.getOrNull(i)?.toAmountOrNull()?.let { it * segments[i].nights * totalGuests } }
         .takeIf { it.size == segments.size && segments.isNotEmpty() }
         ?.sum()
     val adjustmentsSum = adjustments.sumOf { it.amount }
@@ -2571,7 +2538,7 @@ private fun ReservationEditDialog(
                             )
                             Button(
                                 onClick = {
-                                    val amount = adjAmountInput.toDoubleOrNull() ?: return@Button
+                                    val amount = adjAmountInput.toAmountOrNull() ?: return@Button
                                     scope.launch {
                                         try {
                                             val created: ReservationPriceAdjustmentDto = client.post("$BASE_URL/api/reservations/${existing.id}/price-adjustments") {
@@ -2584,7 +2551,7 @@ private fun ReservationEditDialog(
                                         } catch (e: Exception) { snackbar.showSnackbar(s.errorMsg(e.message ?: "?")) }
                                     }
                                 },
-                                enabled = adjAmountInput.toDoubleOrNull() != null
+                                enabled = adjAmountInput.toAmountOrNull() != null
                             ) { Text(s.add) }
                         }
                         // Totals summary
@@ -2659,7 +2626,7 @@ private fun ReservationEditDialog(
                         } ?: return@launch
                         val builtSegments = if (!isExternal && segments.size == segmentPpns.size && segments.isNotEmpty()) {
                             segments.indices.mapNotNull { i ->
-                                val ppn = segmentPpns.getOrNull(i)?.toDoubleOrNull() ?: return@mapNotNull null
+                                val ppn = segmentPpns.getOrNull(i)?.toAmountOrNull() ?: return@mapNotNull null
                                 val ruleId = if (useBaked) existing.priceSegments.getOrNull(i)?.priceRuleId
                                              else segments[i].rule?.id
                                 CreatePriceSegmentRequest(
@@ -2676,10 +2643,10 @@ private fun ReservationEditDialog(
                             roomId = selectedRoom!!.id, guestId = guestId,
                             checkInDate = checkIn.trim(), checkOutDate = checkOut.trim(), status = status,
                             adults = adults.trim().toDoubleOrNull() ?: 1.0,
-                            totalAmount = if (isExternal) externalTotalInput.toDoubleOrNull() else effectiveTotal,
+                            totalAmount = if (isExternal) externalTotalInput.toAmountOrNull() else effectiveTotal,
                             description = existing.description,
                             requiresDownPayment = if (isExternal) false else requiresDownPayment,
-                            downPaymentAmount   = if (isExternal) null else if (requiresDownPayment) downPaymentAmountInput.toDoubleOrNull() else null,
+                            downPaymentAmount   = if (isExternal) null else if (requiresDownPayment) downPaymentAmountInput.toAmountOrNull() else null,
                             priceSegments       = if (isExternal) emptyList() else (builtSegments ?: emptyList()),
                             externalRef         = if (isExternal) externalRefInput.trim().ifBlank { null } else null
                         ))
@@ -2737,7 +2704,7 @@ private fun ReservationFormFields(
     OutlinedTextField(adults, onAdultsChange, label = { Text(s.adultsLabel) }, singleLine = true, modifier = Modifier.fillMaxWidth())
     ExposedDropdownMenuBox(expanded = statusExpanded, onExpandedChange = onStatusExpandChange) {
         OutlinedTextField(
-            value = status.replace('_', ' '), onValueChange = {}, readOnly = true, label = { Text(s.statusLabel) },
+            value = s.statusName(status), onValueChange = {}, readOnly = true, label = { Text(s.statusLabel) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(statusExpanded) },
             modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(), singleLine = true
         )
@@ -2764,7 +2731,7 @@ private fun PriceBreakdownSection(
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         segments.forEachIndexed { i, seg ->
             val ppn      = segmentPpns.getOrElse(i) { "" }
-            val ppnValue = ppn.toDoubleOrNull()
+            val ppnValue = ppn.toAmountOrNull()
             val subtotal = if (ppnValue != null) ppnValue * seg.nights * totalGuests else null
             val bakedPpn = bakedPpns.getOrNull(i)
             val rulePpn  = seg.rule?.pricePerPersonPerNight
@@ -2837,7 +2804,7 @@ private fun PriceBreakdownSection(
         }
 
         val grandTotal = segments.indices
-            .mapNotNull { i -> segmentPpns.getOrNull(i)?.toDoubleOrNull()?.let { it * segments[i].nights * totalGuests } }
+            .mapNotNull { i -> segmentPpns.getOrNull(i)?.toAmountOrNull()?.let { it * segments[i].nights * totalGuests } }
             .takeIf { it.size == segments.size }
             ?.sum()
         if (grandTotal != null && segments.size > 1) {
@@ -3276,7 +3243,7 @@ private fun ReservationsTimelineView(
                                     Modifier.width(DAY_W).fillMaxHeight()
                                         .background(when {
                                             isToday   -> MaterialTheme.colorScheme.primaryContainer
-                                            isHoliday -> Color(0xFFFFF176).copy(alpha = 0.50f)
+                                            isHoliday -> HOLIDAY_COLOR.copy(alpha = 0.50f)
                                             isWeekend -> MaterialTheme.colorScheme.surfaceVariant
                                             else      -> Color.Transparent
                                         })
@@ -3528,7 +3495,7 @@ private fun ReservationsTimelineView(
                                         Box(Modifier.width(DAY_W).fillMaxHeight()
                                             .background(when {
                                                 isToday   -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
-                                                isHoliday -> Color(0xFFFFF176).copy(alpha = 0.35f)
+                                                isHoliday -> HOLIDAY_COLOR.copy(alpha = 0.35f)
                                                 isWeekend -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                                                 else      -> Color.Transparent
                                             })
@@ -3951,7 +3918,7 @@ private fun GuestInputSection(
                                 )
                             }
                         }
-                        val phone = listOfNotNull(selectedGuest.countryCode?.let { "+$it" }, selectedGuest.phoneNumber).joinToString(" ").ifBlank { null }
+                        val phone = formatPhone(selectedGuest.countryCode, selectedGuest.phoneNumber)
                         val detail = listOfNotNull(phone, selectedGuest.nationality).joinToString(" · ")
                         if (detail.isNotBlank()) Text(
                             detail,
@@ -4054,7 +4021,7 @@ private fun GuestInputSection(
                                         )
                                     }
                                 }
-                                val gPhone = listOfNotNull(guest.countryCode?.let { "+$it" }, guest.phoneNumber).joinToString(" ").ifBlank { null }
+                                val gPhone = formatPhone(guest.countryCode, guest.phoneNumber)
                                 val detail = listOfNotNull(gPhone, guest.nationality).joinToString(" · ")
                                 if (detail.isNotBlank()) Text(
                                     detail,

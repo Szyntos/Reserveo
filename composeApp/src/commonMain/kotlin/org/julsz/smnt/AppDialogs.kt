@@ -95,38 +95,6 @@ fun AppAlertDialog(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun AppDatePickerDialog(
-    onDismissRequest: () -> Unit,
-    confirmButton: @Composable () -> Unit,
-    modifier: Modifier = Modifier,
-    dismissButton: (@Composable () -> Unit)? = null,
-    shape: Shape = AlertDialogDefaults.shape,
-    tonalElevation: Dp = AlertDialogDefaults.TonalElevation,
-    colors: androidx.compose.material3.DatePickerColors = androidx.compose.material3.DatePickerDefaults.colors(),
-    properties: DialogProperties = DialogProperties(usePlatformDefaultWidth = false),
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    val fontScale = LocalFontScale.current
-    DatePickerDialog(
-        onDismissRequest = onDismissRequest,
-        confirmButton    = { ScaledSlot(fontScale) { confirmButton() } },
-        modifier         = modifier,
-        dismissButton    = dismissButton?.let { d -> { ScaledSlot(fontScale) { d() } } },
-        shape            = shape,
-        tonalElevation   = tonalElevation,
-        colors           = colors,
-        properties       = properties,
-    ) {
-        val columnScope = this
-        val density = LocalDensity.current
-        CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
-            columnScope.content()
-        }
-    }
-}
-
 // ─── Single-month range picker dialog ────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -186,6 +154,44 @@ fun AppRangePickerDialog(
                         else -> pendingEnd = date
                     }
                 }
+            )
+        }
+    }
+}
+
+// Single-date variant of AppRangePickerDialog, reusing the same Monday-first grid
+// instead of the platform DatePicker (whose week start follows the device/JVM locale,
+// which can drift from the app's own Monday-first calendars).
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AppSingleDatePickerDialog(
+    initialDate: LocalDate,
+    onDismiss: () -> Unit,
+    onConfirm: (LocalDate) -> Unit
+) {
+    val fontScale = LocalFontScale.current
+    val density   = LocalDensity.current
+    var pending      by remember { mutableStateOf(initialDate) }
+    var displayMonth by remember { mutableStateOf(YearMonth.from(initialDate)) }
+    val s = LocalStrings.current
+
+    DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            ScaledSlot(fontScale) {
+                TextButton(onClick = { onConfirm(pending) }) { Text(s.ok) }
+            }
+        },
+        dismissButton = { ScaledSlot(fontScale) { TextButton(onClick = onDismiss) { Text(s.cancel) } } },
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
+            RangeCalendarBody(
+                displayMonth  = displayMonth,
+                selectedStart = pending,
+                selectedEnd   = pending,
+                onMonthChange = { displayMonth = it },
+                onDayClick    = { date -> pending = date }
             )
         }
     }

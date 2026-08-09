@@ -86,4 +86,67 @@ class PaymentRoutesTest {
         val payments = client.get("/api/reservations/${reservation.id}/payments").body<List<PaymentDto>>()
         assertEquals(0, payments.size)
     }
+
+    @Test
+    fun `reservation auto-confirms once paid covers the down payment`() = testApplication {
+        application { configureApp() }
+        insertUser("user@test.local")
+        val hotelId = insertHotel()
+        val roomId = insertRoom(hotelId)
+        val guestId = insertGuest()
+        val client = jsonClient("user@test.local")
+        val reservation: ReservationDto = client.post("/api/reservations") {
+            contentType(ContentType.Application.Json)
+            setBody(CreateReservationRequest(
+                hotelId = hotelId, roomId = roomId, guestId = guestId,
+                checkInDate = "2026-05-01", checkOutDate = "2026-05-04",
+                status = "pending", totalAmount = 300.0,
+                requiresDownPayment = true, downPaymentAmount = 100.0
+            ))
+        }.body()
+
+        client.post("/api/reservations/${reservation.id}/payments") {
+            contentType(ContentType.Application.Json)
+            setBody(CreatePaymentRequest(amount = 60.0, isDeposit = true))
+        }
+        val stillPending = client.get("/api/reservations?hotelId=$hotelId").body<List<ReservationDto>>().first()
+        assertEquals("pending", stillPending.status)
+
+        client.post("/api/reservations/${reservation.id}/payments") {
+            contentType(ContentType.Application.Json)
+            setBody(CreatePaymentRequest(amount = 40.0, isDeposit = true))
+        }
+        val confirmed = client.get("/api/reservations?hotelId=$hotelId").body<List<ReservationDto>>().first()
+        assertEquals("confirmed", confirmed.status)
+    }
+
+    @Test
+    fun `reservation reverts to pending when a payment is deleted below the down payment`() = testApplication {
+        application { configureApp() }
+        insertUser("user@test.local")
+        val hotelId = insertHotel()
+        val roomId = insertRoom(hotelId)
+        val guestId = insertGuest()
+        val client = jsonClient("user@test.local")
+        val reservation: ReservationDto = client.post("/api/reservations") {
+            contentType(ContentType.Application.Json)
+            setBody(CreateReservationRequest(
+                hotelId = hotelId, roomId = roomId, guestId = guestId,
+                checkInDate = "2026-05-01", checkOutDate = "2026-05-04",
+                status = "pending", totalAmount = 300.0,
+                requiresDownPayment = true, downPaymentAmount = 100.0
+            ))
+        }.body()
+
+        val payment = client.post("/api/reservations/${reservation.id}/payments") {
+            contentType(ContentType.Application.Json)
+            setBody(CreatePaymentRequest(amount = 100.0, isDeposit = true))
+        }.body<PaymentDto>()
+        val confirmed = client.get("/api/reservations?hotelId=$hotelId").body<List<ReservationDto>>().first()
+        assertEquals("confirmed", confirmed.status)
+
+        client.delete("/api/payments/${payment.id}")
+        val revertedToPending = client.get("/api/reservations?hotelId=$hotelId").body<List<ReservationDto>>().first()
+        assertEquals("pending", revertedToPending.status)
+    }
 }

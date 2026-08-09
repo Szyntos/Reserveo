@@ -29,7 +29,9 @@ fun Route.paymentRoutes() {
             ?: return@post call.respond(HttpStatusCode.NotFound)
         if (!call.requireHotelManager(hotelId)) return@post
         val req = call.receive<CreatePaymentRequest>()
-        call.respond(HttpStatusCode.Created, createPayment(resId, req))
+        val dto = createPayment(resId, req)
+        syncDownPaymentStatus(resId)
+        call.respond(HttpStatusCode.Created, dto)
     }
 
     delete("/payments/{id}") {
@@ -38,7 +40,9 @@ fun Route.paymentRoutes() {
         val hotelId = paymentHotelId(id)
             ?: return@delete call.respond(HttpStatusCode.NotFound)
         if (!call.requireHotelManager(hotelId)) return@delete
+        val resId = paymentReservationId(id)
         transaction { Payments.deleteWhere { Payments.id eq id } }
+        if (resId != null) syncDownPaymentStatus(resId)
         call.respond(HttpStatusCode.NoContent)
     }
 }
@@ -51,6 +55,36 @@ private fun paymentHotelId(paymentId: Int): Int? = transaction {
     val resId = Payments.selectAll().where { Payments.id eq paymentId }.firstOrNull()?.get(Payments.reservationId)
         ?: return@transaction null
     Reservations.selectAll().where { Reservations.id eq resId }.firstOrNull()?.get(Reservations.hotelId)
+}
+
+private fun paymentReservationId(paymentId: Int): Int? = transaction {
+    Payments.selectAll().where { Payments.id eq paymentId }.firstOrNull()?.get(Payments.reservationId)
+}
+
+// Keeps a down-payment-gated reservation's status in sync with what's actually been paid:
+// pending -> confirmed once paid covers the down payment, and back to pending if a payment
+// is later removed and coverage drops below it. Never touches other statuses (checked_in etc).
+private fun syncDownPaymentStatus(reservationId: Int): Unit = transaction {
+    val res = Reservations.selectAll().where { Reservations.id eq reservationId }.firstOrNull() ?: return@transaction
+    val requiresDownPayment = res[Reservations.requiresDownPayment]
+    val downPaymentAmount   = res[Reservations.downPaymentAmount]?.toDouble()
+    val status              = res[Reservations.status]
+    if (!requiresDownPayment || downPaymentAmount == null) return@transaction
+    if (status != "pending" && status != "confirmed") return@transaction
+
+    val paid = Payments
+        .select(Payments.amount.sum())
+        .where { Payments.reservationId eq reservationId }
+        .firstOrNull()?.get(Payments.amount.sum())?.toDouble() ?: 0.0
+
+    val newStatus = when {
+        status == "pending"   && paid >= downPaymentAmount -> "confirmed"
+        status == "confirmed" && paid <  downPaymentAmount -> "pending"
+        else -> null
+    }
+    if (newStatus != null) {
+        Reservations.update({ Reservations.id eq reservationId }) { it[Reservations.status] = newStatus }
+    }
 }
 
 private fun queryPayments(reservationId: Int): List<PaymentDto> = transaction {

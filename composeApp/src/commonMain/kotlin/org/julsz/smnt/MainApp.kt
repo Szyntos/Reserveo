@@ -1677,7 +1677,7 @@ private fun SettingsPage(
             Slider(
                 value = fontScale,
                 onValueChange = onFontScaleChange,
-                valueRange = 0.75f..1.5f,
+                valueRange = 0.75f..2.5f,
                 modifier = Modifier.fillMaxWidth()
             )
             Row(
