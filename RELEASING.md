@@ -1,7 +1,11 @@
-# Releasing an Android update
+# Releasing an update
 
-The app checks GitHub Releases directly (repo is public) for updates. This is the checklist
-for cutting one.
+Both the Android and Windows desktop builds check GitHub Releases directly (repo is public)
+for updates. This is the checklist for cutting one.
+
+Desktop self-update is Windows-only for now (MSI in-place upgrade via a fixed
+`upgradeUuid`). macOS/Linux users just get pointed at the release page instead of an
+auto-install — there's no unattended-install path there without notarization/root handling.
 
 ## One-time setup: release keystore
 
@@ -32,19 +36,28 @@ build warning) so local testing keeps working — but that build can't update an
 ## Cutting a release
 
 1. Bump `RESERVEO_VERSION_CODE` and `RESERVEO_VERSION_NAME` in `gradle.properties`.
-2. `./gradlew :composeApp:assembleRelease`
-3. Tag and push — **the tag format is load-bearing**, the app parses `versionCode` straight
-   out of it:
+   `RESERVEO_VERSION_NAME` now also feeds the desktop MSI's version, which needs a
+   `major.minor.build` shape — always use 3 components (e.g. `1.1.0`, not `1.1`).
+2. Build both artifacts:
+   ```
+   ./gradlew :composeApp:assembleRelease   # Android APK
+   ./gradlew :composeApp:packageMsi        # Windows installer
+   ```
+3. Tag and push — **the tag format is load-bearing**, both clients parse `versionCode`
+   straight out of it:
    ```
    git tag v<versionCode>-<versionName>   # e.g. v2-1.1.0
    git push origin v<versionCode>-<versionName>
    ```
-4. Publish the release with the APK attached:
+4. Publish the release with both artifacts attached:
    ```
    gh release create v<versionCode>-<versionName> \
      composeApp/build/outputs/apk/release/composeApp-release.apk \
+     composeApp/build/compose/binaries/main/msi/Reserveo-<versionName>.msi \
      --title "<versionName>" --notes "<changelog>"
    ```
 
 Clients with an older `versionCode` will see this release the next time they check for
-updates (on launch, or via Settings → About → Check for updates).
+updates (on launch, or via Settings → About → Check for updates). Windows installs over
+the existing one in place (same `upgradeUuid`); if the release has no `.msi` asset attached
+(or on macOS/Linux), the desktop app falls back to just linking the release page.

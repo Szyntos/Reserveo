@@ -71,6 +71,7 @@ interface AppStrings {
     val settingsCheckForUpdates: String
     fun settingsUpdateAvailable(version: String): String
     val settingsDownloadAndInstall: String
+    val settingsViewRelease: String
     val settingsUpdateCheckFailed: String
     val settingsUpToDate: String
 
@@ -495,6 +496,7 @@ object EnglishStrings : AppStrings {
     override val settingsCheckForUpdates = "Check for updates"
     override fun settingsUpdateAvailable(version: String) = "Update available: $version"
     override val settingsDownloadAndInstall = "Download & install"
+    override val settingsViewRelease = "View release"
     override val settingsUpdateCheckFailed = "Update check failed"
     override val settingsUpToDate = "Up to date"
     override val configTitle = "Config"
@@ -895,6 +897,7 @@ object PolishStrings : AppStrings {
     override val settingsCheckForUpdates = "Sprawdź aktualizacje"
     override fun settingsUpdateAvailable(version: String) = "Dostępna aktualizacja: $version"
     override val settingsDownloadAndInstall = "Pobierz i zainstaluj"
+    override val settingsViewRelease = "Zobacz wydanie"
     override val settingsUpdateCheckFailed = "Sprawdzanie aktualizacji nie powiodło się"
     override val settingsUpToDate = "Aktualna wersja"
     override val configTitle = "Konfiguracja"

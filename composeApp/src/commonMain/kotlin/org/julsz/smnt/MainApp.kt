@@ -90,6 +90,7 @@ fun MainApp(
     updateChecking: Boolean = false,
     updateError: String? = null,
     updateDownloadProgress: Float? = null,
+    updateManualOnly: Boolean = false,
     onCheckForUpdate: () -> Unit = {},
     onDownloadAndInstallUpdate: () -> Unit = {}
 ) {
@@ -198,7 +199,7 @@ fun MainApp(
                             customServerUrl = customServerUrl, onCustomServerUrlChange = onCustomServerUrlChange,
                             appVersionName = appVersionName, appVersionCode = appVersionCode,
                             updateInfo = updateInfo, updateChecking = updateChecking, updateError = updateError,
-                            updateDownloadProgress = updateDownloadProgress,
+                            updateDownloadProgress = updateDownloadProgress, updateManualOnly = updateManualOnly,
                             onCheckForUpdate = onCheckForUpdate, onDownloadAndInstallUpdate = onDownloadAndInstallUpdate
                         )
                     }
@@ -1671,6 +1672,7 @@ private fun SettingsPage(
     updateChecking: Boolean = false,
     updateError: String? = null,
     updateDownloadProgress: Float? = null,
+    updateManualOnly: Boolean = false,
     onCheckForUpdate: () -> Unit = {},
     onDownloadAndInstallUpdate: () -> Unit = {}
 ) {
@@ -1946,7 +1948,7 @@ private fun SettingsPage(
                             )
                         }
                         Button(onClick = onDownloadAndInstallUpdate) {
-                            Text(s.settingsDownloadAndInstall)
+                            Text(if (updateManualOnly) s.settingsViewRelease else s.settingsDownloadAndInstall)
                         }
                     }
                     else -> {

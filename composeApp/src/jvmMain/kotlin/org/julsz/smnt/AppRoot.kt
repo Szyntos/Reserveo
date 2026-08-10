@@ -26,6 +26,7 @@ import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.coroutines.launch
 import java.io.File
 import java.util.Properties
 
@@ -47,6 +48,17 @@ private data class AppSettings(
     val savedPasswords: Map<String, String> = emptyMap(),
     val lastEmail: String = ""
 )
+
+private data class JvmAppVersion(val code: Int, val name: String)
+
+private fun loadJvmAppVersion(): JvmAppVersion? = try {
+    Thread.currentThread().contextClassLoader.getResourceAsStream("version.properties")?.use { stream ->
+        val props = Properties().apply { load(stream) }
+        val code = props.getProperty("code")?.toIntOrNull()
+        val name = props.getProperty("name")
+        if (code != null && name != null) JvmAppVersion(code, name) else null
+    }
+} catch (_: Exception) { null }
 
 private val settingsFile = File(System.getProperty("user.home"), ".reserveo_settings.properties")
 
@@ -177,6 +189,54 @@ fun AppRoot() {
     }
     DisposableEffect(Unit) { onDispose { client.close() } }
 
+    val githubClient = remember { createGithubHttpClient() }
+    DisposableEffect(Unit) { onDispose { githubClient.close() } }
+    val coroutineScope = rememberCoroutineScope()
+
+    val appVersion = remember { loadJvmAppVersion() }
+    var updateChecking        by remember { mutableStateOf(false) }
+    var updateInfo            by remember { mutableStateOf<AppUpdateInfo?>(null) }
+    var updateError           by remember { mutableStateOf<String?>(null) }
+    var updateDownloadProgress by remember { mutableStateOf<Float?>(null) }
+    var updateManualOnly      by remember { mutableStateOf(false) }
+
+    fun checkForUpdateNow() {
+        val version = appVersion ?: return
+        updateChecking = true
+        updateError = null
+        coroutineScope.launch {
+            when (val result = checkForUpdate(githubClient, version.code)) {
+                is UpdateCheckResult.UpdateAvailable -> {
+                    updateInfo = result.info
+                    updateManualOnly = result.manualOnly
+                }
+                is UpdateCheckResult.UpToDate -> updateInfo = null
+                is UpdateCheckResult.Error -> updateError = result.message
+            }
+            updateChecking = false
+        }
+    }
+
+    fun downloadAndInstallUpdate() {
+        val info = updateInfo ?: return
+        if (updateManualOnly) {
+            openReleasePage(info.downloadUrl)
+            return
+        }
+        coroutineScope.launch {
+            updateDownloadProgress = 0f
+            try {
+                val msiFile = downloadUpdate(githubClient, info) { updateDownloadProgress = it }
+                installUpdate(msiFile)
+            } catch (e: Exception) {
+                updateDownloadProgress = null
+                updateError = e.message ?: "Download failed"
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) { checkForUpdateNow() }
+
     var currentUser   by remember { mutableStateOf<UserDto?>(null) }
     var selectedHotel by remember { mutableStateOf<UserHotelRoleDto?>(null) }
 
@@ -283,7 +343,16 @@ fun AppRoot() {
                             serverMode                   = serverMode,
                             onServerModeChange           = { serverMode = it },
                             customServerUrl              = customServerUrl,
-                            onCustomServerUrlChange      = { customServerUrl = it }
+                            onCustomServerUrlChange      = { customServerUrl = it },
+                            appVersionName               = appVersion?.name,
+                            appVersionCode               = appVersion?.code,
+                            updateInfo                   = updateInfo,
+                            updateChecking               = updateChecking,
+                            updateError                  = updateError,
+                            updateDownloadProgress       = updateDownloadProgress,
+                            updateManualOnly             = updateManualOnly,
+                            onCheckForUpdate             = ::checkForUpdateNow,
+                            onDownloadAndInstallUpdate   = ::downloadAndInstallUpdate
                         )
                 }
             }
