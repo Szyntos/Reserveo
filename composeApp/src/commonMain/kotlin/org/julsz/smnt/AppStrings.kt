@@ -66,6 +66,13 @@ interface AppStrings {
     val settingsServerDeployment: String
     val settingsServerCustom: String
     val settingsServerCustomUrl: String
+    val settingsAbout: String
+    val settingsVersion: String
+    val settingsCheckForUpdates: String
+    fun settingsUpdateAvailable(version: String): String
+    val settingsDownloadAndInstall: String
+    val settingsUpdateCheckFailed: String
+    val settingsUpToDate: String
 
     // Config hub
     val configTitle: String
@@ -483,6 +490,13 @@ object EnglishStrings : AppStrings {
     override val settingsServerDeployment = "Deployment"
     override val settingsServerCustom = "Custom"
     override val settingsServerCustomUrl = "Server URL"
+    override val settingsAbout = "About"
+    override val settingsVersion = "Version"
+    override val settingsCheckForUpdates = "Check for updates"
+    override fun settingsUpdateAvailable(version: String) = "Update available: $version"
+    override val settingsDownloadAndInstall = "Download & install"
+    override val settingsUpdateCheckFailed = "Update check failed"
+    override val settingsUpToDate = "Up to date"
     override val configTitle = "Config"
     override val configRoomsTitle = "Rooms"
     override val configRoomsDesc = "Manage rooms, statuses and availability"
@@ -876,6 +890,13 @@ object PolishStrings : AppStrings {
     override val settingsServerDeployment = "Wdrożenie"
     override val settingsServerCustom = "Własny"
     override val settingsServerCustomUrl = "URL serwera"
+    override val settingsAbout = "O aplikacji"
+    override val settingsVersion = "Wersja"
+    override val settingsCheckForUpdates = "Sprawdź aktualizacje"
+    override fun settingsUpdateAvailable(version: String) = "Dostępna aktualizacja: $version"
+    override val settingsDownloadAndInstall = "Pobierz i zainstaluj"
+    override val settingsUpdateCheckFailed = "Sprawdzanie aktualizacji nie powiodło się"
+    override val settingsUpToDate = "Aktualna wersja"
     override val configTitle = "Konfiguracja"
     override val configRoomsTitle = "Pokoje"
     override val configRoomsDesc = "Zarządzaj pokojami, statusami i dostępnością"

@@ -1,5 +1,6 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -49,6 +50,7 @@ kotlin {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.androidx.activity.compose)
             implementation(libs.ktor.client.cio.mp)
+            implementation(libs.androidx.core.ktx)
         }
         commonMain.dependencies {
             implementation(libs.compose.runtime)
@@ -78,6 +80,16 @@ kotlin {
     }
 }
 
+// Release signing key — never committed. See RELEASING.md for how to generate one.
+// Falls back to the debug keystore (with a warning) when absent, so local
+// `assembleRelease` builds still work without extra setup.
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        keystorePropertiesFile.inputStream().use { load(it) }
+    }
+}
+
 android {
     namespace = "org.julsz.smnt"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
@@ -86,22 +98,38 @@ android {
         applicationId = "org.julsz.smnt"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = (project.findProperty("RESERVEO_VERSION_CODE") as String).toInt()
+        versionName = project.findProperty("RESERVEO_VERSION_NAME") as String
     }
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+    signingConfigs {
+        if (keystorePropertiesFile.exists()) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
     buildTypes {
         getByName("release") {
             isMinifyEnabled = false
-            // Personal/family use only — signed with the auto-generated debug
-            // keystore so the APK installs without extra keystore setup.
-            // Not suitable for Play Store distribution.
-            signingConfig = signingConfigs.getByName("debug")
+            if (keystorePropertiesFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            } else {
+                logger.warn("keystore.properties not found — release build signed with the debug keystore. " +
+                    "In-place updates over a properly-signed install will NOT work. See RELEASING.md.")
+                signingConfig = signingConfigs.getByName("debug")
+            }
         }
+    }
+    buildFeatures {
+        buildConfig = true
     }
     compileOptions {
         isCoreLibraryDesugaringEnabled = true

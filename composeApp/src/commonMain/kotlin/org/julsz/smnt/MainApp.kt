@@ -83,7 +83,15 @@ fun MainApp(
     serverMode: String = "localhost",
     onServerModeChange: (String) -> Unit = {},
     customServerUrl: String = "",
-    onCustomServerUrlChange: (String) -> Unit = {}
+    onCustomServerUrlChange: (String) -> Unit = {},
+    appVersionName: String? = null,
+    appVersionCode: Int? = null,
+    updateInfo: AppUpdateInfo? = null,
+    updateChecking: Boolean = false,
+    updateError: String? = null,
+    updateDownloadProgress: Float? = null,
+    onCheckForUpdate: () -> Unit = {},
+    onDownloadAndInstallUpdate: () -> Unit = {}
 ) {
     var currentScreen          by remember { mutableStateOf(AppScreen.Dashboard) }
     var invoiceForReservation  by remember { mutableStateOf<ReservationDto?>(null) }
@@ -187,7 +195,11 @@ fun MainApp(
                             timelineLabelWidth = timelineLabelWidth, onTimelineLabelWidthChange = onTimelineLabelWidthChange,
                             timelineShowRoomType = timelineShowRoomType, onTimelineShowRoomTypeChange = onTimelineShowRoomTypeChange,
                             serverMode = serverMode, onServerModeChange = onServerModeChange,
-                            customServerUrl = customServerUrl, onCustomServerUrlChange = onCustomServerUrlChange
+                            customServerUrl = customServerUrl, onCustomServerUrlChange = onCustomServerUrlChange,
+                            appVersionName = appVersionName, appVersionCode = appVersionCode,
+                            updateInfo = updateInfo, updateChecking = updateChecking, updateError = updateError,
+                            updateDownloadProgress = updateDownloadProgress,
+                            onCheckForUpdate = onCheckForUpdate, onDownloadAndInstallUpdate = onDownloadAndInstallUpdate
                         )
                     }
                 }
@@ -1652,7 +1664,15 @@ private fun SettingsPage(
     timelineLabelWidth: Float = 96f, onTimelineLabelWidthChange: (Float) -> Unit = {},
     timelineShowRoomType: Boolean = true, onTimelineShowRoomTypeChange: (Boolean) -> Unit = {},
     serverMode: String = "localhost", onServerModeChange: (String) -> Unit = {},
-    customServerUrl: String = "", onCustomServerUrlChange: (String) -> Unit = {}
+    customServerUrl: String = "", onCustomServerUrlChange: (String) -> Unit = {},
+    appVersionName: String? = null,
+    appVersionCode: Int? = null,
+    updateInfo: AppUpdateInfo? = null,
+    updateChecking: Boolean = false,
+    updateError: String? = null,
+    updateDownloadProgress: Float? = null,
+    onCheckForUpdate: () -> Unit = {},
+    onDownloadAndInstallUpdate: () -> Unit = {}
 ) {
     val s = LocalStrings.current
     val scrollState = rememberScrollState()
@@ -1879,6 +1899,75 @@ private fun SettingsPage(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+            }
+        }
+
+        if (appVersionName != null) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(s.settingsAbout, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                HorizontalDivider()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(s.settingsVersion, style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "$appVersionName ($appVersionCode)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                when {
+                    updateDownloadProgress != null ->
+                        LinearProgressIndicator(
+                            progress = { updateDownloadProgress },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    updateInfo != null -> {
+                        Text(
+                            s.settingsUpdateAvailable(updateInfo.latestVersionName),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        if (updateInfo.releaseNotes.isNotBlank()) {
+                            Text(
+                                updateInfo.releaseNotes,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Button(onClick = onDownloadAndInstallUpdate) {
+                            Text(s.settingsDownloadAndInstall)
+                        }
+                    }
+                    else -> {
+                        if (updateError != null) {
+                            Text(
+                                s.settingsUpdateCheckFailed,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        } else if (!updateChecking) {
+                            Text(
+                                s.settingsUpToDate,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        OutlinedButton(onClick = onCheckForUpdate, enabled = !updateChecking) {
+                            Text(s.settingsCheckForUpdates)
+                        }
+                    }
+                }
             }
         }
 

@@ -24,6 +24,7 @@ import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.coroutines.launch
 
 // ─── Settings persistence ─────────────────────────────────────────────────────
 
@@ -172,8 +173,49 @@ fun AppRoot() {
     }
     DisposableEffect(Unit) { onDispose { client.close() } }
 
+    val githubClient = remember { createGithubHttpClient() }
+    DisposableEffect(Unit) { onDispose { githubClient.close() } }
+    val coroutineScope = rememberCoroutineScope()
+
     var currentUser   by remember { mutableStateOf<UserDto?>(null) }
     var selectedHotel by remember { mutableStateOf<UserHotelRoleDto?>(null) }
+
+    var updateChecking       by remember { mutableStateOf(false) }
+    var updateInfo           by remember { mutableStateOf<AppUpdateInfo?>(null) }
+    var updateError          by remember { mutableStateOf<String?>(null) }
+    var updateDownloadProgress by remember { mutableStateOf<Float?>(null) }
+
+    fun checkForUpdateNow() {
+        updateChecking = true
+        updateError = null
+        coroutineScope.launch {
+            when (val result = checkForUpdate(githubClient, BuildConfig.VERSION_CODE)) {
+                is UpdateCheckResult.UpdateAvailable -> updateInfo = result.info
+                is UpdateCheckResult.UpToDate -> updateInfo = null
+                is UpdateCheckResult.Error -> updateError = result.message
+            }
+            updateChecking = false
+        }
+    }
+
+    LaunchedEffect(Unit) { checkForUpdateNow() }
+
+    fun downloadAndInstallUpdate() {
+        val info = updateInfo ?: return
+        updateDownloadProgress = 0f
+        coroutineScope.launch {
+            try {
+                val apkFile = downloadUpdate(githubClient, context, info) { progress ->
+                    updateDownloadProgress = progress
+                }
+                updateDownloadProgress = null
+                installUpdate(context, apkFile)
+            } catch (e: Exception) {
+                updateDownloadProgress = null
+                updateError = e.message ?: "Download failed"
+            }
+        }
+    }
 
     val initial = remember {
         val s = loadSettings(context)
@@ -270,7 +312,15 @@ fun AppRoot() {
                             serverMode                    = serverMode,
                             onServerModeChange            = { serverMode = it },
                             customServerUrl               = customServerUrl,
-                            onCustomServerUrlChange       = { customServerUrl = it }
+                            onCustomServerUrlChange       = { customServerUrl = it },
+                            appVersionName                = BuildConfig.VERSION_NAME,
+                            appVersionCode                = BuildConfig.VERSION_CODE,
+                            updateInfo                    = updateInfo,
+                            updateChecking                = updateChecking,
+                            updateError                   = updateError,
+                            updateDownloadProgress         = updateDownloadProgress,
+                            onCheckForUpdate               = ::checkForUpdateNow,
+                            onDownloadAndInstallUpdate     = ::downloadAndInstallUpdate
                         )
                 }
             }
