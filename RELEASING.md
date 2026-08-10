@@ -35,6 +35,23 @@ build warning) so local testing keeps working — but that build can't update an
 
 ## Cutting a release
 
+**Fast path**: `release.ps1` (gitignored, local-only) does everything below — it
+auto-bumps the version, builds both artifacts, commits the bump, tags, pushes `main` +
+the tag, and publishes the GitHub release. Refuses to run against a dirty working tree.
+
+```
+.\release.ps1 -Notes "What changed in this release"
+```
+
+By default it bumps the patch component (`1.2.0` → `1.2.1`) and increments
+`RESERVEO_VERSION_CODE`. For a minor/major bump, pass `-VersionName` explicitly:
+
+```
+.\release.ps1 -VersionName 1.3.0 -Notes "What changed in this release"
+```
+
+**Manual steps** (what the script automates):
+
 1. Bump `RESERVEO_VERSION_CODE` and `RESERVEO_VERSION_NAME` in `gradle.properties`.
    `RESERVEO_VERSION_NAME` now also feeds the desktop MSI's version, which needs a
    `major.minor.build` shape — always use 3 components (e.g. `1.1.0`, not `1.1`).
