@@ -128,7 +128,9 @@ fun ReservationsCalendarPage(
     timelineShowRoomType: Boolean = true,
     onCreateInvoice: ((ReservationDto) -> Unit)? = null,
     onViewInvoice: ((InvoiceDto) -> Unit)? = null,
-    readOnly: Boolean = false
+    readOnly: Boolean = false,
+    compact: Boolean = false,
+    onOpenSidebar: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
 
@@ -226,6 +228,9 @@ fun ReservationsCalendarPage(
     }
 
     LaunchedEffect(hotel.hotelId) { loadData() }
+    // Compact (landscape phone) mode only has room for the timeline's own corner controls —
+    // the month calendar view has no such slot, so force Timeline while compact.
+    LaunchedEffect(compact) { if (compact) currentView = ResView.Timeline }
 
     Column(Modifier.fillMaxSize()) {
         // ── Header ────────────────────────────────────────────────────────────
@@ -268,7 +273,9 @@ fun ReservationsCalendarPage(
                 }
             }
         }
-        BoxWithConstraints(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+        // Compact (landscape phone): the whole header is replaced by corner buttons
+        // drawn inside ReservationsTimelineView's own grid — see `compact` below.
+        if (!compact) BoxWithConstraints(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
             val isNarrow = maxWidth < 560.dp
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 // Row 1: title + view toggle (+ nav on wide)
@@ -421,6 +428,16 @@ fun ReservationsCalendarPage(
                     labelWidthPx        = timelineLabelWidth,
                     onLabelWidthPxChange = onTimelineLabelWidthChange,
                     showRoomType        = timelineShowRoomType,
+                    compact             = compact,
+                    readOnly            = readOnly,
+                    periodLabel         = periodLabel,
+                    showNav             = showNav,
+                    onNavBack           = navBack,
+                    onNavForward        = navForward,
+                    onOpenSidebar       = onOpenSidebar,
+                    onNewReservation    = { if (readOnly) blockAction() else showNewDialog = true },
+                    onNewExternal       = { if (readOnly) blockAction() else showNewExternalDialog = true },
+                    onBlockRoom         = { if (readOnly) blockAction() else showBlockDialog = true },
                     onBlockRequest   = { room, cin, cout ->
                         if (readOnly) { blockAction() } else {
                             scope.launch {
@@ -2860,6 +2877,16 @@ private fun ReservationsTimelineView(
     labelWidthPx: Float = 96f,
     onLabelWidthPxChange: (Float) -> Unit = {},
     showRoomType: Boolean = true,
+    compact: Boolean = false,
+    readOnly: Boolean = false,
+    periodLabel: String = "",
+    showNav: Boolean = false,
+    onNavBack: () -> Unit = {},
+    onNavForward: () -> Unit = {},
+    onOpenSidebar: () -> Unit = {},
+    onNewReservation: () -> Unit = {},
+    onNewExternal: () -> Unit = {},
+    onBlockRoom: () -> Unit = {},
     onBlockRequest: (room: RoomDto, checkIn: LocalDate, checkOut: LocalDate) -> Unit = { _, _, _ -> },
     onCreateRequest: (room: RoomDto, checkIn: LocalDate, checkOut: LocalDate) -> Unit,
     onCreateExternalRequest: (room: RoomDto, checkIn: LocalDate, checkOut: LocalDate) -> Unit = { _, _, _ -> }
@@ -2870,6 +2897,7 @@ private fun ReservationsTimelineView(
     var hoveredRoomId by remember { mutableStateOf<Int?>(null) }
     var hoveredDayIdx by remember { mutableStateOf<Int?>(null) }
     var showOptions   by remember { mutableStateOf(false) }
+    var compactMenuExpanded by remember { mutableStateOf(false) }
     var viewportWidthPx by remember { mutableStateOf(0) }
     var halfShift     by remember { mutableStateOf(false) }
     var showCancelled by remember { mutableStateOf(false) }
@@ -2993,7 +3021,9 @@ private fun ReservationsTimelineView(
 
     Column(Modifier.fillMaxSize()) {
         // ── Controls ──────────────────────────────────────────────────────────
-        Column(
+        // Compact (landscape phone): this whole bar moves into the corner overflow
+        // menu drawn in the date header below, so the grid gets the full height.
+        if (!compact) Column(
             Modifier.fillMaxWidth().padding(bottom = 4.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
@@ -3018,7 +3048,7 @@ private fun ReservationsTimelineView(
                                 }
                             }
                         }
-                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                        .padding(horizontal = 10.dp, vertical = if (compact) 2.dp else 5.dp)
                 ) {
                     Text(s.today, style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -3031,7 +3061,7 @@ private fun ReservationsTimelineView(
                         .clip(RoundedCornerShape(6.dp))
                         .background(cancelBtnColor)
                         .clickable { showCancelled = !showCancelled }
-                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                        .padding(horizontal = 10.dp, vertical = if (compact) 2.dp else 5.dp)
                 ) {
                     Text(
                         if (showCancelled) s.hideCancelled else s.showCancelled,
@@ -3083,7 +3113,7 @@ private fun ReservationsTimelineView(
                             else MaterialTheme.colorScheme.surfaceVariant
                         )
                         .clickable { showOptions = !showOptions }
-                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                        .padding(horizontal = 10.dp, vertical = if (compact) 2.dp else 5.dp)
                 ) {
                     Text(
                         if (showOptions) "▲" else "▼",
@@ -3197,7 +3227,185 @@ private fun ReservationsTimelineView(
 
         // ── Date header (sticky top) ──────────────────────────────────────────
         Row(Modifier.fillMaxWidth().height(HEAD_H)) {
-            Box(Modifier.width(LABEL_W).fillMaxHeight())
+            if (compact) {
+                Box(Modifier.width(LABEL_W).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            Modifier
+                                .size(26.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .clickable(onClick = onOpenSidebar),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            HamburgerIcon(tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
+                        }
+                        Box {
+                            Box(
+                                Modifier
+                                    .size(26.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(
+                                        if (compactMenuExpanded) MaterialTheme.colorScheme.primaryContainer
+                                        else MaterialTheme.colorScheme.surfaceVariant
+                                    )
+                                    .clickable { compactMenuExpanded = true },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    "⋮", style = MaterialTheme.typography.titleMedium,
+                                    color = if (compactMenuExpanded) MaterialTheme.colorScheme.onPrimaryContainer
+                                            else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            DropdownMenu(expanded = compactMenuExpanded, onDismissRequest = { compactMenuExpanded = false }) {
+                                if (readOnly) {
+                                    DropdownMenuItem(text = { Text(s.viewOnlyBadge) }, onClick = {}, enabled = false)
+                                    HorizontalDivider()
+                                }
+                                DropdownMenuItem(text = { Text(s.newReservationBtn) },
+                                    enabled = readOnly || rooms.isNotEmpty(),
+                                    onClick = { compactMenuExpanded = false; onNewReservation() })
+                                DropdownMenuItem(text = { Text(s.newExternalBtn) },
+                                    enabled = readOnly || rooms.isNotEmpty(),
+                                    onClick = { compactMenuExpanded = false; onNewExternal() })
+                                DropdownMenuItem(text = { Text(s.blockRoomBtn) },
+                                    enabled = readOnly || rooms.isNotEmpty(),
+                                    onClick = { compactMenuExpanded = false; onBlockRoom() })
+                                HorizontalDivider()
+                                DropdownMenuItem(text = { Text(s.today) }, onClick = {
+                                    compactMenuExpanded = false
+                                    scope.launch {
+                                        val dayPx = with(density) { dayWidthPx.dp.roundToPx() }
+                                        if (!today.isBefore(dateStart) && !today.isAfter(dateEnd)) {
+                                            val dayOffset = ChronoUnit.DAYS.between(dateStart, today).toInt()
+                                            val centered  = (dayOffset * dayPx - viewportWidthPx / 2 + dayPx / 2).coerceAtLeast(0)
+                                            hScroll.animateScrollTo(centered)
+                                        }
+                                    }
+                                })
+                                DropdownMenuItem(
+                                    text = { Text(if (showCancelled) s.hideCancelled else s.showCancelled) },
+                                    onClick = { showCancelled = !showCancelled }
+                                )
+                                if (showNav) {
+                                    HorizontalDivider()
+                                    Row(
+                                        Modifier.padding(horizontal = 12.dp, vertical = 4.dp).fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        IconButton(onClick = onNavBack, Modifier.size(28.dp)) {
+                                            Text("◀", style = MaterialTheme.typography.labelLarge)
+                                        }
+                                        Text(periodLabel, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                                        IconButton(onClick = onNavForward, Modifier.size(28.dp)) {
+                                            Text("▶", style = MaterialTheme.typography.labelLarge)
+                                        }
+                                    }
+                                }
+                                HorizontalDivider()
+                                Column(Modifier.width(260.dp).padding(horizontal = 12.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        // Scale pill
+                                        Row(Modifier.clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
+                                            listOf(TimelineScale.Center to s.scaleCenter, TimelineScale.Month to s.scaleMonth, TimelineScale.Year to s.scaleYear).forEach { (sc, label) ->
+                                                val sel = scale == sc
+                                                Box(
+                                                    Modifier
+                                                        .clip(RoundedCornerShape(6.dp))
+                                                        .background(if (sel) MaterialTheme.colorScheme.secondary else Color.Transparent)
+                                                        .clickable { onScaleChange(sc) }
+                                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                                ) {
+                                                    Text(label, style = MaterialTheme.typography.labelSmall,
+                                                        color = if (sel) MaterialTheme.colorScheme.onSecondary
+                                                                else MaterialTheme.colorScheme.onSurfaceVariant)
+                                                }
+                                            }
+                                        }
+                                        // Half-shift pill
+                                        Row(Modifier.clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
+                                            listOf(false to s.fullDay, true to s.halfShiftLabel).forEach { (v, label) ->
+                                                val sel = halfShift == v
+                                                Box(
+                                                    Modifier
+                                                        .clip(RoundedCornerShape(6.dp))
+                                                        .background(if (sel) MaterialTheme.colorScheme.tertiary else Color.Transparent)
+                                                        .clickable { halfShift = v }
+                                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                                ) {
+                                                    Text(label, style = MaterialTheme.typography.labelSmall,
+                                                        color = if (sel) MaterialTheme.colorScheme.onTertiary
+                                                                else MaterialTheme.colorScheme.onSurfaceVariant)
+                                                }
+                                            }
+                                        }
+                                    }
+                                    // Width / height / label-width sliders
+                                    listOf(
+                                        Triple(s.widthLabel,      dayWidthPx,   onDayWidthPxChange)   to (16f..80f),
+                                        Triple(s.heightLabel,     rowHeightPx,  onRowHeightPxChange)  to (24f..72f),
+                                        Triple(s.labelWidthLabel, labelWidthPx, onLabelWidthPxChange) to (40f..160f)
+                                    ).forEach { (triple, range) ->
+                                        val (label, value, onChange) = triple
+                                        Row(
+                                            Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(label, style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.width(48.dp))
+                                            Slider(value = value, onValueChange = onChange,
+                                                valueRange = range, modifier = Modifier.weight(1f))
+                                            Text("${value.toInt()}", style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.width(28.dp))
+                                        }
+                                    }
+                                    // Status filter chips
+                                    Row(
+                                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        STATUS_PALETTE.entries.forEach { (status, colors) ->
+                                            val (bg, fg) = colors
+                                            val hidden = status in hiddenStatuses
+                                            Box(
+                                                Modifier
+                                                    .clip(RoundedCornerShape(4.dp))
+                                                    .background(if (hidden) Color.Transparent else bg)
+                                                    .border(
+                                                        width = 1.dp,
+                                                        color = fg.copy(alpha = if (hidden) 0.35f else 0f),
+                                                        shape = RoundedCornerShape(4.dp)
+                                                    )
+                                                    .clickable {
+                                                        onHiddenStatusesChange(
+                                                            if (hidden) hiddenStatuses - status
+                                                            else        hiddenStatuses + status
+                                                        )
+                                                    }
+                                                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                                            ) {
+                                                Text(
+                                                    s.statusName(status),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = fg.copy(alpha = if (hidden) 0.35f else 1f)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                Box(Modifier.width(LABEL_W).fillMaxHeight())
+            }
             Box(Modifier.width(1.dp).fillMaxHeight().background(divColor))
             Box(Modifier.weight(1f).horizontalScroll(hScroll)) {
                 Column(Modifier.width(totalWidth)) {

@@ -100,47 +100,55 @@ fun MainApp(
     }
 
     CompositionLocalProvider(LocalSnackbar provides snackbarState) {
-        Box(Modifier.fillMaxSize()) {
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            // Landscape phones / short windows: shrink the outer chrome so pages
+            // (esp. the reservations timeline) keep most of the vertical space.
+            val isCompactHeight = maxHeight < 480.dp
+            // On the reservations timeline in compact height, the sidebar toggle moves
+            // into the timeline's own top-left corner button — the outer bar would be redundant.
+            val hideTopBar = isCompactHeight && currentScreen == AppScreen.Reservations
             // Main content column (full width, behind the overlay)
             Column(Modifier.fillMaxSize()) {
-                // Top bar with hamburger button
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surface)
-                        .statusBarsPadding()
-                        .height(48.dp)
-                        .padding(horizontal = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
+                if (!hideTopBar) {
+                    // Top bar with hamburger button
+                    Row(
                         modifier = Modifier
-                            .size(40.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { sidebarOpen = !sidebarOpen },
-                        contentAlignment = Alignment.Center
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surface)
+                            .statusBarsPadding()
+                            .height(if (isCompactHeight) 32.dp else 48.dp)
+                            .padding(horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        HamburgerIcon(tint = MaterialTheme.colorScheme.onSurface)
-                    }
-                    if (!canManageReservations) {
-                        val s = LocalStrings.current
                         Box(
-                            Modifier
-                                .padding(start = 8.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant)
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                            modifier = Modifier
+                                .size(if (isCompactHeight) 28.dp else 40.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { sidebarOpen = !sidebarOpen },
+                            contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                s.viewOnlyBadge,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            HamburgerIcon(tint = MaterialTheme.colorScheme.onSurface)
+                        }
+                        if (!canManageReservations) {
+                            val s = LocalStrings.current
+                            Box(
+                                Modifier
+                                    .padding(start = 8.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    s.viewOnlyBadge,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
+                    if (!isCompactHeight) HorizontalDivider()
                 }
-                HorizontalDivider()
-                Box(Modifier.fillMaxSize().padding(28.dp)) {
+                Box(Modifier.fillMaxSize().padding(if (hideTopBar) 4.dp else if (isCompactHeight) 8.dp else 28.dp)) {
                     when (currentScreen) {
                         AppScreen.Dashboard    -> DashboardPage(client = client, hotel = selectedHotel, noShowAfterDays = noShowAfterDays, autoCheckOutAfterDays = autoCheckOutAfterDays, canEdit = canManageReservations)
                         AppScreen.Reservations -> ReservationsCalendarPage(
@@ -154,7 +162,9 @@ fun MainApp(
                             timelineShowRoomType      = timelineShowRoomType,
                             onCreateInvoice = { res -> invoiceForReservation = res; currentScreen = AppScreen.Invoices },
                             onViewInvoice   = { currentScreen = AppScreen.Invoices },
-                            readOnly        = !canManageReservations
+                            readOnly        = !canManageReservations,
+                            compact         = isCompactHeight,
+                            onOpenSidebar   = { sidebarOpen = !sidebarOpen }
                         )
                         AppScreen.Statistics   -> StatisticsPage(client = client, hotel = selectedHotel)
                         AppScreen.Payouts      -> ChannelPayoutsPage(client = client, hotel = selectedHotel, canEdit = canManageReservations)
@@ -424,7 +434,7 @@ private fun SidebarItem(label: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun HamburgerIcon(tint: Color, modifier: Modifier = Modifier) {
+fun HamburgerIcon(tint: Color, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier.size(20.dp),
         verticalArrangement = Arrangement.spacedBy(5.dp),
