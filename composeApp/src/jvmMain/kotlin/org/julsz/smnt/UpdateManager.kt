@@ -93,8 +93,10 @@ suspend fun downloadUpdate(
     info: AppUpdateInfo,
     onProgress: (Float) -> Unit
 ): File = withContext(Dispatchers.IO) {
-    val updatesDir = File(System.getProperty("user.home"), ".reserveo_updates").apply { mkdirs() }
-    val msiFile = File(updatesDir, "reserveo-${info.latestVersionName}.msi")
+    // Downloads (not a hidden app-data folder) so the file is somewhere the user would
+    // actually think to look if the auto-launch below doesn't visibly do anything.
+    val downloadsDir = File(System.getProperty("user.home"), "Downloads").apply { mkdirs() }
+    val msiFile = File(downloadsDir, "Reserveo-${info.latestVersionName}.msi")
 
     githubClient.prepareGet(info.downloadUrl).execute { response ->
         val total = response.contentLength() ?: -1L
@@ -114,13 +116,14 @@ suspend fun downloadUpdate(
     msiFile
 }
 
-// Hands the MSI to the OS shell (same as double-clicking it) rather than spawning msiexec
-// as a direct child process: a packaged jpackage app runs inside a Windows Job Object that
-// kills child processes when the app exits, which silently killed the installer before it
-// could even show its UAC prompt. Going through the shell detaches it from that job, and
-// the visible installer UI also gives the user feedback that something is happening.
+// A packaged jpackage app runs inside a Windows Job Object that kills all its child
+// processes the moment it exits. Both spawning msiexec directly and java.awt.Desktop.open()
+// create the new process as a direct child of this JVM, so it was getting silently killed
+// before it could even show its UAC prompt. Delegating to the already-running explorer.exe
+// (the same way double-clicking a file works) escapes that job, since explorer launches the
+// installer itself rather than us launching it as our own child.
 fun installUpdate(msiFile: File) {
-    Desktop.getDesktop().open(msiFile)
+    ProcessBuilder("explorer.exe", msiFile.absolutePath).start()
     kotlin.system.exitProcess(0)
 }
 
