@@ -51,14 +51,13 @@ private data class AppSettings(
 
 private data class JvmAppVersion(val code: Int, val name: String)
 
-private fun loadJvmAppVersion(): JvmAppVersion? = try {
-    Thread.currentThread().contextClassLoader.getResourceAsStream("version.properties")?.use { stream ->
-        val props = Properties().apply { load(stream) }
-        val code = props.getProperty("code")?.toIntOrNull()
-        val name = props.getProperty("name")
-        if (code != null && name != null) JvmAppVersion(code, name) else null
-    }
-} catch (_: Exception) { null }
+// Baked in via -Dreserveo.versionCode/-Dreserveo.versionName in the packaged app's jvmArgs
+// (see composeApp/build.gradle.kts) — null when running from an IDE config that doesn't set them.
+private fun loadJvmAppVersion(): JvmAppVersion? {
+    val code = System.getProperty("reserveo.versionCode")?.toIntOrNull() ?: return null
+    val name = System.getProperty("reserveo.versionName") ?: return null
+    return JvmAppVersion(code, name)
+}
 
 private val settingsFile = File(System.getProperty("user.home"), ".reserveo_settings.properties")
 

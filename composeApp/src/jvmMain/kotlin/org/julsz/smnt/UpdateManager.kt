@@ -114,11 +114,13 @@ suspend fun downloadUpdate(
     msiFile
 }
 
-// Launches the MSI installer (which will show its own UAC prompt — the app already installs
-// per-machine, so this is expected) and quits so the installer can overwrite files that
-// would otherwise be locked by the running JVM process.
+// Hands the MSI to the OS shell (same as double-clicking it) rather than spawning msiexec
+// as a direct child process: a packaged jpackage app runs inside a Windows Job Object that
+// kills child processes when the app exits, which silently killed the installer before it
+// could even show its UAC prompt. Going through the shell detaches it from that job, and
+// the visible installer UI also gives the user feedback that something is happening.
 fun installUpdate(msiFile: File) {
-    ProcessBuilder("msiexec", "/i", msiFile.absolutePath, "/quiet", "/norestart").start()
+    Desktop.getDesktop().open(msiFile)
     kotlin.system.exitProcess(0)
 }
 

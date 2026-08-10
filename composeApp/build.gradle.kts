@@ -80,23 +80,6 @@ kotlin {
     }
 }
 
-// Feeds RESERVEO_VERSION_CODE/NAME into the running JVM app — desktop has no BuildConfig
-// equivalent, so AppRoot.kt reads this file off the classpath at startup instead.
-val generateJvmVersionInfo = tasks.register("generateJvmVersionInfo") {
-    val outputDir = layout.buildDirectory.dir("generated/jvmVersion")
-    val versionCode = project.findProperty("RESERVEO_VERSION_CODE") as String
-    val versionName = project.findProperty("RESERVEO_VERSION_NAME") as String
-    outputs.dir(outputDir)
-    doLast {
-        val dir = outputDir.get().asFile.apply { mkdirs() }
-        File(dir, "version.properties").writeText("code=$versionCode\nname=$versionName\n")
-    }
-}
-
-kotlin.sourceSets.getByName("jvmMain") {
-    resources.srcDir(generateJvmVersionInfo)
-}
-
 // Release signing key — never committed. See RELEASING.md for how to generate one.
 // Falls back to the debug keystore (with a warning) when absent, so local
 // `assembleRelease` builds still work without extra setup.
@@ -168,6 +151,10 @@ compose.desktop {
             "-Dfile.encoding=UTF-8",
             "-Dstdout.encoding=UTF-8",
             "-Dstderr.encoding=UTF-8",
+            // Baked in at package time so the running app knows its own version — desktop
+            // has no BuildConfig equivalent. Read via System.getProperty in AppRoot.kt.
+            "-Dreserveo.versionCode=${project.findProperty("RESERVEO_VERSION_CODE")}",
+            "-Dreserveo.versionName=${project.findProperty("RESERVEO_VERSION_NAME")}",
         )
 
         nativeDistributions {
