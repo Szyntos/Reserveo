@@ -29,6 +29,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
@@ -1327,6 +1333,16 @@ private fun ReservationDetailDialog(
                             ),
                             modifier = Modifier
                                 .fillMaxWidth()
+                                // AltGr+letter (e.g. Polish "ż" = AltGr+Z) is reported by AWT/Skiko on Windows
+                                // as Ctrl+Alt+<letter>, which the built-in TextFieldState shortcut handling
+                                // matches as Ctrl+Z (undo) and wipes the whole note. Swallow undo/redo
+                                // shortcuts here before they reach that handler; the character itself still
+                                // comes through via the separate key-typed path, unaffected by this.
+                                .onPreviewKeyEvent { event ->
+                                    event.type == KeyEventType.KeyDown &&
+                                        event.isCtrlPressed &&
+                                        (event.key == Key.Z || event.key == Key.Y)
+                                }
                                 .padding(horizontal = 12.dp, vertical = 8.dp)
                                 .padding(end = 8.dp),
                             decorator = { innerTextField ->
@@ -1883,6 +1899,7 @@ private fun NewReservationDialog(
     var pendingAdjustments by remember { mutableStateOf<List<CreatePriceAdjustmentRequest>>(emptyList()) }
     var adjAmountInput   by remember { mutableStateOf("") }
     var adjDescInput     by remember { mutableStateOf("") }
+    var noteInput        by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
     val s = LocalStrings.current
     var guestCountry by remember { mutableStateOf(s.defaultCountryName) }
@@ -2062,6 +2079,16 @@ private fun NewReservationDialog(
                         }
                     }
                 HorizontalDivider()
+                OutlinedTextField(
+                    value = noteInput,
+                    onValueChange = { noteInput = it },
+                    label = { Text(s.notesLabel) },
+                    placeholder = { Text(s.notesPlaceholder) },
+                    minLines = 2,
+                    maxLines = 5,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                HorizontalDivider()
                 Row(
                     Modifier.fillMaxWidth().clickable { requiresDownPayment = !requiresDownPayment },
                     verticalAlignment = Alignment.CenterVertically,
@@ -2114,6 +2141,7 @@ private fun NewReservationDialog(
                                 status = if (requiresDownPayment) "pending" else "confirmed",
                                 adults = adults.trim().toDoubleOrNull() ?: 1.0,
                                 totalAmount = computedTotal?.let { it + adjustmentsSum } ?: computedTotal,
+                                description = noteInput.trim().ifBlank { null },
                                 requiresDownPayment = requiresDownPayment,
                                 downPaymentAmount   = if (requiresDownPayment) downPaymentAmountInput.toAmountOrNull() else null,
                                 priceSegments       = builtSegments ?: emptyList()
@@ -2159,6 +2187,7 @@ private fun NewExternalReservationDialog(
     var guestCountryCode by remember { mutableStateOf("") }
     var guestPhoneNumber by remember { mutableStateOf("") }
     var selectedGuest    by remember { mutableStateOf<GuestDto?>(null) }
+    var noteInput         by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
     val s = LocalStrings.current
     var guestCountry by remember { mutableStateOf(s.defaultCountryName) }
@@ -2275,6 +2304,16 @@ private fun NewExternalReservationDialog(
                     label = { Text(s.bookingRefLabel) },
                     singleLine = true, modifier = Modifier.fillMaxWidth()
                 )
+                HorizontalDivider()
+                OutlinedTextField(
+                    value = noteInput,
+                    onValueChange = { noteInput = it },
+                    label = { Text(s.notesLabel) },
+                    placeholder = { Text(s.notesPlaceholder) },
+                    minLines = 2,
+                    maxLines = 5,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         },
         confirmButton = {
@@ -2299,6 +2338,7 @@ private fun NewExternalReservationDialog(
                             status       = status,
                             adults       = adults.trim().toDoubleOrNull() ?: 1.0,
                             totalAmount  = totalAmountInput.toAmountOrNull(),
+                            description  = noteInput.trim().ifBlank { null },
                             source       = "external",
                             sourceName   = "Booking.com",
                             externalRef  = externalRefInput.trim().ifBlank { null }

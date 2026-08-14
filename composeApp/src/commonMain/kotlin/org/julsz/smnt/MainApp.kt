@@ -863,13 +863,21 @@ private fun DashboardTile(
                         color = cs.onSurfaceVariant)
                     pending.forEach { res ->
                         val noteSnippet = res.description?.takeIf { it.isNotBlank() }?.replace("\n", "; ")
+                        val isExternal = res.source == "external"
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween) {
                             Column(Modifier.weight(1f)) {
                                 Text(res.guestName, style = MaterialTheme.typography.bodySmall,
                                     fontWeight = FontWeight.Medium)
-                                Text(s.roomShort(res.roomNumber), style = MaterialTheme.typography.labelSmall,
-                                    color = cs.onSurfaceVariant)
+                                Text(
+                                    buildString {
+                                        append(s.roomShort(res.roomNumber))
+                                        if (isExternal) append(" · ${s.dragModeExternal}")
+                                        res.totalAmount?.let { append(" · ${"%.0f".format(it)} PLN") }
+                                    },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = cs.onSurfaceVariant
+                                )
                                 if (noteSnippet != null) {
                                     Text(noteSnippet, style = MaterialTheme.typography.labelSmall,
                                         color = cs.onSurfaceVariant.copy(alpha = 0.7f),
@@ -892,13 +900,21 @@ private fun DashboardTile(
                         color = cs.onSurfaceVariant)
                     done.forEach { res ->
                         val noteSnippetDone = res.description?.takeIf { it.isNotBlank() }?.replace("\n", "; ")
+                        val isExternalDone = res.source == "external"
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween) {
                             Column(Modifier.weight(1f)) {
                                 Text(res.guestName, style = MaterialTheme.typography.bodySmall,
                                     color = cs.onSurfaceVariant)
-                                Text(s.roomShort(res.roomNumber), style = MaterialTheme.typography.labelSmall,
-                                    color = cs.onSurfaceVariant.copy(alpha = 0.6f))
+                                Text(
+                                    buildString {
+                                        append(s.roomShort(res.roomNumber))
+                                        if (isExternalDone) append(" · ${s.dragModeExternal}")
+                                        res.totalAmount?.let { append(" · ${"%.0f".format(it)} PLN") }
+                                    },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = cs.onSurfaceVariant.copy(alpha = 0.6f)
+                                )
                                 if (noteSnippetDone != null) {
                                     Text(noteSnippetDone, style = MaterialTheme.typography.labelSmall,
                                         color = cs.onSurfaceVariant.copy(alpha = 0.5f),

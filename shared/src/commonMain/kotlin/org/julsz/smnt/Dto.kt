@@ -159,6 +159,7 @@ data class CreateReservationRequest(
     val status: String = "confirmed",
     val adults: Double = 1.0,
     val totalAmount: Double? = null,
+    val description: String? = null,
     val requiresDownPayment: Boolean = false,
     val downPaymentAmount: Double? = null,
     val priceSegments: List<CreatePriceSegmentRequest> = emptyList(),
