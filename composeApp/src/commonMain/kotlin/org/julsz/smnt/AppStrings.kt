@@ -335,7 +335,42 @@ interface AppStrings {
     val statsKpiRevpar: String
     val statsKpiAvgStay: String
     val statsKpiCancelRate: String
+    val statsKpiNew: String
+    val statsKpiOccupancyDesc: String
+    val statsKpiRevenueDesc: String
+    val statsKpiAdrDesc: String
+    val statsKpiRevparDesc: String
+    val statsKpiAvgStayDesc: String
+    val statsKpiCancelRateDesc: String
     val statsBySource: String
+    val statsBucketWeek: String
+    val statsBucketMonth: String
+    val statsBucketQuarter: String
+    val statsCustomRange: String
+    val statsQuantizeToToday: String
+    val statsQuantizeToMonthEnd: String
+    val statsFilterMaxGuests: String
+    val statsFilterSource: String
+    val statsFilterRoom: String
+    fun statsMaxGuestsLabel(n: Int): String
+    val statsClearFilter: String
+    val statsScopeActive: String
+    val statsScopeConfirmed: String
+    val statsScopeCompleted: String
+    val statsProvisionalNote: String
+    val statsCompareLabel: String
+    val statsComparePrevious: String
+    val statsCompareLastYear: String
+    val statsRevenueByCapacity: String
+    val statsRevenueBySource: String
+    val statsChannelPayouts: String
+    val statsPayoutMonth: String
+    val statsPayoutBooked: String
+    val statsPayoutReceived: String
+    val statsPayoutCommission: String
+    val statsPayoutRate: String
+    val statsWeekdayBreakdown: String
+    val statsTrends: String
 
     // Dashboard — overdue panes
     val overdueCheckIns: String
@@ -718,7 +753,7 @@ object EnglishStrings : AppStrings {
     override val statsNightsTable       = "Nights · Room · Month"
     override val statsHistogram         = "Stay length distribution"
     override val statsGroupAll          = "All rooms"
-    override val statsGroupByType       = "By type"
+    override val statsGroupByType       = "By size"
     override val statsGroupOneRoom      = "One room"
     override val statsTimeSpan          = "Period:"
     override val statsNoData            = "No data"
@@ -730,7 +765,42 @@ object EnglishStrings : AppStrings {
     override val statsKpiRevpar         = "RevPAR"
     override val statsKpiAvgStay        = "Avg. stay"
     override val statsKpiCancelRate     = "Cancel/no-show rate"
+    override val statsKpiNew            = "New"
+    override val statsKpiOccupancyDesc  = "Share of available room-nights that were actually booked in this period."
+    override val statsKpiRevenueDesc    = "Total booking revenue attributed to nights that fall within this period."
+    override val statsKpiAdrDesc        = "Average Daily Rate — revenue divided by occupied room-nights. What you earned, per night sold."
+    override val statsKpiRevparDesc     = "Revenue Per Available Room — revenue divided by all room-nights available, occupied or not. Combines occupancy and rate into one number."
+    override val statsKpiAvgStayDesc    = "Average length of stay, in nights, for reservations starting in this period."
+    override val statsKpiCancelRateDesc = "Share of bookings starting in this period that were cancelled or turned into a no-show."
     override val statsBySource          = "Bookings by source"
+    override val statsBucketWeek        = "Week"
+    override val statsBucketMonth       = "Month"
+    override val statsBucketQuarter     = "Quarter"
+    override val statsCustomRange       = "Custom range…"
+    override val statsQuantizeToToday      = "To today"
+    override val statsQuantizeToMonthEnd   = "To end of month"
+    override val statsFilterMaxGuests   = "Max guests"
+    override val statsFilterSource      = "Source"
+    override val statsFilterRoom        = "Room"
+    override fun statsMaxGuestsLabel(n: Int) = "$n guests"
+    override val statsClearFilter       = "Clear"
+    override val statsScopeActive       = "All active"
+    override val statsScopeConfirmed    = "Confirmed+"
+    override val statsScopeCompleted    = "Completed"
+    override val statsProvisionalNote   = "Includes upcoming dates — figures reflect bookings on the books, not final."
+    override val statsCompareLabel      = "Compare:"
+    override val statsComparePrevious   = "Previous period"
+    override val statsCompareLastYear   = "Same period last year"
+    override val statsRevenueByCapacity = "Revenue by room size"
+    override val statsRevenueBySource   = "Revenue by source"
+    override val statsChannelPayouts    = "Channel payouts"
+    override val statsPayoutMonth       = "Month"
+    override val statsPayoutBooked      = "Booked"
+    override val statsPayoutReceived    = "Received"
+    override val statsPayoutCommission  = "Commission"
+    override val statsPayoutRate        = "Rate"
+    override val statsWeekdayBreakdown  = "Occupancy by day of week"
+    override val statsTrends            = "Trends"
     override val overdueCheckIns   = "Overdue Check-ins"
     override val noOverdueCheckIns = "No overdue check-ins"
     override val overdueCheckOuts   = "Overdue Check-outs"
@@ -1138,7 +1208,7 @@ object PolishStrings : AppStrings {
     override val statsNightsTable       = "Noce · Pokój · Miesiąc"
     override val statsHistogram         = "Rozkład długości pobytów"
     override val statsGroupAll          = "Wszystkie"
-    override val statsGroupByType       = "Wg. typu"
+    override val statsGroupByType       = "Wg. wielkości"
     override val statsGroupOneRoom      = "Jeden pokój"
     override val statsTimeSpan          = "Okres:"
     override val statsNoData            = "Brak danych"
@@ -1150,7 +1220,42 @@ object PolishStrings : AppStrings {
     override val statsKpiRevpar         = "RevPAR"
     override val statsKpiAvgStay        = "Śr. długość pobytu"
     override val statsKpiCancelRate     = "Odwołania/no-show"
+    override val statsKpiNew            = "Nowe"
+    override val statsKpiOccupancyDesc  = "Udział dostępnych pokojo-nocy, które zostały faktycznie zarezerwowane w tym okresie."
+    override val statsKpiRevenueDesc    = "Łączny przychód z rezerwacji przypisany do nocy przypadających na ten okres."
+    override val statsKpiAdrDesc        = "ADR (Average Daily Rate) — przychód podzielony przez liczbę zajętych pokojo-nocy. Ile zarobiono na jedną sprzedaną noc."
+    override val statsKpiRevparDesc     = "RevPAR (Revenue Per Available Room) — przychód podzielony przez wszystkie dostępne pokojo-noce, zajęte i niezajęte. Łączy obłożenie i cenę w jedną liczbę."
+    override val statsKpiAvgStayDesc    = "Średnia długość pobytu w nocach dla rezerwacji rozpoczynających się w tym okresie."
+    override val statsKpiCancelRateDesc = "Udział rezerwacji rozpoczynających się w tym okresie, które zostały odwołane lub zakończyły się jako no-show."
     override val statsBySource          = "Rezerwacje wg źródła"
+    override val statsBucketWeek        = "Tydzień"
+    override val statsBucketMonth       = "Miesiąc"
+    override val statsBucketQuarter     = "Kwartał"
+    override val statsCustomRange       = "Własny zakres…"
+    override val statsQuantizeToToday      = "Do dziś"
+    override val statsQuantizeToMonthEnd   = "Do końca miesiąca"
+    override val statsFilterMaxGuests   = "Maks. gości"
+    override val statsFilterSource      = "Źródło"
+    override val statsFilterRoom        = "Pokój"
+    override fun statsMaxGuestsLabel(n: Int) = "$n os."
+    override val statsClearFilter       = "Wyczyść"
+    override val statsScopeActive       = "Wszystkie aktywne"
+    override val statsScopeConfirmed    = "Potwierdzone+"
+    override val statsScopeCompleted    = "Zakończone"
+    override val statsProvisionalNote   = "Obejmuje nadchodzące daty — dane odzwierciedlają rezerwacje na dziś, nie są ostateczne."
+    override val statsCompareLabel      = "Porównaj:"
+    override val statsComparePrevious   = "Poprzedni okres"
+    override val statsCompareLastYear   = "Ten sam okres rok temu"
+    override val statsRevenueByCapacity = "Przychód wg wielkości pokoju"
+    override val statsRevenueBySource   = "Przychód wg źródła"
+    override val statsChannelPayouts    = "Wypłaty z kanałów"
+    override val statsPayoutMonth       = "Miesiąc"
+    override val statsPayoutBooked      = "Zarezerwowano"
+    override val statsPayoutReceived    = "Otrzymano"
+    override val statsPayoutCommission  = "Prowizja"
+    override val statsPayoutRate        = "Stawka"
+    override val statsWeekdayBreakdown  = "Obłożenie wg dnia tygodnia"
+    override val statsTrends            = "Trendy"
     override val overdueCheckIns   = "Zaległe zameldowania"
     override val noOverdueCheckIns = "Brak zaległych zameldowań"
     override val overdueCheckOuts   = "Zaległe wymeldowania"
