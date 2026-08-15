@@ -207,7 +207,8 @@ fun RuleGeneratorPage(
                         )
                     } else {
                         val hScroll = rememberScrollState()
-                        Box(Modifier.fillMaxWidth().horizontalScroll(hScroll)) {
+                        Box(Modifier.fillMaxWidth()) {
+                        Box(Modifier.fillMaxWidth().horizontalScroll(hScroll).padding(bottom = 8.dp)) {
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
 
                                 // Header row
@@ -271,6 +272,11 @@ fun RuleGeneratorPage(
                                     }
                                 }
                             }
+                        }
+                        AppHorizontalScrollbar(
+                            state    = hScroll,
+                            modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth()
+                        )
                         }
                     }
                 }

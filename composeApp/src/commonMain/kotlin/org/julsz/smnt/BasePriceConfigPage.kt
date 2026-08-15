@@ -6,9 +6,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -178,15 +180,23 @@ private fun RoomTileGrid(
             }
             else -> {
                 val countByRoom = rules.groupBy { it.roomId }.mapValues { it.value.size }
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(200.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement   = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(bottom = 16.dp)
-                ) {
-                    items(rooms, key = { it.id }) { room ->
-                        RoomPriceTile(room, countByRoom[room.id] ?: 0) { onSelect(room) }
+                val gridState = rememberLazyGridState()
+                Box(Modifier.fillMaxSize()) {
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(200.dp),
+                        state = gridState,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement   = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(bottom = 16.dp, end = 12.dp)
+                    ) {
+                        items(rooms, key = { it.id }) { room ->
+                            RoomPriceTile(room, countByRoom[room.id] ?: 0) { onSelect(room) }
+                        }
                     }
+                    AppVerticalScrollbar(
+                        state    = gridState,
+                        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+                    )
                 }
             }
         }
@@ -290,20 +300,31 @@ private fun RoomCalendarView(
         }
 
         // 12-month calendar
-        LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
-            (1..12).forEach { m ->
-                item(key = "month_${displayYear}_$m") {
-                    MonthCalendar(
-                        year          = displayYear,
-                        month         = m,
-                        rules         = rules,
-                        periodPalette = periodPalette,
-                        onRuleClick   = { editingRule = it }
-                    )
-                    if (m < 12) HorizontalDivider(Modifier.padding(vertical = 16.dp))
-                    else Spacer(Modifier.height(16.dp))
+        val monthsLazyState = rememberLazyListState()
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            LazyColumn(
+                Modifier.fillMaxSize(),
+                state = monthsLazyState,
+                contentPadding = PaddingValues(bottom = 24.dp, end = 12.dp)
+            ) {
+                (1..12).forEach { m ->
+                    item(key = "month_${displayYear}_$m") {
+                        MonthCalendar(
+                            year          = displayYear,
+                            month         = m,
+                            rules         = rules,
+                            periodPalette = periodPalette,
+                            onRuleClick   = { editingRule = it }
+                        )
+                        if (m < 12) HorizontalDivider(Modifier.padding(vertical = 16.dp))
+                        else Spacer(Modifier.height(16.dp))
+                    }
                 }
             }
+            AppVerticalScrollbar(
+                state    = monthsLazyState,
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+            )
         }
     }
 

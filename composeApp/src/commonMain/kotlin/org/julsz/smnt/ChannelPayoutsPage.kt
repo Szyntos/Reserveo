@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -131,8 +132,11 @@ fun ChannelPayoutsPage(
             Text(s.payoutsEmpty, style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
+            val payoutsLazyState = rememberLazyListState()
+            Box(Modifier.fillMaxSize()) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
+                state = payoutsLazyState,
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 contentPadding = PaddingValues(bottom = 24.dp)
             ) {
@@ -172,6 +176,11 @@ fun ChannelPayoutsPage(
                         )
                     }
                 }
+            }
+            AppVerticalScrollbar(
+                state    = payoutsLazyState,
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+            )
             }
         }
     }

@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -387,23 +388,30 @@ private fun <T : Any> DataTable(
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
-            LazyColumn(Modifier.fillMaxSize()) {
-                itemsIndexed(rows) { index, row ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(if (index % 2 == 1) stripe else Color.Transparent)
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
-                    ) {
-                        cells(row).zip(headers).forEach { (value, header) ->
-                            Text(value, modifier = Modifier.width(header.second),
-                                style = MaterialTheme.typography.bodySmall,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val lazyState = rememberLazyListState()
+            Box(Modifier.fillMaxSize()) {
+                LazyColumn(Modifier.fillMaxSize(), state = lazyState) {
+                    itemsIndexed(rows) { index, row ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(if (index % 2 == 1) stripe else Color.Transparent)
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            cells(row).zip(headers).forEach { (value, header) ->
+                                Text(value, modifier = Modifier.width(header.second),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
                         }
+                        HorizontalDivider(thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                     }
-                    HorizontalDivider(thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                 }
+                AppVerticalScrollbar(
+                    state    = lazyState,
+                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+                )
             }
         }
     }

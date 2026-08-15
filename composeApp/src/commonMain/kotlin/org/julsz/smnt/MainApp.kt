@@ -9,6 +9,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
@@ -20,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -743,10 +745,12 @@ private fun DashboardPage(client: HttpClient, hotel: UserHotelRoleDto, noShowAft
             }
         } else {
             // ── Narrow (portrait / mobile) — scrollable stacked layout ────────
+            val dashboardLazyState = rememberLazyListState()
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
+                state = dashboardLazyState,
                 verticalArrangement = Arrangement.spacedBy(16.dp),
-                contentPadding = PaddingValues(bottom = 16.dp)
+                contentPadding = PaddingValues(bottom = 16.dp, end = 12.dp)
             ) {
                 item {
                     Text(hotel.hotelName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -832,6 +836,10 @@ private fun DashboardPage(client: HttpClient, hotel: UserHotelRoleDto, noShowAft
                     )
                 }
             }
+            AppVerticalScrollbar(
+                state    = dashboardLazyState,
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+            )
         }
     }
 }
@@ -1040,8 +1048,10 @@ private fun OverdueTile(
             if (reservations.isEmpty()) {
                 Text(s.noOverdueCheckIns, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
             } else {
+                val overdueScrollState = rememberScrollState()
+                Box(if (scrollable) Modifier.weight(1f, fill = false) else Modifier) {
                 Column(
-                    modifier = if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier,
+                    modifier = if (scrollable) Modifier.verticalScroll(overdueScrollState).padding(end = 8.dp) else Modifier,
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     reservations.forEach { res ->
@@ -1068,6 +1078,13 @@ private fun OverdueTile(
                             }
                         }
                     }
+                }
+                if (scrollable) {
+                    AppVerticalScrollbar(
+                        state    = overdueScrollState,
+                        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+                    )
+                }
                 }
             }
         }
@@ -1126,8 +1143,10 @@ private fun OverdueCheckOutsTile(
             if (reservations.isEmpty()) {
                 Text(s.noOverdueCheckOuts, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
             } else {
+                val overdueScrollState = rememberScrollState()
+                Box(if (scrollable) Modifier.weight(1f, fill = false) else Modifier) {
                 Column(
-                    modifier = if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier,
+                    modifier = if (scrollable) Modifier.verticalScroll(overdueScrollState).padding(end = 8.dp) else Modifier,
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     reservations.forEach { res ->
@@ -1154,6 +1173,13 @@ private fun OverdueCheckOutsTile(
                             }
                         }
                     }
+                }
+                if (scrollable) {
+                    AppVerticalScrollbar(
+                        state    = overdueScrollState,
+                        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+                    )
+                }
                 }
             }
         }
@@ -1199,14 +1225,21 @@ private fun StatisticsPage(client: HttpClient, hotel: UserHotelRoleDto) {
     if (loading) {
         CircularProgressIndicator()
     } else {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
-            StatisticsSection(
-                reservations = reservations,
-                rooms        = rooms,
-                payouts      = payouts,
-                overrideList = overrideList
+        val statsScrollState = rememberScrollState()
+        Box(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxWidth().verticalScroll(statsScrollState).padding(end = 12.dp)) {
+                StatisticsSection(
+                    reservations = reservations,
+                    rooms        = rooms,
+                    payouts      = payouts,
+                    overrideList = overrideList
+                )
+                Spacer(Modifier.height(16.dp))
+            }
+            AppVerticalScrollbar(
+                state    = statsScrollState,
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
             )
-            Spacer(Modifier.height(16.dp))
         }
     }
 }
@@ -1461,7 +1494,7 @@ private fun StatisticsSection(
                 },
                 modifier = Modifier.size(32.dp)
             ) {
-                Text("‹", style = MaterialTheme.typography.titleMedium,
+                Text("◀", style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurface)
             }
             Text(
@@ -1478,7 +1511,7 @@ private fun StatisticsSection(
                 },
                 modifier = Modifier.size(32.dp)
             ) {
-                Text("›", style = MaterialTheme.typography.titleMedium,
+                Text("▶", style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurface)
             }
         }
@@ -2018,8 +2051,10 @@ private fun OccupancyCalendarHeatmap(daily: List<Pair<LocalDate, Double>>) {
                 }
             }
         }
+        val heatmapHScroll = rememberScrollState()
+        Box(Modifier.weight(1f)) {
         Row(
-            Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+            Modifier.fillMaxWidth().horizontalScroll(heatmapHScroll).padding(bottom = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(gap)
         ) {
             weeks.forEach { week ->
@@ -2059,6 +2094,11 @@ private fun OccupancyCalendarHeatmap(daily: List<Pair<LocalDate, Double>>) {
                     repeat(7 - week.size) { Spacer(Modifier.size(cell)) }
                 }
             }
+        }
+        AppHorizontalScrollbar(
+            state    = heatmapHScroll,
+            modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth()
+        )
         }
     }
 }
@@ -2132,8 +2172,10 @@ private fun KpiTilesRow(kpis: StatsKpis, periodKpis: List<PeriodKpi>, comparison
             comparisonKpis?.cancelRate, periodKpis.map { it.kpis.cancelRate to it.period.isProvisional }, false)
     )
 
+    val kpiHScroll = rememberScrollState()
+    Box(Modifier.fillMaxWidth()) {
     Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        Modifier.fillMaxWidth().horizontalScroll(kpiHScroll).padding(bottom = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         tiles.forEach { tile ->
@@ -2154,10 +2196,12 @@ private fun KpiTilesRow(kpis: StatsKpis, periodKpis: List<PeriodKpi>, comparison
                 }
             ) {
             Column(
-                // Fixed (not min-only) width: this tile sits in a horizontalScroll Row, which hands
-                // children an infinite max-width constraint — widthIn(min=) wouldn't bound it, so the
-                // sparkline's fillMaxWidth() below would collapse to ~0 and render as a vertical sliver.
-                Modifier.width(150.dp)
+                // Min-only width: this tile sits in a horizontalScroll Row, which hands children an
+                // infinite max-width constraint. A plain fillMaxWidth() on the sparkline below would
+                // try to fill that infinity and collapse to ~0, so it gets its own fixed width instead
+                // — that lets the tile itself grow past 150dp (e.g. at a larger font scale, or a long
+                // currency value) rather than clipping its text.
+                Modifier.widthIn(min = 150.dp)
                     .clip(RoundedCornerShape(10.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
                     .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -2170,7 +2214,7 @@ private fun KpiTilesRow(kpis: StatsKpis, periodKpis: List<PeriodKpi>, comparison
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text(tile.value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                        maxLines = 1)
                     val prev = tile.previous
                     if (prev != null) {
                         if (prev != 0.0) {
@@ -2192,12 +2236,17 @@ private fun KpiTilesRow(kpis: StatsKpis, periodKpis: List<PeriodKpi>, comparison
                 if (tile.trend.size >= 2) {
                     KpiSparkline(
                         tile.trend, MaterialTheme.colorScheme.primary,
-                        Modifier.fillMaxWidth().height(40.dp).padding(top = 4.dp)
+                        Modifier.width(122.dp).height(40.dp).padding(top = 4.dp)
                     )
                 }
             }
             }
         }
+    }
+    AppHorizontalScrollbar(
+        state    = kpiHScroll,
+        modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth()
+    )
     }
 }
 
@@ -2264,7 +2313,9 @@ private fun TrendLineChart(periodKpis: List<PeriodKpi>, metric: TrendMetric) {
             Text(metric.format(maxV), style = MaterialTheme.typography.labelSmall, color = onSurfaceVariant, maxLines = 1)
             Text(metric.format(minV), style = MaterialTheme.typography.labelSmall, color = onSurfaceVariant, maxLines = 1)
         }
-        Column(Modifier.weight(1f).horizontalScroll(rememberScrollState())) {
+        val chartHScroll = rememberScrollState()
+        Box(Modifier.weight(1f)) {
+        Column(Modifier.horizontalScroll(chartHScroll).padding(bottom = 8.dp)) {
             Canvas(Modifier.width(pointW * periodKpis.size).height(chartH)) {
                 val gridN = 3
                 for (i in 0..gridN) {
@@ -2314,6 +2365,11 @@ private fun TrendLineChart(periodKpis: List<PeriodKpi>, metric: TrendMetric) {
                     }
                 }
             }
+        }
+        AppHorizontalScrollbar(
+            state    = chartHScroll,
+            modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth()
+        )
         }
     }
 }
@@ -2365,16 +2421,16 @@ private fun BreakdownBars(items: List<Pair<String, Double>>, valueLabel: (Double
         items.forEach { (name, value) ->
             val frac = (value / total).toFloat()
             Row(
-                Modifier.fillMaxWidth().height(20.dp),
+                Modifier.fillMaxWidth().heightIn(min = 20.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Box(Modifier.width(90.dp)) {
+                Box(Modifier.widthIn(min = 90.dp, max = 120.dp)) {
                     Text(name, style = MaterialTheme.typography.labelSmall, maxLines = 1,
                         overflow = TextOverflow.Ellipsis)
                 }
                 Box(
-                    Modifier.weight(1f).fillMaxHeight()
+                    Modifier.weight(1f).height(8.dp)
                         .clip(RoundedCornerShape(3.dp))
                         .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
                 ) {
@@ -2384,7 +2440,7 @@ private fun BreakdownBars(items: List<Pair<String, Double>>, valueLabel: (Double
                             .background(primary)
                     )
                 }
-                Box(Modifier.width(70.dp)) {
+                Box(Modifier.widthIn(min = 70.dp)) {
                     Text(valueLabel(value), style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
@@ -2408,15 +2464,16 @@ private fun WeekdayBreakdownBars(stats: List<WeekdayStat>) {
         stats.forEach { st ->
             val frac = (st.occupancyRate / maxOcc).toFloat().coerceIn(0f, 1f)
             Row(
-                Modifier.fillMaxWidth().height(20.dp),
+                Modifier.fillMaxWidth().heightIn(min = 20.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Box(Modifier.width(40.dp)) {
-                    Text(st.dow.getDisplayName(TextStyle.SHORT, s.locale), style = MaterialTheme.typography.labelSmall)
+                Box(Modifier.widthIn(min = 40.dp)) {
+                    Text(st.dow.getDisplayName(TextStyle.SHORT, s.locale), style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1)
                 }
                 Box(
-                    Modifier.weight(1f).fillMaxHeight()
+                    Modifier.weight(1f).height(8.dp)
                         .clip(RoundedCornerShape(3.dp))
                         .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
                 ) {
@@ -2426,13 +2483,13 @@ private fun WeekdayBreakdownBars(stats: List<WeekdayStat>) {
                             .background(primary)
                     )
                 }
-                Box(Modifier.width(40.dp)) {
+                Box(Modifier.widthIn(min = 40.dp)) {
                     Text("${(st.occupancyRate * 100).roundToInt()}%", style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                 }
-                Box(Modifier.width(70.dp)) {
+                Box(Modifier.widthIn(min = 70.dp)) {
                     Text("${"%.0f".format(st.adr)} PLN", style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                 }
             }
         }
@@ -2503,10 +2560,14 @@ private fun NightsTable(
         map
     }
 
-    val labelW  = 72.dp
-    val colW    = 60.dp
-    val headerH = 28.dp
-    val cellH   = 32.dp
+    // Scaled by the user's font-size setting (LocalDensity.fontScale, set app-wide — see AppRoot)
+    // so header/cell text has room to grow instead of being clipped; both grid columns below
+    // read the same computed values, so row heights stay in lockstep across the split table.
+    val fs      = LocalDensity.current.fontScale.coerceAtLeast(1f)
+    val labelW  = 72.dp * fs
+    val colW    = 60.dp * fs
+    val headerH = 28.dp * fs
+    val cellH   = 32.dp * fs
 
     Row(
         Modifier.fillMaxWidth()
@@ -2532,7 +2593,9 @@ private fun NightsTable(
         }
         VerticalDivider()
         // horizontally scrollable period content
-        Column(Modifier.weight(1f).horizontalScroll(rememberScrollState())) {
+        val nightsHScroll = rememberScrollState()
+        Box(Modifier.weight(1f)) {
+        Column(Modifier.horizontalScroll(nightsHScroll).padding(bottom = 8.dp)) {
             Row {
                 periods.forEach { p ->
                     Box(Modifier.width(colW).height(headerH), contentAlignment = Alignment.Center) {
@@ -2565,6 +2628,11 @@ private fun NightsTable(
                 if (i < rooms.lastIndex) HorizontalDivider(
                     color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
             }
+        }
+        AppHorizontalScrollbar(
+            state    = nightsHScroll,
+            modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth()
+        )
         }
     }
 }
@@ -2639,18 +2707,18 @@ private fun NightsHistogram(
                 val frac  = if (maxCount > 0 && total > 0) total.toFloat() / maxCount else 0f
 
                 Row(
-                    Modifier.fillMaxWidth().height(20.dp),
+                    Modifier.fillMaxWidth().heightIn(min = 20.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     // nights label, right-aligned
-                    Box(Modifier.width(24.dp), contentAlignment = Alignment.CenterEnd) {
-                        Text("$n", style = MaterialTheme.typography.labelSmall,
+                    Box(Modifier.widthIn(min = 24.dp), contentAlignment = Alignment.CenterEnd) {
+                        Text("$n", style = MaterialTheme.typography.labelSmall, maxLines = 1,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     // bar track
                     Box(
-                        Modifier.weight(1f).fillMaxHeight()
+                        Modifier.weight(1f).height(8.dp)
                             .clip(RoundedCornerShape(3.dp))
                             .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
                     ) {
@@ -2671,8 +2739,8 @@ private fun NightsHistogram(
                         }
                     }
                     // count label
-                    Box(Modifier.width(30.dp)) {
-                        if (total > 0) Text("$total", style = MaterialTheme.typography.labelSmall,
+                    Box(Modifier.widthIn(min = 30.dp)) {
+                        if (total > 0) Text("$total", style = MaterialTheme.typography.labelSmall, maxLines = 1,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
@@ -2729,8 +2797,9 @@ private fun SettingsPage(
 ) {
     val s = LocalStrings.current
     val scrollState = rememberScrollState()
+    Box(Modifier.fillMaxSize()) {
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(scrollState),
+        modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(end = 12.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
         Text(s.settingsTitle, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -3025,6 +3094,11 @@ private fun SettingsPage(
         }
 
         Spacer(Modifier.height(24.dp))
+    }
+    AppVerticalScrollbar(
+        state    = scrollState,
+        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+    )
     }
 }
 

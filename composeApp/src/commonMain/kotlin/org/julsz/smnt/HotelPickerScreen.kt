@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -122,14 +123,23 @@ fun HotelPickerScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    LazyVerticalGrid(
-                        columns = GridCells.Adaptive(minSize = 280.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        items(hotels) { hotel ->
-                            HotelCard(hotel = hotel, onClick = { onHotelSelected(hotel) })
+                    val gridState = rememberLazyGridState()
+                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                        LazyVerticalGrid(
+                            columns = GridCells.Adaptive(minSize = 280.dp),
+                            state = gridState,
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                            contentPadding = PaddingValues(end = 12.dp)
+                        ) {
+                            items(hotels) { hotel ->
+                                HotelCard(hotel = hotel, onClick = { onHotelSelected(hotel) })
+                            }
                         }
+                        AppVerticalScrollbar(
+                            state    = gridState,
+                            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+                        )
                     }
                 }
             }

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -396,7 +397,12 @@ fun ReservationsCalendarPage(
             }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (currentView) {
-                ResView.Calendar -> LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+                ResView.Calendar -> {
+                val calendarLazyState = rememberLazyListState()
+                LazyColumn(
+                    state = calendarLazyState,
+                    contentPadding = PaddingValues(bottom = 24.dp, end = 12.dp)
+                ) {
                     (1..12).forEach { m ->
                         item(key = "month_${displayYear}_$m") {
                             ResMonthCalendar(
@@ -410,6 +416,11 @@ fun ReservationsCalendarPage(
                             else Spacer(Modifier.height(16.dp))
                         }
                     }
+                }
+                AppVerticalScrollbar(
+                    state    = calendarLazyState,
+                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+                )
                 }
                 ResView.Timeline -> ReservationsTimelineView(
                     rooms            = rooms.sortedWith(compareBy({ it.number.toIntOrNull() ?: Int.MAX_VALUE }, { it.number })),
@@ -1121,8 +1132,10 @@ private fun ReservationDetailDialog(
         onDismissRequest = onDismiss,
         title = { Text(s.reservationDetailTitle(res.id)) },
         text = {
+            val detailScrollState = rememberScrollState()
+            Box {
             Column(
-                Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                Modifier.fillMaxWidth().verticalScroll(detailScrollState).padding(end = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 // Guest header
@@ -1397,6 +1410,11 @@ private fun ReservationDetailDialog(
                     }
                 }
             }
+            AppVerticalScrollbar(
+                state    = detailScrollState,
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+            )
+            }
         },
         confirmButton = {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1487,8 +1505,10 @@ private fun ManagePaymentsDialog(
         onDismissRequest = onDismiss,
         title = { Text(s.paymentsTitle(res.id)) },
         text = {
+            val paymentsScrollState = rememberScrollState()
+            Box {
             Column(
-                Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                Modifier.fillMaxWidth().verticalScroll(paymentsScrollState).padding(end = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 // Summary row
@@ -1850,6 +1870,11 @@ private fun ManagePaymentsDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) { Text(s.addPaymentBtn) }
             }
+            AppVerticalScrollbar(
+                state    = paymentsScrollState,
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+            )
+            }
         },
         confirmButton = {},
         dismissButton = { TextButton(onClick = onDismiss) { Text(s.close) } }
@@ -1933,7 +1958,9 @@ private fun NewReservationDialog(
         onDismissRequest = onDismiss,
         title = { Text(s.newReservationTitle) },
         text = {
-            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            val newResScrollState = rememberScrollState()
+            Box {
+            Column(Modifier.fillMaxWidth().verticalScroll(newResScrollState).padding(end = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 ExposedDropdownMenuBox(expanded = roomExpanded, onExpandedChange = { roomExpanded = it }) {
                     OutlinedTextField(
                         value = selectedRoom?.let { "${s.roomLabel(it.number)} · ${it.typeName}" } ?: s.selectRoomHint,
@@ -2107,6 +2134,11 @@ private fun NewReservationDialog(
                     )
                 }
             }
+            AppVerticalScrollbar(
+                state    = newResScrollState,
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+            )
+            }
         },
         confirmButton = {
             Button(
@@ -2209,7 +2241,9 @@ private fun NewExternalReservationDialog(
         onDismissRequest = onDismiss,
         title = { Text(s.newExternalReservationTitle) },
         text = {
-            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            val extResScrollState = rememberScrollState()
+            Box {
+            Column(Modifier.fillMaxWidth().verticalScroll(extResScrollState).padding(end = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(
                     Modifier.fillMaxWidth()
                         .clip(RoundedCornerShape(6.dp))
@@ -2314,6 +2348,11 @@ private fun NewExternalReservationDialog(
                     maxLines = 5,
                     modifier = Modifier.fillMaxWidth()
                 )
+            }
+            AppVerticalScrollbar(
+                state    = extResScrollState,
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+            )
             }
         },
         confirmButton = {
@@ -2460,7 +2499,9 @@ private fun ReservationEditDialog(
         onDismissRequest = onDismiss,
         title = { Text(s.editReservationTitle(existing.id)) },
         text = {
-            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            val editResScrollState = rememberScrollState()
+            Box {
+            Column(Modifier.fillMaxWidth().verticalScroll(editResScrollState).padding(end = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (isExternal) {
                     Row(
                         Modifier.fillMaxWidth()
@@ -2680,6 +2721,11 @@ private fun ReservationEditDialog(
                     )
                 }
                 } // end else (not external)
+            }
+            AppVerticalScrollbar(
+                state    = editResScrollState,
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+            )
             }
         },
         confirmButton = {
@@ -4459,7 +4505,9 @@ private fun BlockRoomDialog(
         onDismissRequest = onDismiss,
         title = { Text(s.blockRoomTitle) },
         text = {
-            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            val blockScrollState = rememberScrollState()
+            Box {
+            Column(Modifier.fillMaxWidth().verticalScroll(blockScrollState).padding(end = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 // All-rooms checkbox
                 Row(
                     Modifier.fillMaxWidth().clickable { blockAllRooms = !blockAllRooms },
@@ -4546,6 +4594,11 @@ private fun BlockRoomDialog(
                     }
                 }
             }
+            AppVerticalScrollbar(
+                state    = blockScrollState,
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+            )
+            }
         },
         confirmButton = {
             Button(
@@ -4597,8 +4650,10 @@ private fun EditGuestDialog(
         onDismissRequest = onDismiss,
         title = { Text(guest.fullName()) },
         text = {
+            val guestScrollState = rememberScrollState()
+            Box {
             Column(
-                Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                Modifier.fillMaxWidth().verticalScroll(guestScrollState).padding(end = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -4634,6 +4689,11 @@ private fun EditGuestDialog(
                     modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp),
                     maxLines = 5
                 )
+            }
+            AppVerticalScrollbar(
+                state    = guestScrollState,
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+            )
             }
         },
         confirmButton = {

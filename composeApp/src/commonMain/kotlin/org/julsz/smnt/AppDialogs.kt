@@ -238,7 +238,7 @@ private fun RangeCalendarBody(
             verticalAlignment     = Alignment.CenterVertically
         ) {
             TextButton(onClick = { onMonthChange(displayMonth.minusMonths(1)) }) {
-                Text("‹", style = MaterialTheme.typography.titleLarge)
+                Text("◀", style = MaterialTheme.typography.labelLarge)
             }
             Text(
                 text      = displayMonth.month.getDisplayName(JTextStyle.FULL, Locale.getDefault()),
@@ -249,7 +249,7 @@ private fun RangeCalendarBody(
                 overflow  = TextOverflow.Ellipsis
             )
             TextButton(onClick = { onMonthChange(displayMonth.plusMonths(1)) }) {
-                Text("›", style = MaterialTheme.typography.titleLarge)
+                Text("▶", style = MaterialTheme.typography.labelLarge)
             }
         }
 

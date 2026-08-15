@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -114,19 +115,27 @@ fun RoomsConfigPage(client: HttpClient, hotel: UserHotelRoleDto, onBack: () -> U
                     )
                 }
             } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 260.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(bottom = 16.dp)
-                ) {
-                    items(visible, key = { it.id }) { room ->
-                        RoomCard(
-                            room      = room,
-                            onEdit    = { editingRoom = room },
-                            onArchive = { archiveRoom(room) }
-                        )
+                val gridState = rememberLazyGridState()
+                Box(Modifier.fillMaxSize()) {
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = 260.dp),
+                        state = gridState,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(bottom = 16.dp, end = 12.dp)
+                    ) {
+                        items(visible, key = { it.id }) { room ->
+                            RoomCard(
+                                room      = room,
+                                onEdit    = { editingRoom = room },
+                                onArchive = { archiveRoom(room) }
+                            )
+                        }
                     }
+                    AppVerticalScrollbar(
+                        state    = gridState,
+                        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+                    )
                 }
             }
         }
