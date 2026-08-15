@@ -1222,7 +1222,7 @@ private fun StatisticsSection(
     val today = remember { LocalDate.now() }
 
     var bucket          by remember { mutableStateOf(StatBucket.Month) }
-    var rangeStart       by remember { mutableStateOf(alignBucketStart(today, StatBucket.Month).minusMonths(5)) }
+    var rangeStart       by remember { mutableStateOf(alignBucketStart(today, StatBucket.Month).minusMonths(2)) }
     var rangeEnd         by remember { mutableStateOf(today) }
     var showRangePicker  by remember { mutableStateOf(false) }
     var rangeAnchor      by remember { mutableStateOf(RangeAnchor.Today) }
@@ -1337,12 +1337,47 @@ private fun StatisticsSection(
         computeWeekdayBreakdown(active, filteredRooms, rangeStart, rangeEndExclusive)
     }
 
+    val dailyOccupancy = remember(active, filteredRooms, rangeStart, rangeEndExclusive) {
+        computeDailyOccupancy(active, filteredRooms, rangeStart, rangeEndExclusive)
+    }
+
+    val payoutIntegrity = remember(reservations, overrideList) {
+        computePayoutIntegrity(reservations, PayoutOverrides.from(overrideList))
+    }
+
+    val healthAlerts = remember(kpis, comparisonKpis, payoutIntegrity, s) {
+        buildList {
+            if (!payoutIntegrity.isSound) {
+                add(s.statsAlertUnaccounted(payoutIntegrity.unaccounted))
+            }
+            comparisonKpis?.let { prev ->
+                if (prev.occupancyRate > 0.0) {
+                    val delta = (kpis.occupancyRate - prev.occupancyRate) / prev.occupancyRate
+                    if (delta <= -0.15) add(s.statsAlertMetricDrop(s.statsKpiOccupancy, (-delta * 100).roundToInt()))
+                }
+                if (prev.revenue > 0.0) {
+                    val delta = (kpis.revenue - prev.revenue) / prev.revenue
+                    if (delta <= -0.15) add(s.statsAlertMetricDrop(s.statsKpiRevenue, (-delta * 100).roundToInt()))
+                }
+                if (prev.cancelRate > 0.0 && kpis.cancelRate - prev.cancelRate >= 0.10) {
+                    add(s.statsAlertCancelSpike((kpis.cancelRate * 100).roundToInt()))
+                }
+            }
+        }
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(s.statsTitle, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
 
+        HealthBanner(healthAlerts)
+
         // bucket selector
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(s.statsTimeSpan, style = MaterialTheme.typography.labelMedium,
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(s.statsTimeSpan, style = MaterialTheme.typography.labelMedium, maxLines = 1,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(Modifier.clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
                 listOf(StatBucket.Week to s.statsBucketWeek, StatBucket.Month to s.statsBucketMonth,
@@ -1355,7 +1390,7 @@ private fun StatisticsSection(
                             .padding(horizontal = 10.dp, vertical = 5.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(label, style = MaterialTheme.typography.labelSmall,
+                        Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1,
                             color = if (sel) MaterialTheme.colorScheme.onPrimary
                                     else MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -1363,8 +1398,13 @@ private fun StatisticsSection(
             }
         }
 
-        // range controls
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // range controls — presets/anchor/custom scroll horizontally on their own row so they
+        // never get squeezed into a shrinking leftover width; prev/date/next get a separate row.
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             Row(Modifier.clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
                 listOf(1, 3, 6, 9, 12).forEach { n ->
                     Box(
@@ -1381,7 +1421,7 @@ private fun StatisticsSection(
                             .padding(horizontal = 10.dp, vertical = 5.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(s.statsMonthsLabel(n), style = MaterialTheme.typography.labelSmall,
+                        Text(s.statsMonthsLabel(n), style = MaterialTheme.typography.labelSmall, maxLines = 1,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
@@ -1397,7 +1437,7 @@ private fun StatisticsSection(
                                 .padding(horizontal = 10.dp, vertical = 5.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(label, style = MaterialTheme.typography.labelSmall,
+                            Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1,
                                 color = if (sel) MaterialTheme.colorScheme.onPrimary
                                         else MaterialTheme.colorScheme.onSurfaceVariant)
                         }
@@ -1408,9 +1448,10 @@ private fun StatisticsSection(
                 modifier       = Modifier.height(32.dp),
                 contentPadding = PaddingValues(horizontal = 10.dp)
             ) {
-                Text(s.statsCustomRange, style = MaterialTheme.typography.labelSmall)
+                Text(s.statsCustomRange, style = MaterialTheme.typography.labelSmall, maxLines = 1)
             }
-            Spacer(Modifier.weight(1f))
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             IconButton(
                 onClick = {
                     val len = rangeEndExclusive.toEpochDay() - rangeStart.toEpochDay()
@@ -1423,13 +1464,11 @@ private fun StatisticsSection(
                 Text("‹", style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface)
             }
-            Box(Modifier.widthIn(min = 140.dp), contentAlignment = Alignment.Center) {
-                Text(
-                    "${rangeStart.dayOfMonth} ${rangeStart.month.getDisplayName(TextStyle.SHORT, s.locale)} ${rangeStart.year} – " +
-                        "${rangeEnd.dayOfMonth} ${rangeEnd.month.getDisplayName(TextStyle.SHORT, s.locale)} ${rangeEnd.year}",
-                    style = MaterialTheme.typography.labelMedium, maxLines = 1
-                )
-            }
+            Text(
+                "${rangeStart.dayOfMonth} ${rangeStart.month.getDisplayName(TextStyle.SHORT, s.locale)} ${rangeStart.year} – " +
+                    "${rangeEnd.dayOfMonth} ${rangeEnd.month.getDisplayName(TextStyle.SHORT, s.locale)} ${rangeEnd.year}",
+                style = MaterialTheme.typography.labelMedium, maxLines = 1
+            )
             IconButton(
                 onClick = {
                     val len = rangeEndExclusive.toEpochDay() - rangeStart.toEpochDay()
@@ -1457,12 +1496,21 @@ private fun StatisticsSection(
             )
         }
 
-        // filters row
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // filters row — dropdowns and the status-scope group each get their own scrollable
+        // row instead of sharing one with a weight-spacer, which squeezes whichever comes last.
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             StatsFilterDropdown(s.statsFilterMaxGuests, maxGuestsOptions, maxGuestsFilter, s::statsMaxGuestsLabel) { maxGuestsFilter = it }
             StatsSingleRoomDropdown(s.statsFilterRoom, allRoomsSorted, singleRoomFilter) { singleRoomFilter = it }
             StatsFilterDropdown(s.statsFilterSource, sourceOptions, sourceFilter, { it }) { sourceFilter = it }
-            Spacer(Modifier.weight(1f))
+        }
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Row(Modifier.clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
                 listOf(StatusScope.AllActive to s.statsScopeActive, StatusScope.ConfirmedPlus to s.statsScopeConfirmed,
                        StatusScope.Completed to s.statsScopeCompleted).forEach { (scope, label) ->
@@ -1474,7 +1522,7 @@ private fun StatisticsSection(
                             .padding(horizontal = 10.dp, vertical = 5.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(label, style = MaterialTheme.typography.labelSmall,
+                        Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1,
                             color = if (sel) MaterialTheme.colorScheme.onPrimary
                                     else MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -1488,8 +1536,12 @@ private fun StatisticsSection(
         }
 
         // comparison toggle
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(s.statsCompareLabel, style = MaterialTheme.typography.labelSmall,
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(s.statsCompareLabel, style = MaterialTheme.typography.labelSmall, maxLines = 1,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(Modifier.clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
                 listOf(CompareMode.PreviousPeriod to s.statsComparePrevious,
@@ -1502,7 +1554,7 @@ private fun StatisticsSection(
                             .padding(horizontal = 10.dp, vertical = 5.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(label, style = MaterialTheme.typography.labelSmall,
+                        Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1,
                             color = if (sel) MaterialTheme.colorScheme.onPrimary
                                     else MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -1514,26 +1566,31 @@ private fun StatisticsSection(
 
         Spacer(Modifier.height(4.dp))
 
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(s.statsTrends, style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.weight(1f))
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(s.statsTrends, style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.weight(1f))
+                StatsExportCsvButton(periodKpis)
+            }
             Row(
-                Modifier.clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant)
-                    .horizontalScroll(rememberScrollState())
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                TrendMetric.entries.forEach { metric ->
-                    val sel = trendMetric == metric
-                    Box(
-                        Modifier.clip(RoundedCornerShape(6.dp))
-                            .background(if (sel) MaterialTheme.colorScheme.primary else Color.Transparent)
-                            .clickable { trendMetric = metric }
-                            .padding(horizontal = 10.dp, vertical = 5.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(metric.label(s), style = MaterialTheme.typography.labelSmall,
-                            color = if (sel) MaterialTheme.colorScheme.onPrimary
-                                    else MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                Row(Modifier.clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
+                    TrendMetric.entries.forEach { metric ->
+                        val sel = trendMetric == metric
+                        Box(
+                            Modifier.clip(RoundedCornerShape(6.dp))
+                                .background(if (sel) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                .clickable { trendMetric = metric }
+                                .padding(horizontal = 10.dp, vertical = 5.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(metric.label(s), style = MaterialTheme.typography.labelSmall,
+                                color = if (sel) MaterialTheme.colorScheme.onPrimary
+                                        else MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                        }
                     }
                 }
             }
@@ -1545,6 +1602,8 @@ private fun StatisticsSection(
         Text(s.statsNightsTable, style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
         NightsTable(rooms = filteredRooms, periods = periods, reservations = active)
+        Spacer(Modifier.height(6.dp))
+        ViridisLegend()
 
         Spacer(Modifier.height(4.dp))
 
@@ -1569,6 +1628,15 @@ private fun StatisticsSection(
             Spacer(Modifier.height(4.dp))
         }
 
+        if (dailyOccupancy.isNotEmpty()) {
+            Text(s.statsCalendarHeatmap, style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OccupancyCalendarHeatmap(dailyOccupancy)
+            Spacer(Modifier.height(6.dp))
+            ViridisLegend()
+            Spacer(Modifier.height(4.dp))
+        }
+
         if (channelSummaries.isNotEmpty()) {
             Text(s.statsChannelPayouts, style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1583,45 +1651,51 @@ private fun StatisticsSection(
             Spacer(Modifier.height(4.dp))
         }
 
-        // histogram controls
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // histogram controls — title on its own line, controls in a horizontally scrollable
+        // row below, so narrow screens scroll instead of squeezing button labels onto 3 lines.
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(s.statsHistogram, style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.weight(1f))
-            Row(Modifier.clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
-                listOf(HistGroup.All to s.statsGroupAll, HistGroup.ByType to s.statsGroupByType,
-                       HistGroup.OneRoom to s.statsGroupOneRoom).forEach { (grp, label) ->
-                    val sel = histGroup == grp
-                    Box(
-                        Modifier.clip(RoundedCornerShape(6.dp))
-                            .background(if (sel) MaterialTheme.colorScheme.primary else Color.Transparent)
-                            .clickable { histGroup = grp }
-                            .padding(horizontal = 10.dp, vertical = 5.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(label, style = MaterialTheme.typography.labelSmall,
-                            color = if (sel) MaterialTheme.colorScheme.onPrimary
-                                    else MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(Modifier.clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
+                    listOf(HistGroup.All to s.statsGroupAll, HistGroup.ByType to s.statsGroupByType,
+                           HistGroup.OneRoom to s.statsGroupOneRoom).forEach { (grp, label) ->
+                        val sel = histGroup == grp
+                        Box(
+                            Modifier.clip(RoundedCornerShape(6.dp))
+                                .background(if (sel) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                .clickable { histGroup = grp }
+                                .padding(horizontal = 10.dp, vertical = 5.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1,
+                                color = if (sel) MaterialTheme.colorScheme.onPrimary
+                                        else MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
-            }
-            if (histGroup == HistGroup.OneRoom) {
-                var expanded by remember { mutableStateOf(false) }
-                Box {
-                    OutlinedButton(
-                        onClick        = { expanded = true },
-                        modifier       = Modifier.height(32.dp),
-                        contentPadding = PaddingValues(horizontal = 10.dp)
-                    ) {
-                        Text(selectedRoom?.let { s.roomShort(it.number) } ?: s.selectRoomHint,
-                            style = MaterialTheme.typography.labelSmall)
-                    }
-                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                        filteredRooms.forEach { room ->
-                            DropdownMenuItem(
-                                text    = { Text("${s.roomShort(room.number)} (${room.typeName})") },
-                                onClick = { selectedRoom = room; expanded = false }
-                            )
+                if (histGroup == HistGroup.OneRoom) {
+                    var expanded by remember { mutableStateOf(false) }
+                    Box {
+                        OutlinedButton(
+                            onClick        = { expanded = true },
+                            modifier       = Modifier.height(32.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp)
+                        ) {
+                            Text(selectedRoom?.let { s.roomShort(it.number) } ?: s.selectRoomHint,
+                                style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                        }
+                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                            filteredRooms.forEach { room ->
+                                DropdownMenuItem(
+                                    text    = { Text("${s.roomShort(room.number)} (${room.typeName})") },
+                                    onClick = { selectedRoom = room; expanded = false }
+                                )
+                            }
                         }
                     }
                 }
@@ -1637,6 +1711,26 @@ private fun StatisticsSection(
             selectedRoom = if (histGroup == HistGroup.OneRoom) selectedRoom else null
         )
         Spacer(Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun HealthBanner(alerts: List<String>) {
+    if (alerts.isEmpty()) return
+    Column(
+        Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.errorContainer)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        alerts.forEach { msg ->
+            Text(
+                "⚠ $msg",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onErrorContainer
+            )
+        }
     }
 }
 
@@ -1825,6 +1919,150 @@ private fun computeWeekdayBreakdown(
     }
 }
 
+/** Per-day occupancy fraction (nights occupied / rooms.size) across [spanStart, spanEndExclusive). */
+private fun computeDailyOccupancy(
+    active: List<ReservationDto>,
+    rooms: List<RoomDto>,
+    spanStart: LocalDate,
+    spanEndExclusive: LocalDate
+): List<Pair<LocalDate, Double>> {
+    val days = (spanEndExclusive.toEpochDay() - spanStart.toEpochDay()).toInt()
+    if (rooms.isEmpty() || days <= 0) return emptyList()
+
+    val counts = IntArray(days)
+    active.forEach { res ->
+        val ci = LocalDate.parse(res.checkInDate)
+        val co = LocalDate.parse(res.checkOutDate)
+        var night = maxOf(ci, spanStart)
+        val end = minOf(co, spanEndExclusive)
+        while (night.isBefore(end)) {
+            counts[(night.toEpochDay() - spanStart.toEpochDay()).toInt()]++
+            night = night.plusDays(1)
+        }
+    }
+    return (0 until days).map { i -> spanStart.plusDays(i.toLong()) to (counts[i].toDouble() / rooms.size) }
+}
+
+// Viridis — the perceptually-uniform, colorblind-safe sequential colormap developed for
+// matplotlib (Smith & van der Walt) and now the standard "magnitude" ramp across scientific
+// visualization. Unlike a rainbow/jet scale it has monotonically increasing perceived
+// lightness low→high, so intensity reads correctly even in grayscale or under CVD.
+private val VIRIDIS_STOPS = listOf(
+    Color(0xFF440154), Color(0xFF482878), Color(0xFF3E4A89), Color(0xFF31688E),
+    Color(0xFF26828E), Color(0xFF1F9E89), Color(0xFF35B779), Color(0xFF6DCD59),
+    Color(0xFFB4DE2C), Color(0xFFFDE725)
+)
+
+private fun viridis(frac: Float): Color {
+    val f = frac.coerceIn(0f, 1f)
+    val segments = VIRIDIS_STOPS.size - 1
+    val pos = f * segments
+    val i = pos.toInt().coerceIn(0, segments - 1)
+    val t = pos - i
+    return androidx.compose.ui.graphics.lerp(VIRIDIS_STOPS[i], VIRIDIS_STOPS[i + 1], t)
+}
+
+/** WCAG relative luminance, used to pick a readable black/white label over a viridis cell. */
+private fun relativeLuminance(c: Color): Double {
+    fun lin(v: Float): Double {
+        val x = v.toDouble()
+        return if (x <= 0.03928) x / 12.92 else Math.pow((x + 0.055) / 1.055, 2.4)
+    }
+    return 0.2126 * lin(c.red) + 0.7152 * lin(c.green) + 0.0722 * lin(c.blue)
+}
+
+private fun textOn(bg: Color): Color = if (relativeLuminance(bg) > 0.42) Color.Black else Color.White
+
+@Composable
+private fun ViridisLegend() {
+    val s = LocalStrings.current
+    Row(
+        Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(s.statsGradientLegendLow, style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Box(
+            Modifier.weight(1f).height(8.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(Brush.horizontalGradient(VIRIDIS_STOPS))
+        )
+        Text(s.statsGradientLegendHigh, style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun OccupancyCalendarHeatmap(daily: List<Pair<LocalDate, Double>>) {
+    if (daily.isEmpty()) return
+    val s    = LocalStrings.current
+    val cell = 14.dp
+    val gap  = 3.dp
+
+    val firstDow: Int = daily.first().first.dayOfWeek.value // 1=Mon..7=Sun
+    val padded: List<Pair<LocalDate, Double>?> = List(firstDow - 1) { null } + daily
+    val weeks = padded.chunked(7)
+
+    Row(
+        Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(12.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(gap)) {
+            DayOfWeek.values().forEach { dow ->
+                Box(Modifier.height(cell).width(20.dp), contentAlignment = Alignment.CenterStart) {
+                    Text(dow.getDisplayName(TextStyle.NARROW, s.locale), style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        Row(
+            Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(gap)
+        ) {
+            weeks.forEach { week ->
+                Column(verticalArrangement = Arrangement.spacedBy(gap)) {
+                    week.forEach { entry ->
+                        if (entry == null) {
+                            Spacer(Modifier.size(cell))
+                        } else {
+                            val (date, occ) = entry
+                            val frac = occ.toFloat().coerceIn(0f, 1f)
+                            AppTooltipArea(
+                                tooltip = {
+                                    Surface(
+                                        shape           = RoundedCornerShape(6.dp),
+                                        shadowElevation = 8.dp,
+                                        color           = MaterialTheme.colorScheme.inverseSurface
+                                    ) {
+                                        Text(
+                                            "$date — ${(occ * 100).roundToInt()}%",
+                                            style    = MaterialTheme.typography.bodySmall,
+                                            color    = MaterialTheme.colorScheme.inverseOnSurface,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                        )
+                                    }
+                                }
+                            ) {
+                                Box(
+                                    Modifier.size(cell).clip(RoundedCornerShape(3.dp))
+                                        .background(
+                                            if (occ <= 0.0) MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)
+                                            else viridis(frac)
+                                        )
+                                )
+                            }
+                        }
+                    }
+                    repeat(7 - week.size) { Spacer(Modifier.size(cell)) }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun KpiSparkline(points: List<Pair<Double, Boolean>>, color: Color, modifier: Modifier = Modifier) {
     if (points.size < 2) return
@@ -1927,8 +2165,12 @@ private fun KpiTilesRow(kpis: StatsKpis, periodKpis: List<PeriodKpi>, comparison
             ) {
                 Text(tile.label, style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(tile.value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(tile.value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                     val prev = tile.previous
                     if (prev != null) {
                         if (prev != 0.0) {
@@ -1937,12 +2179,13 @@ private fun KpiTilesRow(kpis: StatsKpis, periodKpis: List<PeriodKpi>, comparison
                             val good = if (tile.higherIsBetter) up else !up
                             Text(
                                 (if (up) "▲" else "▼") + " ${(kotlin.math.abs(delta) * 100).roundToInt()}%",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (good) Color(0xFF2E7D32) else Color(0xFFC62828)
+                                style    = MaterialTheme.typography.labelSmall,
+                                color    = if (good) Color(0xFF2E7D32) else Color(0xFFC62828),
+                                maxLines = 1
                             )
                         } else if (tile.current != 0.0) {
                             Text(s.statsKpiNew, style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                         }
                     }
                 }
@@ -2072,6 +2315,38 @@ private fun TrendLineChart(periodKpis: List<PeriodKpi>, metric: TrendMetric) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun StatsExportCsvButton(periodKpis: List<PeriodKpi>) {
+    val s          = LocalStrings.current
+    val snackbar   = LocalSnackbar.current
+    val clipboard  = androidx.compose.ui.platform.LocalClipboardManager.current
+    val scope      = rememberCoroutineScope()
+
+    OutlinedButton(
+        onClick = {
+            val header = "Period,Occupancy%,Revenue,ADR,RevPAR,AvgStayNights,CancelRate%"
+            val rows = periodKpis.joinToString("\n") { pk ->
+                val k = pk.kpis
+                listOf(
+                    pk.period.label,
+                    "%.1f".format(k.occupancyRate * 100),
+                    "%.2f".format(k.revenue),
+                    "%.2f".format(k.adr),
+                    "%.2f".format(k.revPar),
+                    "%.2f".format(k.avgStayNights),
+                    "%.1f".format(k.cancelRate * 100)
+                ).joinToString(",")
+            }
+            clipboard.setText(androidx.compose.ui.text.AnnotatedString("$header\n$rows"))
+            scope.launch { snackbar.showSnackbar(s.statsCsvCopied) }
+        },
+        modifier       = Modifier.height(32.dp),
+        contentPadding = PaddingValues(horizontal = 10.dp)
+    ) {
+        Text(s.statsExportCsv, style = MaterialTheme.typography.labelSmall)
     }
 }
 
@@ -2211,10 +2486,8 @@ private fun NightsTable(
     reservations: List<ReservationDto>
 ) {
     if (rooms.isEmpty() || periods.isEmpty()) return
-    val s         = LocalStrings.current
-    val primary   = MaterialTheme.colorScheme.primary
-    val onSurface = MaterialTheme.colorScheme.onSurface
-    val surfVar   = MaterialTheme.colorScheme.surfaceVariant
+    val s       = LocalStrings.current
+    val surfVar = MaterialTheme.colorScheme.surfaceVariant
 
     val nightsMap = remember(rooms, periods, reservations) {
         val map = rooms.associate { it.id to MutableList(periods.size) { 0L } }
@@ -2277,18 +2550,14 @@ private fun NightsTable(
                         val nights    = nightsMap[room.id]?.getOrNull(idx) ?: 0L
                         val daysInP   = (p.endExclusive.toEpochDay() - p.start.toEpochDay()).coerceAtLeast(1)
                         val intensity = (nights.toFloat() / daysInP).coerceIn(0f, 1f)
+                        val cellColor = if (nights > 0) viridis(intensity) else Color.Transparent
                         Box(
-                            Modifier.width(colW).height(cellH)
-                                .background(
-                                    if (nights > 0) primary.copy(alpha = 0.15f + intensity * 0.70f)
-                                    else Color.Transparent
-                                ),
+                            Modifier.width(colW).height(cellH).background(cellColor),
                             contentAlignment = Alignment.Center
                         ) {
                             if (nights > 0) {
                                 Text("$nights", style = MaterialTheme.typography.labelSmall,
-                                    color = if (intensity > 0.55f) MaterialTheme.colorScheme.onPrimary
-                                            else onSurface)
+                                    color = textOn(cellColor))
                             }
                         }
                     }

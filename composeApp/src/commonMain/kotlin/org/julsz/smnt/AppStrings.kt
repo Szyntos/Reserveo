@@ -371,6 +371,15 @@ interface AppStrings {
     val statsPayoutRate: String
     val statsWeekdayBreakdown: String
     val statsTrends: String
+    val statsHealthAllGood: String
+    fun statsAlertMetricDrop(metric: String, pct: Int): String
+    fun statsAlertCancelSpike(pct: Int): String
+    fun statsAlertUnaccounted(count: Int): String
+    val statsExportCsv: String
+    val statsCsvCopied: String
+    val statsCalendarHeatmap: String
+    val statsGradientLegendLow: String
+    val statsGradientLegendHigh: String
 
     // Dashboard — overdue panes
     val overdueCheckIns: String
@@ -801,6 +810,15 @@ object EnglishStrings : AppStrings {
     override val statsPayoutRate        = "Rate"
     override val statsWeekdayBreakdown  = "Occupancy by day of week"
     override val statsTrends            = "Trends"
+    override val statsHealthAllGood     = "No anomalies in this window."
+    override fun statsAlertMetricDrop(metric: String, pct: Int) = "$metric down $pct% vs. the comparison period."
+    override fun statsAlertCancelSpike(pct: Int) = "Cancellation/no-show rate spiked to $pct%."
+    override fun statsAlertUnaccounted(count: Int) = "$count channel reservation(s) unaccounted for in payouts — check the Payouts page."
+    override val statsExportCsv         = "Export CSV"
+    override val statsCsvCopied         = "Trend data copied to clipboard as CSV"
+    override val statsCalendarHeatmap   = "Occupancy calendar"
+    override val statsGradientLegendLow  = "Empty"
+    override val statsGradientLegendHigh = "Fully booked"
     override val overdueCheckIns   = "Overdue Check-ins"
     override val noOverdueCheckIns = "No overdue check-ins"
     override val overdueCheckOuts   = "Overdue Check-outs"
@@ -1256,6 +1274,15 @@ object PolishStrings : AppStrings {
     override val statsPayoutRate        = "Stawka"
     override val statsWeekdayBreakdown  = "Obłożenie wg dnia tygodnia"
     override val statsTrends            = "Trendy"
+    override val statsHealthAllGood     = "Brak nieprawidłowości w tym okresie."
+    override fun statsAlertMetricDrop(metric: String, pct: Int) = "$metric spadło o $pct% względem okresu porównawczego."
+    override fun statsAlertCancelSpike(pct: Int) = "Wskaźnik odwołań/no-show wzrósł do $pct%."
+    override fun statsAlertUnaccounted(count: Int) = "$count rezerwacji z kanałów nierozliczonych w wypłatach — sprawdź stronę Wypłaty."
+    override val statsExportCsv         = "Eksportuj CSV"
+    override val statsCsvCopied         = "Dane trendu skopiowane do schowka jako CSV"
+    override val statsCalendarHeatmap   = "Kalendarz obłożenia"
+    override val statsGradientLegendLow  = "Puste"
+    override val statsGradientLegendHigh = "Pełne obłożenie"
     override val overdueCheckIns   = "Zaległe zameldowania"
     override val noOverdueCheckIns = "Brak zaległych zameldowań"
     override val overdueCheckOuts   = "Zaległe wymeldowania"
